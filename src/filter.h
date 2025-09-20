@@ -10,12 +10,12 @@
 
 enum CFilterCriteriaTimeModeEnum
 {
-    fctmIgnore, // ignorovat datum a cas
-    fctmDuring, // modifikovano behem xxx vterin/minut/hodin/dnu/tydnu/mesicu/roku (a od soucasnoti dal)
-    fctmFromTo  // modifikovano od - do
+    fctmIgnore, // ignore date and time
+    fctmDuring, // modified within xxx seconds/minutes/hours/days/weeks/months/years (from now on)
+    fctmFromTo  // modified from - to
 };
 
-// poradi musi korespondovat s polem 'sizeUnits'
+// the order must match the 'sizeUnits' array
 enum CFilterCriteriaSizeUnitsEnum
 {
     fcsuBytes,
@@ -27,7 +27,7 @@ enum CFilterCriteriaSizeUnitsEnum
     fcsuEB,
 };
 
-// poradi musi korespondovat s polem 'timeUnits'
+// the order must match the 'timeUnits' array
 enum CFilterCriteriaTimeUnitsEnum
 {
     fctuSeconds,
@@ -44,9 +44,9 @@ class CFilterCriteria
 protected:
     // Attributes
 
-    // jednotlive bity poli odpobidaji konstantam FILE_ATTRIBUTE_xxx
-    DWORD AttributesMask;  // pokud je bit roven nule, checkbox bude sedivy; na atributu nezalezi
-    DWORD AttributesValue; // pokud odpovidajici bit v 'AttributesMask' roven 1, tento bit vyjadruje stav
+    // individual bits correspond to the FILE_ATTRIBUTE_xxx constants
+    DWORD AttributesMask;  // if the bit is zero, the checkbox is grayed out and the attribute is ignored
+    DWORD AttributesValue; // if the corresponding bit in 'AttributesMask' equals 1, this bit indicates the attribute state
 
     // Size Min/Max
     int UseMinSize;
@@ -73,39 +73,38 @@ protected:
     int UseToTime;
     unsigned __int64 To; // local time
 
-    // promenne predpocitane v PrepareForTest
-    BOOL UseMinTime;          // kontrolovat MinTime
+    // variables precomputed in PrepareForTest
+    BOOL UseMinTime;          // check MinTime
     unsigned __int64 MinTime; // local time
-    BOOL UseMaxTime;          // kontrolovat MaxTime
+    BOOL UseMaxTime;          // check MaxTime
     unsigned __int64 MaxTime; // local time
-    CQuadWord MinSizeBytes;   // 'MinSize' prevedena na bajty
-    CQuadWord MaxSizeBytes;   // 'MaxSize' prevedena na bajty
-    BOOL NeedPrepare;         // pouze hlidaci pes, je-li TRUE, je treba zavolat PrepareForTest pred volanim Test
+    CQuadWord MinSizeBytes;   // 'MinSize' converted to bytes
+    CQuadWord MaxSizeBytes;   // 'MaxSize' converted to bytes
+    BOOL NeedPrepare;         // guard flag: call PrepareForTest before Test when TRUE
 
 public:
     CFilterCriteria();
 
-    // nastavi hodnoty na uvodni stav, nesaha na 'Name' a 'Masks'
-    // slouzi pro tlacitko Reset v dialogu
+    // resets values to the initial state without touching 'Name' and 'Masks'
+    // used for the Reset button in the dialog
     void Reset();
 
-    // PrepareForTest je treba zavolat pred volanim metody Test
+    // PrepareForTest must be called before invoking Test
     void PrepareForTest();
-    // vraci TRUE, pokud predane parametry souboru/adresare vyhovuji kriteriim
-    // 'modified' je UTC, prevedeme jej na local time
+    // returns TRUE if the file/directory parameters satisfy the criteria
+    // 'modified' is UTC and will be converted to local time
     BOOL Test(DWORD attributes, const CQuadWord* size, const FILETIME* modified);
 
-    // do retezce 'buffer' naplni popis nastavenych hodnot, jsou-li
-    // jine nez implicitni (po zavolani Reset metody)
-    // 'maxLen' udava maximalni delku retezce 'buffer'
-    // diry vraci TRUE, pokud je nektera z hodnot jina nez implicitni
+    // fills 'buffer' with a description of the set values if they differ from the defaults
+    // after calling Reset. 'maxLen' specifies the maximum length of 'buffer'.
+    // Returns TRUE in 'dirty' if any value differs from the defaults
     BOOL GetAdvancedDescription(char* buffer, int maxLen, BOOL& dirty);
 
-    // save/load do/z Windows Registry
-    // !!! POZOR: ukladani optimalizovano, ukladaji se pouze zmenene hodnoty; pred ulozenim do klice musi by tento klic napred promazan
+    // save/load from the Windows Registry
+    // WARNING: saving is optimized-only changed values are stored; the key must be cleared before saving
     BOOL Save(HKEY hKey);
     BOOL Load(HKEY hKey);
-    BOOL LoadOld(HKEY hKey); // nacte data z configu verze 13 a mene
+    BOOL LoadOld(HKEY hKey); // loads settings from configuration version 13 and older
 
     friend class CFilterCriteriaDialog;
 };

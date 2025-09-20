@@ -35,8 +35,8 @@ CHotPathsBar::CHotPathsBar(HWND hNotifyWindow, CObjectOrigin origin)
 
     SetStyle(TLB_STYLE_IMAGE | TLB_STYLE_TEXT);
 
-    // naleju ikonky do vlastni toolbary
-    // vlozim pouze itemy a submenu z nejvyssi urovne; ostatni se bude rozbalovat jako submenu
+    // pour icons into our toolbar
+    // insert only items and submenus from the top level; the rest will expand as a submenu
     int level = 0;
     TLBI_ITEM_INFO2 tii;
     int i;
@@ -106,7 +106,7 @@ CHotPathsBar::CHotPathsBar(HWND hNotifyWindow, CObjectOrigin origin)
 int CHotPathsBar::GetNeededHeight()
 {
     CALL_STACK_MESSAGE_NONE
-    // i v pripade, ze nedrzime zadnou ikonu budeem vracet spravnou vysku
+    // even when we hold no icon we'll return the correct height
     int height = CToolBar::GetNeededHeight();
     int iconSize = GetIconSizeForSystemDPI(ICONSIZE_16);
     int minH = 3 + iconSize + 3;
@@ -118,7 +118,7 @@ int CHotPathsBar::GetNeededHeight()
 void CHotPathsBar::Customize()
 {
     CALL_STACK_MESSAGE_NONE
-    // nechame vybalit stranku HotPaths
+    // show the HotPaths page
     PostMessage(MainWindow->HWindow, WM_USER_CONFIGURATION, 1, -1);
 }
 
@@ -153,7 +153,7 @@ CHotPathsBar::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         {
           TRACE_E("RegisterDragDrop error.");
         }
-        dropTarget->Release();  // RegisterDragDrop volala AddRef()
+        dropTarget->Release();  // RegisterDragDrop called AddRef()
       }
       break;
     }

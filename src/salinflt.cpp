@@ -220,8 +220,8 @@ uch NextByte(CDecompressionObject* decompress)
     else
     {
         if (decompress->DataPtr == decompress->DataEnd)
-            decompress->DataPtr++; // chybovy stav je az decompress->DataPtr > decompress->DataEnd
-        return 0 /* chyba */;
+            decompress->DataPtr++; // error state occurs only when decompress->DataPtr > decompress->DataEnd
+        return 0 /* error */;
     }
 }
 #endif
@@ -500,7 +500,7 @@ int inflate_stored(CDecompressionObject* decompress)
             bytesLeft -= inBytes;
             decompress->WinPos += inBytes;
             outBytes -= inBytes;
-            if (!bytesLeft && outBytes) // je potreba delsi vstup, ten ale nemame (vse je v decompress->Data)
+            if (!bytesLeft && outBytes) // a longer input is required but unavailable (everything is in decompress->Data)
             {
                 TRACE_I("inflate_stored: input error");
                 return 4;
@@ -1090,7 +1090,7 @@ int huft_free(CDecompressionObject* decompress, struct huft* t)
 
 // *************************************************************************************
 //
-// metody pro Salamandera:
+// methods for Salamander:
 //
 // *************************************************************************************
 
@@ -1112,5 +1112,5 @@ int CDecompressionObject::Flush(unsigned bytes)
         }
     }
     Crc = UpdateCrc32(SlideWin, bytes, Crc);
-    return 0; // uspech
+    return 0; // success
 }

@@ -34,7 +34,7 @@ BOOL CSalamanderSafeFile::SafeFileOpen(SAFE_FILE* file,
                         fileName, dwDesiredAccess, dwShareMode, dwCreationDisposition,
                         dwFlagsAndAttributes, flags);
 
-    // pro chyby jako LOW_MEMORY si prejeme uplny konec operace
+    // for errors like LOW_MEMORY we want the operation to terminate completely
     if (pressedButton != NULL)
         *pressedButton = DIALOG_CANCEL;
 
@@ -72,7 +72,7 @@ BOOL CSalamanderSafeFile::SafeFileOpen(SAFE_FILE* file,
         }
     } while (hFile == INVALID_HANDLE_VALUE);
 
-    // vse je OK - naplnime kontext
+    // everything is OK - fill the context
     file->FileName = DupStr(fileName);
     if (file->FileName == NULL)
     {
@@ -117,7 +117,7 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
     if (skipPath != NULL && skipPathMax > 0)
         *skipPath = 0;
     BOOL wholeFileAllocated = FALSE;
-    BOOL needWholeAllocTest = FALSE; // mame overit, ze se dari nastavit ukazovatko a data se nepripoji na konec souboru
+    BOOL needWholeAllocTest = FALSE; // verify that the pointer can be set and data will not append to the end of the file
     if (allocateWholeFile != NULL &&
         *allocateWholeFile >= CQuadWord(0, 0x80000000))
     {
@@ -125,7 +125,7 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
         needWholeAllocTest = TRUE;
     }
 
-    // zjistime, zda jiz existuje
+    // determine whether it already exists
     DWORD attrs;
     HANDLE hFile;
     int fileNameLen = (int)strlen(fileName);
@@ -135,7 +135,7 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
         if (attrs == 0xFFFFFFFF)
             break;
 
-        // uz existuje, zkusime jestli to neni jen kolize s dosovym nazvem (plne jmeno existujiciho souboru/adresare je jine)
+        // already exists; see if it is only a DOS-name collision (the full name of the existing file/directory differs)
         if (!isDir)
         {
             WIN32_FIND_DATA data;
@@ -144,10 +144,11 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
             {
                 HANDLES(FindClose(find));
                 const char* tgtName = SalPathFindFileName(fileName);
-                if (StrICmp(tgtName, data.cAlternateFileName) == 0 && // shoda jen pro dos name
-                    StrICmp(tgtName, data.cFileName) != 0)            // (plne jmeno je jine)
+                if (StrICmp(tgtName, data.cAlternateFileName) == 0 && // matches only by DOS name
+                    StrICmp(tgtName, data.cFileName) != 0)            // full name differs
                 {
-                    // prejmenujeme ("uklidime") soubor/adresar s konfliktnim dos name do docasneho nazvu 8.3 (nepotrebuje extra dos name)
+                    // rename ("clean up") the item with the conflicting DOS name
+                    // to a temporary 8.3 name (no extra DOS name is required)
                     char tmpName[MAX_PATH + 20];
                     char origFullName[MAX_PATH];
                     lstrcpyn(tmpName, fileName, MAX_PATH);
@@ -170,20 +171,20 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
                                 break;
                             }
                         }
-                        if (tmpName[0] != 0) // pokud se podarilo "uklidit" konfliktni soubor/adresar, zkusime vytvoreni ciloveho
-                        {                    // souboru/adresare, pak vratime "uklizenemu" souboru/adresari jeho puvodni jmeno
+                        if (tmpName[0] != 0) // if cleanup succeeded, try creating the target
+                        {                    // item, then restore the cleaned file/folder name
                             hFile = INVALID_HANDLE_VALUE;
-                            //              if (!isDir)   // soubor
-                            //              {       // do handles pridame handle na zaver pouze pokud se plni struktura SAFE_FILE
+                            //              if (!isDir)   // file
+                            //              {       // add the handle to Handles only if the SAFE_FILE structure is being filled
                             hFile = NOHANDLES(CreateFile(fileName, dwDesiredAccess, dwShareMode, NULL,
                                                          CREATE_NEW, dwFlagsAndAttributes, NULL));
                             //              }
-                            //              else   // adresar
+                            //              else   // directory
                             //              {
-                            //                if (CreateDirectory(fileName, NULL)) out = (void *)1;  // pri uspechu musime vratit neco jineho nez INVALID_HANDLE_VALUE
+                            //                if (CreateDirectory(fileName, NULL)) out = (void *)1;  // on success we must return something other than INVALID_HANDLE_VALUE
                             //              }
                             if (!::SalMoveFile(tmpName, origFullName))
-                            { // toto se zjevne muze stat, nepochopitelne, ale Windows vytvori misto 'fileName' (dos name) soubor se jmenem origFullName
+                            { // this can apparently happen: inexplicably Windows creates instead of 'fileName' (DOS name) a file named origFullName
                                 TRACE_I("Unexpected situation in CSalamanderGeneral::SafeCreateFile(): unable to rename file from tmp-name to original long file name! " << origFullName);
 
                                 if (hFile != INVALID_HANDLE_VALUE)
@@ -199,30 +200,30 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
                                 }
                             }
                             if (hFile != INVALID_HANDLE_VALUE)
-                                goto SUCCESS; // navrat jen pri uspechu, chyby se resi dale (ignorujeme konflikt dos-jmena)
+                                goto SUCCESS; // return only on success; errors are handled later (DOS-name conflict ignored)
                         }
                     }
                 }
             }
         }
 
-        // uz existuje, ale co to je ?
+        // it already exists, but what is it?
         if (attrs & FILE_ATTRIBUTE_DIRECTORY)
         {
             int ret;
-            // je to adresar
+            // it's a directory
             if (isDir)
             {
-                // pokud jsme chteli adresar, pak je to v poradku
-                // a vratime cokoli ruzneho od INVALID_HANDLE_VALUE
+                // if we wanted a directory this is fine
+                // and we return anything other than INVALID_HANDLE_VALUE
                 return (void*)1;
             }
-            // jinak hlasime chybu
+            // otherwise report an error
             if (silentMask != NULL && (*silentMask & SILENT_SKIP_FILE_NAMEUSED) && allowSkip)
                 ret = DIALOG_SKIP;
             else
             {
-                // ERROR: filename+error, tlacitka retry/skip/skip all/cancel
+                // ERROR: filename+error, buttons retry/skip/skip all/cancel
                 ret = DialogError(hParent, allowSkip ? BUTTONS_RETRYSKIPCANCEL : BUTTONS_RETRYCANCEL,
                                   fileName, LoadStr(IDS_NAMEALREADYUSEDFORDIR), LoadStr(IDS_ERRORCREATINGFILE));
             }
@@ -244,15 +245,15 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
         else
         {
             int ret;
-            // je to soubor, zjistime, zda ho muzeme prepsat
+            // it's a file, check whether it can be overwritten
             if (isDir)
             {
-                // snazime se vytvorit adresar, ale v miste uz je soubor se stejnym nazvem -- vyhlasime chybu
+                // we are trying to create a directory but there is already a file with the same name -- report an error
                 if (silentMask != NULL && (*silentMask & SILENT_SKIP_DIR_NAMEUSED) && allowSkip)
                     ret = DIALOG_SKIP;
                 else
                 {
-                    // ERROR: filename+error, tlacitka retry/skip/skip all/cancel
+                    // ERROR: filename+error, buttons retry/skip/skip all/cancel
                     ret = DialogError(hParent, allowSkip ? BUTTONS_RETRYSKIPCANCEL : BUTTONS_RETRYCANCEL,
                                       fileName, LoadStr(IDS_NAMEALREADYUSED), LoadStr(IDS_ERRORCREATINGDIR));
                 }
@@ -266,7 +267,7 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
                     if (skipped != NULL)
                         *skipped = TRUE;
                     if (skipPath != NULL)
-                        lstrcpyn(skipPath, fileName, skipPathMax); // uzivatel chce vratit skipnutou cestu
+                        lstrcpyn(skipPath, fileName, skipPathMax); // user wants to return the skipped path
                     return INVALID_HANDLE_VALUE;
                 case DIALOG_CANCEL:
                 case DIALOG_FAIL:
@@ -276,7 +277,7 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
             }
             else
             {
-                // doptame se na prepis
+                // ask whether to overwrite
                 if ((srcFileName != NULL && !Configuration.CnfrmFileOver) || (silentMask != NULL && (*silentMask & SILENT_OVERWRITE_FILE_EXIST)))
                     ret = DIALOG_YES;
                 else if (silentMask != NULL && (*silentMask & SILENT_SKIP_FILE_EXIST) && allowSkip)
@@ -295,13 +296,13 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
                         strcpy(fibuffer, LoadStr(IDS_ERR_FILEOPEN));
                     if (srcFileName != NULL)
                     {
-                        // CONFIRM FILE OVERWRITE: filename1+filedata1+filename2+filedata2, tlacitka yes/all/skip/skip all/cancel
+                        // CONFIRM FILE OVERWRITE: filename1+filedata1+filename2+filedata2, buttons yes/all/skip/skip all/cancel
                         ret = DialogOverwrite(hParent, allowSkip ? BUTTONS_YESALLSKIPCANCEL : BUTTONS_YESALLCANCEL,
                                               fileName, fibuffer, srcFileName, srcFileInfo);
                     }
                     else
                     {
-                        // CONFIRM FILE OVERWRITE: filename1+filedata1+a newly created file, tlacitka yes/all/skip/skip all/cancel
+                        // CONFIRM FILE OVERWRITE: filename1+filedata1+a newly created file, buttons yes/all/skip/skip all/cancel
                         ret = DialogQuestion(hParent, allowSkip ? BUTTONS_YESALLSKIPCANCEL : BUTTONS_YESNOCANCEL,
                                              fileName, LoadStr(IDS_NEWLYCREATEDFILE), LoadStr(IDS_CONFIRMFILEOVERWRITING));
                     }
@@ -328,12 +329,12 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
                 }
                 if (ret == DIALOG_YES)
                 {
-                    // budeme prepisovat - zrusime atributy
+                    // we will overwrite - remove attributes
                     if (attrs & FILE_ATTRIBUTE_HIDDEN ||
                         attrs & FILE_ATTRIBUTE_SYSTEM ||
                         attrs & FILE_ATTRIBUTE_READONLY)
                     {
-                        // pro soubory bez hidden a system attr. se druha (hidden+system) confirmation nevypisuje
+                        // for files without hidden and system attributes the second (hidden+system) confirmation is not shown
                         if (srcFileName == NULL || !Configuration.CnfrmSHFileOver ||
                             (silentMask != NULL && (*silentMask & SILENT_OVERWRITE_FILE_SYSHID)) ||
                             ((attrs & FILE_ATTRIBUTE_HIDDEN) == 0 && (attrs & FILE_ATTRIBUTE_SYSTEM) == 0))
@@ -341,7 +342,7 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
                         else if (silentMask != NULL && (*silentMask & SILENT_SKIP_FILE_SYSHID) && allowSkip)
                             ret = DIALOG_SKIP;
                         else
-                            // QUESTION: filename+question, tlacitka yes/all/skip/skip all/cancel
+                            // QUESTION: filename+question, buttons yes/all/skip/skip all/cancel
                             ret = DialogQuestion(hParent, allowSkip ? BUTTONS_YESALLSKIPCANCEL : BUTTONS_YESALLCANCEL,
                                                  fileName, LoadStr(IDS_WANTOVERWRITESHFILE), LoadStr(IDS_CONFIRMFILEOVERWRITING));
                         switch (ret)
@@ -380,7 +381,7 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
     {
         if (fileNameLen > MAX_PATH - 1)
         {
-            // Prilis dlouhe jmeno -- nabidneme Skip / Skip All / Cancel
+            // Name too long -- offer Skip / Skip All / Cancel
             int ret;
             if (silentMask != NULL && (*silentMask & (isDir ? SILENT_SKIP_DIR_CREATE : SILENT_SKIP_FILE_CREATE)) && allowSkip)
                 ret = DIALOG_SKIP;
@@ -401,7 +402,7 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
                 if (skipped != NULL)
                     *skipped = TRUE;
                 if (isDir && skipPath != NULL)
-                    lstrcpyn(skipPath, fileName, skipPathMax); // uzivatel chce vratit skipnutou cestu
+                    lstrcpyn(skipPath, fileName, skipPathMax); // user wants to return the skipped path
             }
             }
             return INVALID_HANDLE_VALUE;
@@ -409,31 +410,31 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
 
         char namecopy[MAX_PATH];
         strcpy(namecopy, fileName);
-        // pokud je to soubor, ziskame jmeno adresare
+        // if it is a file, obtain the directory name
         if (!isDir)
         {
             char* ptr = strrchr(namecopy, '\\');
-            // existuje cesta, kterou bychom mohli tvorit ?
+            // does a path exist that we could create?
             if (ptr == NULL)
                 goto CREATE_FILE;
-            // pokud ano, nechame jen cestu
+            // if so, keep only the path
             *ptr = '\0';
-            // existuje uz cesta ?
+            // does the path already exist?
             while (1)
             {
                 attrs = SalGetFileAttributes(namecopy);
                 if (attrs != 0xFFFFFFFF)
                 {
-                    // ano - jdeme delat soubor
+                    // yes - proceed to create the file
                     if (attrs & FILE_ATTRIBUTE_DIRECTORY)
                         goto CREATE_FILE;
-                    // ne - je to soubor se stejnym nazvem - hazime chybu
+                    // no - a file with the same name exists - report an error
                     int ret;
                     if (silentMask != NULL && (*silentMask & SILENT_SKIP_DIR_NAMEUSED) && allowSkip)
                         ret = DIALOG_SKIP;
                     else
                     {
-                        // ERROR: filename+error, tlacitka retry/skip/skip all/cancel
+                        // ERROR: filename+error, buttons retry/skip/skip all/cancel
                         ret = DialogError(hParent, allowSkip ? BUTTONS_RETRYSKIPCANCEL : BUTTONS_RETRYCANCEL, namecopy,
                                           LoadStr(IDS_NAMEALREADYUSED), LoadStr(IDS_ERRORCREATINGDIR));
                     }
@@ -447,7 +448,7 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
                         if (skipped != NULL)
                             *skipped = TRUE;
                         if (skipPath != NULL)
-                            lstrcpyn(skipPath, namecopy, skipPathMax); // uzivatel chce vratit skipnutou cestu
+                            lstrcpyn(skipPath, namecopy, skipPathMax); // user wants to return the skipped path
                         return INVALID_HANDLE_VALUE;
                     case DIALOG_CANCEL:
                     case DIALOG_FAIL:
@@ -459,13 +460,13 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
                     break;
             }
         }
-        // vytvorime adresarovou cestu
+        // build the directory path
         char root[MAX_PATH];
         GetRootPath(root, namecopy);
-        // pokud je dir root adresar, je tu nejaky problem
+        // if dir is a root directory there's some problem
         if (strlen(namecopy) <= strlen(root))
         {
-            // root adresar -> chyba
+            // root directory -> error
             int ret;
             if (silentMask != NULL && (*silentMask & SILENT_SKIP_DIR_CREATE) && allowSkip)
                 ret = DIALOG_SKIP;
@@ -482,20 +483,20 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
                 if (skipped != NULL)
                     *skipped = TRUE;
                 if (skipPath != NULL)
-                    lstrcpyn(skipPath, namecopy, skipPathMax); // uzivatel chce vratit skipnutou cestu
+                    lstrcpyn(skipPath, namecopy, skipPathMax); // user wants to return the skipped path
             }
             return INVALID_HANDLE_VALUE;
         }
         char* ptr;
         char namecpy2[MAX_PATH];
         strcpy(namecpy2, namecopy);
-        // najdeme prvni existujici adresar
+        // find the first existing directory
         while (1)
         {
             ptr = strrchr(namecpy2, '\\');
             if (ptr == NULL)
             {
-                // root adresar -> chyba
+                // root directory -> error
                 int ret;
                 if (silentMask != NULL && (*silentMask & SILENT_SKIP_DIR_CREATE) && allowSkip)
                     ret = DIALOG_SKIP;
@@ -512,12 +513,12 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
                     if (skipped != NULL)
                         *skipped = TRUE;
                     if (skipPath != NULL)
-                        lstrcpyn(skipPath, namecpy2, skipPathMax); // uzivatel chce vratit skipnutou cestu
+                        lstrcpyn(skipPath, namecpy2, skipPathMax); // user wants to return the skipped path
                 }
                 return INVALID_HANDLE_VALUE;
             }
             *ptr = '\0';
-            // jsme uz na root-adresari ?
+            // are we already at the root directory?
             if (ptr <= namecpy2 + strlen(root))
                 break;
             while (1)
@@ -525,7 +526,7 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
                 attrs = SalGetFileAttributes(namecpy2);
                 if (attrs != 0xFFFFFFFF)
                 {
-                    // mame adresar nebo soubor ?
+                    // is it a directory or a file ?
                     if (attrs & FILE_ATTRIBUTE_DIRECTORY)
                         break;
                     else
@@ -535,7 +536,7 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
                             ret = DIALOG_SKIP;
                         else
                         {
-                            // ERROR: filename+error, tlacitka retry/skip/skip all/cancel
+                            // ERROR: filename+error, buttons retry/skip/skip all/cancel
                             ret = DialogError(hParent, allowSkip ? BUTTONS_RETRYSKIPCANCEL : BUTTONS_RETRYCANCEL,
                                               namecpy2, LoadStr(IDS_NAMEALREADYUSED), LoadStr(IDS_ERRORCREATINGDIR));
                         }
@@ -549,7 +550,7 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
                             if (skipped != NULL)
                                 *skipped = TRUE;
                             if (skipPath != NULL)
-                                lstrcpyn(skipPath, namecpy2, skipPathMax); // uzivatel chce vratit skipnutou cestu
+                                lstrcpyn(skipPath, namecpy2, skipPathMax); // user wants to return the skipped path
                             return INVALID_HANDLE_VALUE;
                         case DIALOG_CANCEL:
                         case DIALOG_FAIL:
@@ -564,32 +565,32 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
             if (attrs != 0xFFFFFFFF && attrs & FILE_ATTRIBUTE_DIRECTORY)
                 break;
         }
-        // mame prvni funkcni adresar v namecopy
+        // namecopy now points to the first valid directory
         ptr = namecpy2 + strlen(namecpy2) - 1;
         if (*ptr != '\\')
         {
             *++ptr = '\\';
             *++ptr = '\0';
         }
-        // pridame dalsi
+        // add the others
         const char* src = namecopy + strlen(namecpy2);
         while (*src == '\\')
             src++;
         int len = (int)strlen(namecpy2);
-        // a uz je vyrabime jeden za druhym
+        // and we create them one after another
         while (*src != 0)
         {
-            BOOL invalidPath = FALSE; // *src != 0 && *src <= ' '; // mezera na zacatku jmena adresare je povolena, pri rucni vyrobe adresare ji ale nedovolujeme, je to matouci
+            BOOL invalidPath = FALSE; // *src != 0 && *src <= ' '; // a space at the beginning of a directory name is allowed, but when creating manually we disallow it as confusing
             const char* slash = strchr(src, '\\');
             if (slash == NULL)
                 slash = src + strlen(src);
             memcpy(namecpy2 + len, src, slash - src);
             namecpy2[len += (int)(slash - src)] = '\0';
             if (namecpy2[len - 1] <= ' ' || namecpy2[len - 1] == '.')
-                invalidPath = TRUE; // mezery a tecky na konci jmena vytvareneho adresare jsou nezadouci
+                invalidPath = TRUE; // spaces or dots at the end of the new directory name are undesirable
             while (invalidPath || !CreateDirectory(namecpy2, NULL))
             {
-                // nepodarilo se vytvorit adresar, zobrazime chybu
+                // failed to create directory, show error
                 int ret;
                 if (silentMask != NULL && (*silentMask & SILENT_SKIP_DIR_CREATE) && allowSkip)
                     ret = DIALOG_SKIP;
@@ -598,7 +599,7 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
                     DWORD err = GetLastError();
                     if (invalidPath)
                         err = ERROR_INVALID_NAME;
-                    // ERROR: filename+error, tlacitka retry/skip/skip all/cancel
+                    // ERROR: filename+error, buttons retry/skip/skip all/cancel
                     ret = DialogError(hParent, allowSkip ? BUTTONS_RETRYSKIPCANCEL : BUTTONS_RETRYCANCEL,
                                       namecpy2, ::GetErrorText(err), LoadStr(IDS_ERRORCREATINGDIR));
                 }
@@ -612,7 +613,7 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
                     if (skipped != NULL)
                         *skipped = TRUE;
                     if (skipPath != NULL)
-                        lstrcpyn(skipPath, namecpy2, skipPathMax); // uzivatel chce vratit skipnutou cestu
+                        lstrcpyn(skipPath, namecpy2, skipPathMax); // user wants to return the skipped path
                     return INVALID_HANDLE_VALUE;
 
                 case DIALOG_CANCEL:
@@ -629,22 +630,21 @@ CSalamanderSafeFile::SafeFileCreate(const char* fileName,
     }
 
 CREATE_FILE:
-    // je-li to soubor, vytvorime ho
+    // create the file if it's not a directory
     if (!isDir)
-    { // do handles pridame handle na zaver pouze pokud se plni struktura SAFE_FILE
+    { // add the handle to HANDLES only if we're filling SAFE_FILE structure
         while ((hFile = NOHANDLES(CreateFile(fileName, dwDesiredAccess, dwShareMode, NULL,
                                              CREATE_ALWAYS, dwFlagsAndAttributes, NULL))) == INVALID_HANDLE_VALUE)
         {
             DWORD err = GetLastError();
-            // resi situaci, kdy je potreba prepsat soubor na Sambe:
-            // soubor ma 440+jinyho_vlastnika a je v adresari, kam ma akt. user zapis
-            // (smazat lze, ale primo prepsat ne (nelze otevrit pro zapis) - obchazime:
-            //  smazeme+vytvorime soubor znovu)
-            // (na Sambe lze povolit mazani read-only, coz umozni delete read-only souboru,
-            //  jinak nelze smazat, protoze Windows neumi smazat read-only soubor a zaroven
-            //  u toho souboru nelze shodit "read-only" atribut, protoze akt. user neni vlastnik)
-            if (DeleteFile(fileName)) // je-li read-only, pujde smazat jedine na Sambe s povolenym "delete readonly"
-            {                         // do handles pridame handle na zaver pouze pokud se plni struktura SAFE_FILE
+            // handles the case of overwriting a file on Samba:
+            // the file has 440+different owner and resides in a directory where the current user can write
+            // (it can be deleted but not overwritten directly because it can't be opened for writing)
+            // so delete it and create it again
+            // Samba may allow deleting read-only files; otherwise Windows cannot delete a read-only file and
+            // the user is not the owner to clear the attribute
+            if (DeleteFile(fileName)) // if read-only, deletion works only on Samba with "delete readonly" enabled
+            {                         // add the handle to HANDLES only if we're filling SAFE_FILE structure
                 hFile = NOHANDLES(CreateFile(fileName, dwDesiredAccess, dwShareMode, NULL,
                                              CREATE_ALWAYS, dwFlagsAndAttributes, NULL));
                 if (hFile != INVALID_HANDLE_VALUE)
@@ -657,7 +657,7 @@ CREATE_FILE:
                 ret = DIALOG_SKIP;
             else
             {
-                // ERROR: filename+error, tlacitka retry/skip/skip all/cancel
+                // ERROR: filename+error, buttons retry/skip/skip all/cancel
                 ret = DialogError(hParent, allowSkip ? BUTTONS_RETRYSKIPCANCEL : BUTTONS_RETRYCANCEL, fileName,
                                   ::GetErrorText(err), LoadStr(IDS_ERRORCREATINGFILE));
             }
@@ -679,9 +679,9 @@ CREATE_FILE:
         }
 
     SUCCESS:
-        // *************** Zde zacina anti-fragmentovaci kod
+        // *************** Anti-fragmentation code starts here
 
-        // pokud je to mozne, provedeme alokaci potrebneho mista pro soubor (nedochazi pak k fragmentaci disku + hladsi zapis na diskety)
+        // if possible, allocate the required space for the file (avoids disk fragmentation and allows smoother writes to floppies)
         if (allocateWholeFile != NULL)
         {
             BOOL fatal = TRUE;
@@ -703,14 +703,14 @@ CREATE_FILE:
                             DWORD wr;
                             if (WriteFile(hFile, "x", 1, &wr, NULL) && wr == 1)
                             {
-                                if (SetEndOfFile(hFile)) // zkusime zkraceni souboru na jeden byte
+                                if (SetEndOfFile(hFile)) // attempt to truncate the file to one byte
                                 {
                                     CQuadWord size;
                                     size.LoDWord = GetFileSize(hFile, &size.HiDWord);
                                     if (size == CQuadWord(1, 0))
-                                    { // kontrola, jestli nedoslo k pridani zapisovaneho bytu na konec souboru + jestli umime soubor zkratit
+                                    { // check if an extra byte was appended and whether we can shrink the file
                                         needWholeAllocTest = FALSE;
-                                        goto SET_SIZE_AGAIN; // musime znovu nastavit kompletni velikost souboru
+                                        goto SET_SIZE_AGAIN; // must set the full file size again
                                     }
                                 }
                             }
@@ -718,14 +718,14 @@ CREATE_FILE:
                         else
                         {
                             fatal = FALSE;
-                            wholeFileAllocated = TRUE; // vse je OK, soubor je natazeny
+                            wholeFileAllocated = TRUE; // everything is OK, the file is preallocated
                         }
                     }
                 }
                 else
                 {
                     if (GetLastError() == ERROR_DISK_FULL)
-                        ignoreErr = TRUE; // malo mista na disku
+                        ignoreErr = TRUE; // not enough disk space
                 }
             }
             if (fatal)
@@ -734,29 +734,29 @@ CREATE_FILE:
                 {
                     DWORD err = GetLastError();
                     TRACE_E("SafeFileCreate(): unable to allocate whole file size before copy operation, please report under what conditions this occurs! GetLastError(): " << GetErrorText(err));
-                    *allocateWholeFile = CQuadWord(-1, 0); // dalsi pokusy na tomhle cilovem disku si odpustime
+                    *allocateWholeFile = CQuadWord(-1, 0); // skip further attempts on this target disk
                 }
                 else
-                    *allocateWholeFile = CQuadWord(0, 0); // soubor se nezdarilo nastavit, ale priste to zkusime znovu
+                    *allocateWholeFile = CQuadWord(0, 0); // failed now but we'll try next time
 
-                // zkusime jeste soubor zkratit na nulu, aby nedoslo pri zavreni souboru k nejakemu zbytecnemu zapisu
+                // also try truncating the file to zero to avoid unnecessary writes when closing
                 SetFilePointer(hFile, 0, NULL, FILE_BEGIN);
                 SetEndOfFile(hFile);
 
                 CloseHandle(hFile);
-                ClearReadOnlyAttr(fileName); // kdyby vznikl jako read-only, tak abychom si s nim poradili
+                ClearReadOnlyAttr(fileName); // in case it was created read-only so we can handle it
                 DeleteFile(fileName);
 
-                allocateWholeFile = NULL; // v pristi kole uz se o nafukovani nebudeme pokouset
+                allocateWholeFile = NULL; // next pass we won't try to preallocate
                 goto CREATE_FILE;
             }
         }
-        // *************** Zde konci anti-fragmentovaci kod
+        // *************** Anti-fragmentation code ends here
     }
-    // vratime result - pokud jsme dosli az sem, vracime uspech
+    // return the result - reaching this point means success
     if (isDir)
-        return (void*)1; // pro adresar proste neco jineho, nez INVALID_HANDLE_VALUE
-    if (file != NULL)    // mame za ukol inicializovat strukturu SAFE_FILE
+        return (void*)1; // for a directory return something other than INVALID_HANDLE_VALUE
+    if (file != NULL)    // we need to initialize the SAFE_FILE structure
     {
         file->FileName = DupStr(fileName);
         if (file->FileName == NULL)
@@ -772,7 +772,7 @@ CREATE_FILE:
         file->dwCreationDisposition = CREATE_ALWAYS;
         file->dwFlagsAndAttributes = dwFlagsAndAttributes;
         file->WholeFileAllocated = wholeFileAllocated;
-        HANDLES_ADD(__htFile, __hoCreateFile, hFile); // handle hFile pridame do HANDLES
+        HANDLES_ADD(__htFile, __hoCreateFile, hFile); // add handle hFile to HANDLES
     }
     return hFile;
 }
@@ -782,7 +782,7 @@ void CSalamanderSafeFile::SafeFileClose(SAFE_FILE* file)
     if (file->HFile != NULL && file->HFile != INVALID_HANDLE_VALUE)
     {
         if (file->WholeFileAllocated)
-            SetEndOfFile(file->HFile); // jinak by se zapisoval zbytek souboru
+            SetEndOfFile(file->HFile); // otherwise the remainder of the file would be written
         HANDLES(CloseHandle(file->HFile));
     }
     if (file->FileName != NULL)
@@ -837,7 +837,7 @@ SEEK_AGAIN:
     {
         DWORD dlgRet;
         DWORD skip = seekForRead ? SILENT_SKIP_FILE_READ : SILENT_SKIP_FILE_WRITE;
-        if (silentMask != NULL && (*silentMask & skip) && ButtonsContainsSkip(flags)) // pokud nemame hlasku ignorovat, zobrazime ji
+        if (silentMask != NULL && (*silentMask & skip) && ButtonsContainsSkip(flags)) // show the message only if we are not ignoring it
             dlgRet = DIALOG_SKIP;
         else
         {
@@ -848,14 +848,14 @@ SEEK_AGAIN:
         switch (dlgRet)
         {
         case DIALOG_RETRY:
-            goto SEEK_AGAIN; // zkusime znovu
+            goto SEEK_AGAIN; // try again
         case DIALOG_SKIPALL:
             if (silentMask != NULL)
                 *silentMask |= skip;
         default:
         {
             if (pressedButton != NULL)
-                *pressedButton = dlgRet; // vratim tlacitko, na ktere user kliknul
+                *pressedButton = dlgRet; // return the button the user clicked
             return FALSE;
         }
         }
@@ -884,11 +884,11 @@ BOOL CSalamanderSafeFile::SafeFileRead(SAFE_FILE* file, LPVOID lpBuffer,
         TRACE_E("CSalamanderSafeFile::SafeFileRead() HFile==NULL");
         return FALSE;
     }
-    // ziskame aktualni seek v souboru
+    // obtain the current seek position in the file
     long currentSeekHi = 0;
     DWORD currentSeekLo = SetFilePointer(file->HFile, 0, &currentSeekHi, FILE_CURRENT);
     if (currentSeekLo == 0xFFFFFFFF && GetLastError() != NO_ERROR)
-        goto READ_ERROR; // nelze nastavit offset, zkusime to znovu
+        goto READ_ERROR; // cannot set the offset, try again
 
     while (TRUE)
     {
@@ -896,7 +896,7 @@ BOOL CSalamanderSafeFile::SafeFileRead(SAFE_FILE* file, LPVOID lpBuffer,
         {
             if ((flags & SAFE_FILE_CHECK_SIZE) && nNumberOfBytesToRead != *lpNumberOfBytesRead)
             {
-                // volajici vyzaduje nacteni presne tolika bajtu, o kolik si pozadal
+                // the caller requires reading exactly the requested number of bytes
                 DWORD dlgRet;
                 if (silentMask != NULL && (*silentMask & SILENT_SKIP_FILE_READ) && ButtonsContainsSkip(flags))
                     dlgRet = DIALOG_SKIP;
@@ -908,14 +908,14 @@ BOOL CSalamanderSafeFile::SafeFileRead(SAFE_FILE* file, LPVOID lpBuffer,
                 switch (dlgRet)
                 {
                 case DIALOG_RETRY:
-                    goto SEEK;
+                    goto SEEK; // try again
                 case DIALOG_SKIPALL:
                     if (silentMask != NULL)
                         *silentMask |= SILENT_SKIP_FILE_READ;
                 default:
                 {
                     if (pressedButton != NULL)
-                        *pressedButton = dlgRet; // vratim tlacitko, na ktere user kliknul
+                        *pressedButton = dlgRet; // return the button the user clicked
                     return FALSE;
                 }
                 }
@@ -942,27 +942,27 @@ BOOL CSalamanderSafeFile::SafeFileRead(SAFE_FILE* file, LPVOID lpBuffer,
                 if (file->HFile != NULL)
                 {
                     if (file->WholeFileAllocated)
-                        SetEndOfFile(file->HFile);     // jinak by se zapisoval zbytek souboru
-                    HANDLES(CloseHandle(file->HFile)); // zavreme invalidni handle, protoze uz by z nej stejne neslo cist
+                        SetEndOfFile(file->HFile);     // otherwise the remainder of the file would be written
+                    HANDLES(CloseHandle(file->HFile)); // close the invalid handle because it would no longer be readable anyway
                 }
 
                 file->HFile = HANDLES_Q(CreateFile(file->FileName, file->dwDesiredAccess, file->dwShareMode, NULL,
                                                    file->dwCreationDisposition, file->dwFlagsAndAttributes, NULL));
-                if (file->HFile != INVALID_HANDLE_VALUE) // otevreno, jeste nastavime offset
+                if (file->HFile != INVALID_HANDLE_VALUE) // opened, now set the offset
                 {
                 SEEK:
                     LONG lo = currentSeekLo;
                     LONG hi = currentSeekHi;
                     lo = SetFilePointer(file->HFile, lo, &hi, FILE_BEGIN);
                     if (lo == 0xFFFFFFFF && GetLastError() != NO_ERROR)
-                        goto READ_ERROR; // nelze nastavit offset, zkusime to znovu
+                        goto READ_ERROR; // cannot set the offset, try again
                     if (lo != (long)currentSeekLo || hi != currentSeekHi)
                     {
                         SetLastError(ERROR_SEEK_ON_DEVICE);
-                        goto READ_ERROR; // nelze nastavit offset (soubor uz muze byt mensi), zkusime to znovu
+                        goto READ_ERROR; // cannot set the offset (file may be smaller), try again
                     }
                 }
-                else // nejde otevrit, problem trva ...
+                else // cannot open, the problem persists...
                 {
                     file->HFile = NULL;
                     goto READ_ERROR;
@@ -976,7 +976,7 @@ BOOL CSalamanderSafeFile::SafeFileRead(SAFE_FILE* file, LPVOID lpBuffer,
             default:
             {
                 if (pressedButton != NULL)
-                    *pressedButton = dlgRet; // vratim tlacitko, na ktere user kliknul
+                    *pressedButton = dlgRet; // return the button the user clicked
                 return FALSE;
             }
             }
@@ -994,11 +994,11 @@ BOOL CSalamanderSafeFile::SafeFileWrite(SAFE_FILE* file, LPVOID lpBuffer,
         TRACE_E("CSalamanderSafeFile::SafeFileWrite() HFile==NULL");
         return FALSE;
     }
-    // ziskame aktualni seek v souboru
+    // obtain the current seek position in the file
     long currentSeekHi = 0;
     DWORD currentSeekLo = SetFilePointer(file->HFile, 0, &currentSeekHi, FILE_CURRENT);
     if (currentSeekLo == 0xFFFFFFFF && GetLastError() != NO_ERROR)
-        goto WRITE_ERROR; // nelze nastavit offset, zkusime to znovu
+        goto WRITE_ERROR; // cannot set the offset, try again
 
     while (TRUE)
     {
@@ -1026,27 +1026,27 @@ BOOL CSalamanderSafeFile::SafeFileWrite(SAFE_FILE* file, LPVOID lpBuffer,
                 if (file->HFile != NULL)
                 {
                     if (file->WholeFileAllocated)
-                        SetEndOfFile(file->HFile);     // jinak by se zapisoval zbytek souboru
-                    HANDLES(CloseHandle(file->HFile)); // zavreme invalidni handle, protoze uz by z nej stejne neslo cist
+                        SetEndOfFile(file->HFile);     // otherwise the rest of the file would be written
+                    HANDLES(CloseHandle(file->HFile)); // close the invalid handle because we couldn't read from it anyway
                 }
 
                 file->HFile = HANDLES_Q(CreateFile(file->FileName, file->dwDesiredAccess, file->dwShareMode, NULL,
                                                    file->dwCreationDisposition, file->dwFlagsAndAttributes, NULL));
-                if (file->HFile != INVALID_HANDLE_VALUE) // otevreno, jeste nastavime offset
+                if (file->HFile != INVALID_HANDLE_VALUE) // opened, now set the offset
                 {
                     //SEEK:
                     LONG lo = currentSeekLo;
                     LONG hi = currentSeekHi;
                     lo = SetFilePointer(file->HFile, lo, &hi, FILE_BEGIN);
                     if (lo == 0xFFFFFFFF && GetLastError() != NO_ERROR)
-                        goto WRITE_ERROR; // nelze nastavit offset, zkusime to znovu
+                        goto WRITE_ERROR; // cannot set the offset, try again
                     if (lo != (long)currentSeekLo || hi != currentSeekHi)
                     {
                         SetLastError(ERROR_SEEK_ON_DEVICE);
-                        goto WRITE_ERROR; // nelze nastavit offset (soubor uz muze byt mensi), zkusime to znovu
+                        goto WRITE_ERROR; // cannot set the offset (file may be smaller), try again
                     }
                 }
-                else // nejde otevrit, problem trva ...
+                else // cannot open, the problem persists...
                 {
                     file->HFile = NULL;
                     goto WRITE_ERROR;
@@ -1060,7 +1060,7 @@ BOOL CSalamanderSafeFile::SafeFileWrite(SAFE_FILE* file, LPVOID lpBuffer,
             default:
             {
                 if (pressedButton != NULL)
-                    *pressedButton = dlgRet; // vratim tlacitko, na ktere user kliknul
+                    *pressedButton = dlgRet; // return the button the user clicked
                 return FALSE;
             }
             }

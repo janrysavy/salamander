@@ -7,18 +7,18 @@
 //
 // InitializeGraphics
 //
-// Inicializuje sdilene GDI objekty vyuzivane pro chod Salamandera.
-// Vola se pred otevrenim hlavniho okna s firstRun==TRUE, colorsOnly==FALSE,
-// a fonts==TRUE.
+// Initializes shared GDI objects used by Salamander.
+// Called before opening the main window with firstRun==TRUE, colorsOnly==FALSE
+// and fonts==TRUE.
 //
-// Pokud behem behu aplikace dojde ke zmene barev nebo systemoveho nastaveni,
-// je funkce volana s parametrem firstRun==FALSE
+// If colors or system settings change while the application is running,
+// the function is called with firstRun==FALSE.
 //
 
 BOOL InitializeGraphics(BOOL colorsOnly);
 void ReleaseGraphics(BOOL colorsOnly);
 
-// inicializace objektu, ktere se nemeni se zmenou barev nebo rozliseni
+// initializes objects that do not change with color or resolution changes
 BOOL InitializeConstGraphics();
 void ReleaseConstGraphics();
 
@@ -30,11 +30,12 @@ class CMenuPopup;
 class CFilesArray : public TDirectArray<CFileData>
 {
 protected:
-    BOOL DeleteData; // ma volat destruktory rusenych prvku?
+    BOOL DeleteData; // should destructors of removed items be called?
 
 public:
-    // j.r. zvetsuji deltu na 800, protoze pri vstupu do vetsich adresaru (nekolik tisic souboru)
-    // zacina Enlarge() podle profileru celkem zrat CPU
+    // j.r. increased the delta to 800 because entering large directories
+    // (thousands of files) makes Enlarge() noticeably consume CPU according
+    // to the profiler
     CFilesArray(int base = 200, int delta = 800) : TDirectArray<CFileData>(base, delta) { DeleteData = TRUE; }
     ~CFilesArray() { Destroy(); }
 
@@ -79,8 +80,8 @@ public:
 //
 // CNames
 //
-// pole alokovanych retezcu, lze je abecedne seradit, a pak v nich hledat retezec
-// (pulenim intervalu)
+// array of allocated strings that can be sorted alphabetically and searched
+// using binary search
 //
 
 class CNames
@@ -89,41 +90,41 @@ protected:
     TDirectArray<char*> Dirs;
     TDirectArray<char*> Files;
     BOOL CaseSensitive;
-    BOOL NeedSort; // hlidac spravneho pouzivani tridy
+    BOOL NeedSort; // guard for correct class usage
 
 public:
     CNames();
     ~CNames();
 
-    // vyprazdni a dealokuje obe pole
+    // empties and deallocates both arrays
     void Clear();
 
-    // nastavuje chovani metod Sort a Contains; pokud je caseSensitive == TRUE,
-    // budou rozlisovany jmena s lisici se pouze velikosti pismen
+    // sets the behavior of Sort and Contains; when caseSensitive == TRUE
+    // names differing only in case are distinguished
     void SetCaseSensitive(BOOL caseSensitive);
 
-    // kopiiruje si obsah 'name' do vlastniho bufferu
-    // prida ho do seznamu (do Dirs pokud je 'nameIsDir' TRUE, jinak do Files)
-    // vrati TRUE v pripade uspechu, jinak FALSE
+    // copies the content of 'name' into its own buffer
+    // adds it to the list (Dirs if 'nameIsDir' is TRUE, otherwise Files)
+    // returns TRUE on success, otherwise FALSE
     BOOL Add(BOOL nameIsDir, const char* name);
 
-    // seradi seznamy Dirs a Files, aby bylo mozne volat Contains();
+    // sorts the Dirs and Files arrays so that Contains() can be called
     void Sort();
 
-    // vraci TRUE, pokud nazev specifikovany pres 'nameIsDir' a 'name'; pokud 'foundOnIndex'
-    // neni NULL, vraci se v nem index, na kterem byla polozka nalezena
-    // je obsazen v jednom z poli
+    // returns TRUE if the name specified by 'nameIsDir' and 'name' is present;
+    // if 'foundOnIndex' is not NULL, it receives the index of the found item
+    // in one of the arrays
     BOOL Contains(BOOL nameIsDir, const char* name, int* foundOnIndex = NULL);
 
-    // vraci celkovy pocet drzenych jmen
+    // returns the total number of stored names
     int GetCount() { return Dirs.Count + Files.Count; }
-    // vraci pocet drzenych adresaru
+    // returns the number of stored directories
     int GetDirsCount() { return Dirs.Count; }
-    // vraci pocet drzenych souboru
+    // returns the number of stored files
     int GetFilesCount() { return Files.Count; }
 
-    // nacte seznam jmen z textu na clipboardu; Dirs budou prazdne, vse napada do Files
-    // hWindow je pro OpenClipboard (netusim, jestli je nutny)
+    // loads the list of names from the clipboard; Dirs remain empty, everything goes into Files
+    // hWindow is passed to OpenClipboard (not sure if required)
     BOOL LoadFromClipboard(HWND hWindow);
 };
 
@@ -133,14 +134,14 @@ public:
 class CPathHistoryItem
 {
 protected:
-    int Type;                             // typ: 0 je disk, 1 je archiv, 2 je FS
-    char* PathOrArchiveOrFSName;          // diskova cesta nebo jmeno archivu nebo jmeno FS
-    char* ArchivePathOrFSUserPart;        // cesta v archivu nebo user-part FS cesty
-    HICON HIcon;                          // ikona odpovidajici ceste (muze byt NULL); v destruktoru bude ikona sestrelena
-    CPluginFSInterfaceAbstract* PluginFS; // jen pro Type==2: posledni pouzivany interface pro FS cestu
+    int Type;                             // type: 0 disk, 1 archive, 2 plugin FS
+    char* PathOrArchiveOrFSName;          // disk path, archive name, or FS name
+    char* ArchivePathOrFSUserPart;        // path inside archive or FS user part
+    HICON HIcon;                          // icon for the path (may be NULL; destroyed in destructor)
+    CPluginFSInterfaceAbstract* PluginFS; // only for Type==2: last used interface for the FS path
 
-    int TopIndex;      // top-index v dobe ulozeni stavu panelu
-    char* FocusedName; // focus v dobe ulozeni stavu panelu
+    int TopIndex;      // top index at the time the panel state was saved
+    char* FocusedName; // focus at the time the panel state was saved
 
 public:
     CPathHistoryItem(int type, const char* pathOrArchiveOrFSName,
@@ -148,14 +149,14 @@ public:
                      CPluginFSInterfaceAbstract* pluginFS);
     ~CPathHistoryItem();
 
-    // zmena top-indexu a focused-name (opakovane pridani jedne cesty do historie)
+    // updates top index and focused name when the same path is added again
     void ChangeData(int topIndex, const char* focusedName);
 
     void GetPath(char* buffer, int bufferSize);
     HICON GetIcon();
-    BOOL Execute(CFilesWindow* panel); // vraci TRUE pokud zmena vysla (FALSE - zustava na miste)
+    BOOL Execute(CFilesWindow* panel); // returns TRUE if the change succeeded (FALSE leaves the panel as is)
 
-    BOOL IsTheSamePath(CPathHistoryItem& item, CPluginFSInterfaceEncapsulation* curPluginFS); // vraci TRUE pri shode cest (kazdy typ se porovnava jinak)
+    BOOL IsTheSamePath(CPathHistoryItem& item, CPluginFSInterfaceEncapsulation* curPluginFS); // returns TRUE if the paths match (each type compares differently)
 
     friend class CPathHistory;
 };
@@ -164,59 +165,59 @@ class CPathHistory
 {
 protected:
     TIndirectArray<CPathHistoryItem> Paths;
-    int ForwardIndex;            // -1 znamena 0 polozek pro forward, jinak od tohoto indexu
-                                 // do konce pole Paths je forward
-    BOOL Lock;                   // je objekt "uzamcen" (zmeny nejsou vitany - pouziva Execute - nase
-                                 // zmeny cest v panelech neukladame ... (preruseni historie by nebylo na miste)
-    BOOL DontChangeForwardIndex; // TRUE = ForwardIndex ma zustat na -1 (plne backward)
-    CPathHistoryItem* NewItem;   // alokuje se, pokud behem AddPathUnique je nahozeny Lock (pro pozdejsi zpracovani)
+    int ForwardIndex;            // -1 means there are no forward items, otherwise
+                                 // everything from this index to the end of Paths is forward
+    BOOL Lock;                   // object is "locked" (Execute uses it, our panel
+                                 // changes are not stored or history would break)
+    BOOL DontChangeForwardIndex; // TRUE means ForwardIndex should stay -1 (fully backward)
+    CPathHistoryItem* NewItem;   // allocated when AddPathUnique is called while Lock is active
 
 public:
     CPathHistory(BOOL dontChangeForwardIndex = FALSE);
     ~CPathHistory();
 
-    // vycisti vsechny polozky historie
+    // clears all history items
     void ClearHistory();
 
-    // pridani cesty do historie
+    // add a path to the history
     void AddPath(int type, const char* pathOrArchiveOrFSName, const char* archivePathOrFSUserPart,
                  CPluginFSInterfaceAbstract* pluginFS, CPluginFSInterfaceEncapsulation* curPluginFS);
 
-    // pridani cesty do historie, jen pokud uz zde cesta neni (viz Alt+F12; u FS prepisuje pluginFS na nejnovejsi)
+    // add a path to history only if it's not present yet (see Alt+F12; FS paths overwrite pluginFS with the newest one)
     void AddPathUnique(int type, const char* pathOrArchiveOrFSName, const char* archivePathOrFSUserPart,
                        HICON hIcon, CPluginFSInterfaceAbstract* pluginFS,
                        CPluginFSInterfaceEncapsulation* curPluginFS);
 
-    // meni data (top-index a focused-name) aktualni cesty, a to jen pokud zadana cesta
-    // odpovida aktualni ceste v historii
+    // modify the current path's top index and focused name only when the given
+    // path matches the current entry in history
     void ChangeActualPathData(int type, const char* pathOrArchiveOrFSName,
                               const char* archivePathOrFSUserPart,
                               CPluginFSInterfaceAbstract* pluginFS,
                               CPluginFSInterfaceEncapsulation* curPluginFS,
                               int topIndex, const char* focusedName);
 
-    // vymaze aktualni cestu z historie, a to jen pokud zadana cesta odpovida aktualni
-    // ceste v historii
+    // remove the current path from history only if the specified path matches
+    // the current entry
     void RemoveActualPath(int type, const char* pathOrArchiveOrFSName,
                           const char* archivePathOrFSUserPart,
                           CPluginFSInterfaceAbstract* pluginFS,
                           CPluginFSInterfaceEncapsulation* curPluginFS);
 
-    // naplni menu polozkami
-    // ID budou od jednicky a odpovidaji parameru index ve volani metody Execute()
+    // fill the menu with items
+    // IDs start from one and correspond to the index parameter of Execute()
     void FillBackForwardPopupMenu(CMenuPopup* popup, BOOL forward);
 
-    // naplni menu polozkami
-    // ID budou od firstID. Pri volani Execute je treba je posunout tak, aby prvni melo hodnotu 1.
-    // maxCount - maximalni pocet pripojovanych polozek; -1 - vsechny dostupne (separator se nepocita)
-    // separator - pokud menu obsahuje alespon jednu polozku, bude nad ni vlozen separator
+    // fill the menu with items
+    // IDs start at firstID. When Execute() is called, shift them so the first has value 1.
+    // maxCount - maximum number of attached items; -1 = all available (separator not counted)
+    // separator - if the menu contains at least one item, insert a separator above it
     void FillHistoryPopupMenu(CMenuPopup* popup, DWORD firstID, int maxCount, BOOL separator);
 
-    // vola se pri zavirani FS - v historii jsou ulozene FS ifacy, ktere je po zavreni potreba
-    // NULLovat (aby nahodou nedoslo ke shode jen diky alokaci FS ifacu na stejnou adresu)
+    // called when closing a FS - the history holds FS interfaces that must be set
+    // to NULL after closing to avoid accidental matches by identical addresses
     void ClearPluginFSFromHistory(CPluginFSInterfaceAbstract* fs);
 
-    // index vybrane polozky v menu forward/backward (indexovano: u forward od jedne, backward od dvou)
+    // index of the selected forward/backward menu item (forward numbering starts at one; backward at two)
     void Execute(int index, BOOL forward, CFilesWindow* panel, BOOL allItems = FALSE, BOOL removeItem = FALSE);
 
     BOOL HasForward() { return ForwardIndex != -1; }
@@ -235,7 +236,7 @@ public:
 //
 // CFileHistoryItem, CFileHistory
 //
-// Drzi seznam souboru, na ktere uzivatel volal View nebo Edit.
+// Holds a list of files that the user viewed or edited.
 //
 
 enum CFileHistoryItemTypeEnum
@@ -248,10 +249,10 @@ enum CFileHistoryItemTypeEnum
 class CFileHistoryItem
 {
 protected:
-    CFileHistoryItemTypeEnum Type; // jakym zpusobem bylo k souboru pristoupeno
-    DWORD HandlerID;               // ID viewru/editoru pro opakovani akce
-    HICON HIcon;                   // ikonka asociovana k souboru
-    char* FileName;                // nazev souboru
+    CFileHistoryItemTypeEnum Type; // how the file was accessed
+    DWORD HandlerID;               // ID of viewer/editor to repeat the action
+    HICON HIcon;                   // icon associated with the file
+    char* FileName;                // file name
 
 public:
     CFileHistoryItem(CFileHistoryItemTypeEnum type, DWORD handlerID, const char* fileName);
@@ -259,7 +260,7 @@ public:
 
     BOOL IsGood() { return FileName != NULL; }
 
-    // vrati TRUE, pokud je objekt nakonstruovan z uvedenych dat
+    // returns TRUE if the object is constructed from the specified data
     BOOL Equal(CFileHistoryItemTypeEnum type, DWORD handlerID, const char* fileName);
 
     BOOL Execute();
@@ -270,26 +271,26 @@ public:
 class CFileHistory
 {
 protected:
-    TIndirectArray<CFileHistoryItem> Files; // polozky s mensim indexem jsou mladsi
+    TIndirectArray<CFileHistoryItem> Files; // items with smaller index are newer
 
 public:
     CFileHistory();
 
-    // odstrani vsechny polozky historie
+    // removes all history items
     void ClearHistory();
 
-    // prohleda historii a pokud pridavanou polozku nenalezne, prida ji na vrchni pozici
-    // pokud polozka uz exituje, bude vytazena na vrchni pozici
+    // searches history and if the added item is not found, inserts it at the top
+    // if the item already exists, it is moved to the top
     BOOL AddFile(CFileHistoryItemTypeEnum type, DWORD handlerID, const char* fileName);
 
-    // naplni menu polozkami
-    // ID budou od jednicky a odpovidaji parameru index ve volani metody Execute()
+    // fills the menu with items
+    // IDs start from one and correspond to the index parameter of Execute()
     BOOL FillPopupMenu(CMenuPopup* popup);
 
-    // index vybrane polozky v menu (indexovano od jedne)
+    // index of the selected menu item (numbered from one)
     BOOL Execute(int index);
 
-    // drzi historie nejakou polozku?
+    // does the history contain any item?
     BOOL HasItem();
 };
 
@@ -300,20 +301,20 @@ public:
 
 class CPluginDataInterfaceAbstract;
 
-// tato sada promennych slouzi pro interni callbacky sloupcu Salamandera
-// plugin dostane ukazatele na tyto ukazatele
-extern const CFileData* TransferFileData;                     // ukazatel na data, podle kterych kreslime sloupec
-extern int TransferIsDir;                                     // 0 (soubor), 1 (adresar), 2 (up-dir)
-extern char TransferBuffer[TRANSFER_BUFFER_MAX];              // ukazatel na pole, ktere ma TRANSFER_BUFFER_MAX znaku a slouzi jako navratova hodnota
-extern int TransferLen;                                       // pocet vracenych znaku
-extern DWORD TransferRowData;                                 // uzivatelska data, bity 0x00000001 az 0x00000080 jsou vyhrazene pro Salamandera
-extern CPluginDataInterfaceAbstract* TransferPluginDataIface; // plugin-data-interface panelu, do ktereho se polozka vykresluje (patri k TransferFileData->PluginData)
-extern DWORD TransferActCustomData;                           // CustomData sloupce, pro ktery se ziskava text (pro ktery se vola callback) // FIXME_X64 - male pro ukazatel, neni nekdy potreba?
+// this set of variables is used for Salamander column callbacks
+// the plugin receives pointers to these pointers
+extern const CFileData* TransferFileData;                     // pointer to data used to draw the column
+extern int TransferIsDir;                                     // 0 = file, 1 = directory, 2 = up-dir
+extern char TransferBuffer[TRANSFER_BUFFER_MAX];              // pointer to an array with TRANSFER_BUFFER_MAX characters used as the return value
+extern int TransferLen;                                       // number of returned characters
+extern DWORD TransferRowData;                                 // user data; bits 0x00000001 to 0x00000080 are reserved for Salamander
+extern CPluginDataInterfaceAbstract* TransferPluginDataIface; // plugin data interface of the panel where the item is drawn (belongs to TransferFileData->PluginData)
+extern DWORD TransferActCustomData;                           // CustomData of the column for which text is retrieved (the callback is called for it) // FIXME_X64 - small for a pointer, maybe unnecessary?
 
-// pokud uz se hledala pripona v Associations, je zde vysledek hledani
-extern int TransferAssocIndex; // -2 jeste se nehledala, -1 neni tam, >=0 platny index
+// if the extension was already searched in Associations, this holds the result
+extern int TransferAssocIndex; // -2 not searched yet, -1 not found, >=0 valid index
 
-// funkce pro plneni standardnich sloupcu Salamandera
+// functions for populating Salamander's standard columns
 void WINAPI InternalGetDosName();
 void WINAPI InternalGetSize();
 void WINAPI InternalGetType();
@@ -324,7 +325,7 @@ void WINAPI InternalGetTimeOnlyForDisk();
 void WINAPI InternalGetAttr();
 void WINAPI InternalGetDescr();
 
-// funkce pro ziskani indexu jednoduchych ikon pro FS s vlastnimi ikonami (pitFromPlugin)
+// function to obtain the index of simple icons for FS with custom icons (pitFromPlugin)
 int WINAPI InternalGetPluginIconIndex();
 
 //****************************************************************************
@@ -332,10 +333,10 @@ int WINAPI InternalGetPluginIconIndex();
 // CViews
 //
 
-#define STANDARD_COLUMNS_COUNT 9 // pocet standardnich sloupcu pro rozsah
+#define STANDARD_COLUMNS_COUNT 9 // number of standard columns for the range
 #define VIEW_TEMPLATES_COUNT 10
 #define VIEW_NAME_MAX 30
-// sloupec Name je vzdy viditelny a pokud neni nastaven flag VIEW_SHOW_EXTENSION, obsahuje i priponu
+// the Name column is always visible and if VIEW_SHOW_EXTENSION is not set it also contains the extension
 #define VIEW_SHOW_EXTENSION 0x00000001
 #define VIEW_SHOW_DOSNAME 0x00000002
 #define VIEW_SHOW_SIZE 0x00000004
@@ -345,7 +346,7 @@ int WINAPI InternalGetPluginIconIndex();
 #define VIEW_SHOW_ATTRIBUTES 0x00000040
 #define VIEW_SHOW_DESCRIPTION 0x00000080
 
-// struktura pro definici jednoho standardniho sloupce
+// structure describing a single standard column
 struct CColumDataItem
 {
     DWORD Flag;
@@ -357,16 +358,16 @@ struct CColumDataItem
     unsigned ID : 4;
 };
 
-// definice standardnich sloupcu
+// definition of standard columns
 CColumDataItem* GetStdColumn(int i, BOOL isDisk);
 
 //****************************************************************************
 //
 // CViewTemplate, CViewTemplates
 //
-// Slouzi jako predloha pro pohledy v panelech. Urcuje viditelnost sloupcu
-// v jednotlivych pohledech. Sablony jsou spolecne oboum panelum. Neobsahuji
-// data, ktera jsou panelove zavisla (krome sirek a elasticity sloupcu).
+// Serves as a template for panel views. It defines the visibility of columns
+// in individual views. The templates are shared by both panels and do not hold
+// panel-specific data (except column widths and elasticity).
 //
 
 struct CColumnConfig
@@ -379,40 +380,40 @@ struct CColumnConfig
 
 struct CViewTemplate
 {
-    DWORD Mode;               // rezim zobrazovani pohledu (tree/brief/detailed)
-    char Name[VIEW_NAME_MAX]; // nazev, pod ktery pohled bude pohled vystupovat v konfiguraci/menu;
-                              // pokud je prazdny retezec, pohled neni definovan
-    DWORD Flags;              // viditelnost standardnich Salamanderovskych sloupcu
+    DWORD Mode;               // view mode (tree/brief/detailed)
+    char Name[VIEW_NAME_MAX]; // name under which the view appears in config/menu;
+                              // if empty, the view is not defined
+    DWORD Flags;              // visibility of standard Salamander columns
                               // VIEW_SHOW_xxxx
 
-    CColumnConfig Columns[STANDARD_COLUMNS_COUNT]; // drzi sirky a elasticitu sloupcu
+    CColumnConfig Columns[STANDARD_COLUMNS_COUNT]; // stores column widths and elasticity
 
-    BOOL LeftSmartMode;  // smart mode pro levy panel (jen elasticky sloupec Name: sloupec se zuzuje, aby nebyla potreba horizontalni scrollbara)
-    BOOL RightSmartMode; // smart mode pro pravy panel (jen elasticky sloupec Name: sloupec se zuzuje, aby nebyla potreba horizontalni scrollbara)
+    BOOL LeftSmartMode;  // smart mode for the left panel (only the elastic Name column shrinks to avoid horizontal scrollbars)
+    BOOL RightSmartMode; // smart mode for the right panel (only the elastic Name column shrinks to avoid horizontal scrollbars)
 };
 
 class CViewTemplates
 {
 public:
-    // prvni pohledy nelze presouvat a mazat; lze je vsak prejmenovat
-    // promenna Mode je pevne dana pro vsech deset pohledu a nelze ji menit
+    // the first views cannot be moved or deleted; they can be renamed
+    // the Mode variable is fixed for all ten views and cannot be changed
     CViewTemplate Items[VIEW_TEMPLATES_COUNT];
 
 public:
     CViewTemplates();
 
-    // nastavi atributy
+    // sets the attributes
     void Set(DWORD index, DWORD viewMode, const char* name, DWORD flags, BOOL leftSmartMode, BOOL rightSmartMode);
     void Set(DWORD index, const char* name, DWORD flags, BOOL leftSmartMode, BOOL rightSmartMode);
 
-    BOOL SwapItems(int index1, int index2); // prohodi dve polozky v poli
-    BOOL CleanName(char* name);             // oreze mezery a vrati TRUE, je-li name ok
+    BOOL SwapItems(int index1, int index2); // swaps two items in the array
+    BOOL CleanName(char* name);             // trims spaces and returns TRUE if the name is OK
 
-    int SaveColumns(CColumnConfig* columns, char* buffer);  // konverze pole na retezec
-    void LoadColumns(CColumnConfig* columns, char* buffer); // a zpet
+    int SaveColumns(CColumnConfig* columns, char* buffer);  // converts the array to a string
+    void LoadColumns(CColumnConfig* columns, char* buffer); // and back
 
-    BOOL Save(HKEY hKey); // ulozi cele pole
-    BOOL Load(HKEY hKey); // nacte cele pole
+    BOOL Save(HKEY hKey); // saves the entire array
+    BOOL Load(HKEY hKey); // loads the entire array
 
     void Load(CViewTemplates& source)
     {
@@ -424,7 +425,7 @@ public:
 //
 // CDynamicStringImp
 //
-// dynamicky vytvoreny string - sam se prialokovava podle potreby (aktualni potreba + 100 znaku)
+// dynamically created string - re-allocates itself as needed (current need + 100 characters)
 
 class CDynamicStringImp : public CDynamicString
 {
@@ -446,12 +447,12 @@ public:
             free(Text);
     }
 
-    // odpoji data od objektu (aby se v destruktoru objektu nedealokoval buffer)
+    // detaches data from the object (so the buffer is not deallocated in the destructor)
     void DetachData();
 
-    // vraci TRUE pokud se retezec 'str' o delce 'len' podarilo pridat; je-li 'len' -1,
-    // urci se 'len' jako "strlen(str)" (pridani bez koncove nuly); je-li 'len' -2,
-    // urci se 'len' jako "strlen(str)+1" (pridani vcetne koncove nuly)
+    // returns TRUE if the string 'str' of length 'len' was successfully added; when 'len' is -1,
+    // the length is computed as strlen(str) (added without the terminating null). When 'len' is -2,
+    // the length is strlen(str)+1 (added including the terminating null)
     virtual BOOL WINAPI Add(const char* str, int len = -1);
 };
 
@@ -459,40 +460,39 @@ public:
 //
 // CTruncatedString
 //
-// Retezec, ktery je konstruovan na zaklade str="xxxx "%s" xxxx" a subStr="data.txt".
-// Substring bude pripadne oriznut na zaklade rozmeru dialogu/messageboxu.
+// String constructed from str="xxxx "%s" xxxx" and subStr="data.txt".
+// The substring may be truncated according to the dialog/message box size.
 //
 
 class CTruncatedString
 {
 protected:
-    char* Text;      // kompletni text
-    int SubStrIndex; // index prvniho znaku zkracovatelneho podretezce; -1, pokud neexistuje
-    int SubStrLen;   // pocet znaku podretezce
+    char* Text;      // complete text
+    int SubStrIndex; // index of the first character of the truncatable substring; -1 if it doesn't exist
+    int SubStrLen;   // number of characters of the substring
 
-    char* TruncatedText; // zkracena forma textu (pokud bylo zkraceni potreba)
+    char* TruncatedText; // truncated form of the text (if truncation was needed)
 
 public:
     CTruncatedString();
     ~CTruncatedString();
 
-    // provede kopii
+    // makes a copy
     BOOL CopyFrom(const CTruncatedString* src);
 
-    // obsah promenne str bude nakopirovan do alokovaneho bufferu Text
-    // pokud je subStr ruzny od NULL, bude jeho obsah pres sprintf vlozen do str
-    // predpokladem je, ze str obsahuje formatovaci retezec %s
+    // the contents of 'str' will be copied to the allocated Text buffer
+    // if subStr is not NULL, it is inserted into str using sprintf
+    // str must therefore contain the %s formatting sequence
     BOOL Set(const char* str, const char* subStr);
 
-    // na zaklade rozmeru okna urceneho ctrlID bude retezec zkracen
-    // pokud je nastavena promenna forMessageBox, bude zkracen substring tak,
-    // a messagebox nepresahl hranice obrazovky
+    // truncates the string according to the dimensions of the window identified by ctrlID
+    // if forMessageBox is set, the substring is shortened so the message box stays on screen
     BOOL TruncateText(HWND hWindow, BOOL forMessageBox = FALSE);
 
-    // vrati zkracenou (pokud to bylo treba) verzi textu
+    // returns the truncated version of the text (if truncation was needed)
     const char* Get();
 
-    // vrati TRUE, pokud je mozne retezec zkratit
+    // returns TRUE if the string can be truncated
     BOOL NeedTruncate() { return SubStrIndex != -1; }
 };
 
@@ -500,61 +500,61 @@ public:
 //
 // CShares
 //
-// seznam sharovanych adresaru
+// list of shared directories
 
 struct CSharesItem
 {
-    char* LocalPath;  // alokovana lokalni cesta pro sdileny prostredek
-    char* LocalName;  // ukazuje do LocalPath a oznacuje nazev sdileneho adresare
-                      // pokud jde o root cestu, je rovno LocalPath
-    char* RemoteName; // nazev sdileneho prostredku
-    char* Comment;    // nepovinny popis sdileneho prostredku
+    char* LocalPath;  // allocated local path for the share
+    char* LocalName;  // points into LocalPath and designates the shared directory name
+                      // equals LocalPath for a root path
+    char* RemoteName; // name of the shared resource
+    char* Comment;    // optional description of the shared resource
 
     CSharesItem(const char* localPath, const char* remoteName, const char* comment);
     ~CSharesItem();
 
-    void Cleanup(); // inicializuje ukazatele na a promenne
-    void Destroy(); // destrukce alokovanych dat
+    void Cleanup(); // initializes pointers and variables
+    void Destroy(); // destroys allocated data
 
-    BOOL IsGood() { return LocalPath != NULL; } // pokud je alokovana LocalPath, budou i ostatni
+    BOOL IsGood() { return LocalPath != NULL; } // if LocalPath is allocated, the rest will be too
 };
 
 class CShares
 {
 protected:
-    CRITICAL_SECTION CS;                // sekce pouzita pro synchronizaci dat objektu
-    TIndirectArray<CSharesItem> Data;   // seznam sharu
-    TIndirectArray<CSharesItem> Wanted; // seznam odkazu do Data atraktivnich pro hledani
+    CRITICAL_SECTION CS;                // section used to synchronize object data
+    TIndirectArray<CSharesItem> Data;   // list of shares
+    TIndirectArray<CSharesItem> Wanted; // list of attractive references into Data for searching
     BOOL SubsetOnly;
 
 public:
-    CShares(BOOL subsetOnly = TRUE); // subsetOnly znamena, ze nebudou pridany "special" shary
-                                     // jeste bychom mohli neplnit Comment, ale je to asi minimalni ujma
+    CShares(BOOL subsetOnly = TRUE); // subsetOnly means no "special" shares are added
+                                     // we could also leave Comment empty, but that's minimal loss
     ~CShares();
 
-    void Refresh(); // znovunacteni sharu ze systemu
+    void Refresh(); // reload shares from the system
 
-    // pripravi pouziti pro Search(), 'path' je cesta, na ktere nas zajimaji shary ("" = this_computer)
+    // prepares for Search(); 'path' specifies the location we are interested in ("" = this_computer)
     void PrepareSearch(const char* path);
 
-    // vraci TRUE, pokud je na 'path' z PrepareSearch sharovany podadresar (nebo root) 'name'
+    // returns TRUE if the 'path' from PrepareSearch contains the shared subdirectory (or root) 'name'
     BOOL Search(const char* name);
 
-    // vraci TRUE, pokud je 'path' sdilenym adresarem nebo jeho podadresarem
-    // pokud takove sdileni nebylo nalezeno, vraci FALSE
-    // volat bez PrepareSearch; prohledava vsechny shary linearne
-    // POZOR! neoptimalizovane na rychlost jako PrepareSearch/Search
+    // returns TRUE if 'path' is a shared directory or one of its subdirectories
+    // returns FALSE if no such share is found
+    // call without PrepareSearch; searches all shares linearly
+    // NOTE: not optimized for speed like PrepareSearch/Search
     BOOL GetUNCPath(const char* path, char* uncPath, int uncPathMax);
 
-    // vrati pocet sdilenych adresaru
+    // returns the number of shared directories
     int GetCount() { return Data.Count; }
 
-    // vrati informace o konkretni polozce; localPath, remoteName nebo comment
-    // mohou obsahovat NULL a nebudou pak vraceny
+    // returns information about a specific item; localPath, remoteName or comment
+    // may be NULL and then won't be returned
     BOOL GetItem(int index, const char** localPath, const char** remoteName, const char** comment);
 
 protected:
-    // vraci TRUE pokud najde 'name' ve Wanted + jeho 'index', jinak FALSE + 'index' kam vlozit
+    // returns TRUE if it finds 'name' in Wanted along with its 'index', otherwise FALSE plus the index where it should be inserted
     BOOL GetWantedIndex(const char* name, int& index);
 };
 
@@ -576,10 +576,10 @@ extern CSalamanderHelp SalamanderHelp;
 class CLanguage
 {
 public:
-    // nazev SLG souboru (pouze nazev.spl)
+    // SLG file name (filename only, .spl)
     char* FileName;
 
-    // udaje vytazene ze SLG souboru
+    // data extracted from the SLG file
     WORD LanguageID;
     WCHAR* AuthorW;
     char* Web;
@@ -602,8 +602,8 @@ BOOL IsSLGFileValid(HINSTANCE hModule, HINSTANCE hSLG, WORD& slgLangID, char* is
 //
 // CSystemPolicies
 //
-// Infromace se nacitaji pri startu Salamandera a upravuji nektere vlastnosti
-// a funkce programu.
+// Information is loaded at Salamander startup and adjusts some program
+// features and functions.
 //
 
 class CSystemPolicies
@@ -628,7 +628,7 @@ public:
     CSystemPolicies();
     ~CSystemPolicies();
 
-    // vytahne nastaveni z registry
+    // loads the settings from the registry
     void LoadFromRegistry();
 
     // If your application has a "run" function that allows a user to start a program
@@ -720,22 +720,22 @@ public:
     // 1 - The policy is enabled. Users can't map and disconnect network drives.
     DWORD GetNoNetConnectDisconnect() { return NoNetConnectDisconnect; }
 
-    // jsou uvalene restrikce na spousteni aplikaci?
+    // are there restrictions on running applications?
     BOOL GetMyRunRestricted() { return RestrictRun != 0 || DisallowRun != 0; }
-    // je uvalena restrikce na soubor 'fileName' (muze byt i plna cesta)
+    // is there a restriction on the file 'fileName' (it may also be a full path)
     BOOL GetMyCanRun(const char* fileName);
 
-    // 1 = nase StrCmpLogicalEx a systemova StrCmpLogicalW pod Vistou neberou tecku jako
-    // oddelovac ve jmenech ("File.txt" je vetsi nez "File (4).txt")
+    // 1 = our StrCmpLogicalEx and the system StrCmpLogicalW under Vista do not treat the dot
+    // as a separator in names ("File.txt" is greater than "File (4).txt")
     DWORD GetNoDotBreakInLogicalCompare() { return NoDotBreakInLogicalCompare; }
 
 private:
-    // nastavi vsechny hodnoty do povoleneho stavu a provede destrukci seznamu stringu
+    // sets all values to the allowed state and destroys the list of strings
     void EnableAll();
-    // nacte vsechny klice a prida je do seznamu
-    // vraci FALSE, pokud bylo malo pameti pro alokaci seznamu
+    // loads all keys and adds them to the list
+    // returns FALSE if there was not enough memory to allocate the list
     BOOL LoadList(TDirectArray<char*>* list, HKEY hRootKey, const char* keyName);
-    // vrati TRUE, pokud je 'name' v seznamu list
+    // returns TRUE if 'name' is in the list
     BOOL FindNameInList(TDirectArray<char*>* list, const char* name);
 };
 
@@ -744,12 +744,12 @@ extern CSystemPolicies SystemPolicies;
 //
 // ****************************************************************************
 //
-// horizontalne i vertikalne centrovany dialog
-// predek vsech dialogu v Salamandrovi
-// zajistuje volani ArrangeHorizontalLines pro vsechny dialogy
+// horizontally and vertically centered dialog
+// base of all dialogs in Salamander
+// ensures ArrangeHorizontalLines is called for every dialog
 //
-// Pokud je 'HCenterAgains' ruzny od NULL, je centrovano k nemu, jinak k Parentu.
-// nastavuje msgbox parenta pro plug-iny na tento dialog (jen po dobu jeho platnosti)
+// If 'HCenterAgains' is not NULL, it is centered against it, otherwise against the parent.
+// Sets the msgbox parent for plug-ins to this dialog (only while it exists)
 //
 
 class CCommonDialog : public CDialog
@@ -757,7 +757,7 @@ class CCommonDialog : public CDialog
 protected:
     HWND HCenterAgains;
     HWND HOldPluginMsgBoxParent;
-    BOOL CallEndStopRefresh; // je treba zavolat EndStopRefresh
+    BOOL CallEndStopRefresh; // EndStopRefresh must be called
 
 public:
     CCommonDialog(HINSTANCE modul, int resID, HWND parent,
@@ -791,8 +791,8 @@ protected:
 //
 // ****************************************************************************
 //
-// predek vsech property-sheet pages v Salamandrovi
-// zajistuje volani ArrangeHorizontalLines pro vsechny pages
+// base of all property-sheet pages in Salamander
+// ensures ArrangeHorizontalLines is called for every page
 //
 
 class CCommonPropSheetPage : public CPropSheetPage
@@ -815,83 +815,82 @@ protected:
 //
 // CMessagesKeeper
 //
-// Kruhova fronta, ktera drzi X poslednich struktur MSG,
-// ktere jsme odchytili v hooku
+// Circular queue that stores the last X MSG structures
+// captured in the hook
 //
-// V pripade padu Salamandera vkladame tento seznam do Bug Reporu
+// If Salamander crashes we insert this list into the bug report
 //
 
-// pocet drzenych zprav
+// number of stored messages
 #define MESSAGES_KEEPER_COUNT 30
 
 class CMessagesKeeper
 {
 private:
-    MSG Messages[MESSAGES_KEEPER_COUNT]; // vlastni zpravy
-    int Index;                           // index do pole Messages na volne misto
-    int Count;                           // pocet validnich polozek
+    MSG Messages[MESSAGES_KEEPER_COUNT]; // actual messages
+    int Index;                           // index of free slot in Messages
+    int Count;                           // number of valid items
 
 public:
     CMessagesKeeper();
 
-    // vlozi do fronty zpravu
+    // adds a message to the queue
     void Add(const MSG* msg);
 
-    // vrati pocet validnich zprav
+    // returns the number of valid messages
     int GetCount() { return Count; }
 
-    // do 'buffer' (velikost bufferu predat v 'buffMax') vlozi polozku dle indexu
-    // 'index': pro hodnotu 0 pujde o nejstarsi polozku, pro hodnotu Count
-    // o posledne pridavanou message
-    // pokud jde index mimo pole, vlozi text "error"
+    // writes the item at 'index' into 'buffer' (buffer size given by 'buffMax')
+    // index 0 is the oldest item, Count is the last added one
+    // if the index is out of range, writes the text "error"
     void Print(char* buffer, int buffMax, int index);
 };
 
-// pro hlavni aplikacni smycku
+// for the main application loop
 extern CMessagesKeeper MessagesKeeper;
 
 //****************************************************************************
 //
 // CWayPointsKeeper
 //
-// Kruhova fronta, ktera drzi X poslednich waypointu (id a custom data a cas vlozeni),
-// ktere jsme rozmistili po kodu
+// Circular queue holding the last X waypoints (id, custom data and insertion time)
+// that we placed throughout the code
 //
-// V pripade padu Salamandera vkladame tento seznam do Bug Reporu
+// If Salamander crashes we include this list in the bug report
 //
 
-// pocet drzenych waypointu
+// number of stored waypoints
 #define WAYPOINTS_KEEPER_COUNT 100
 
 struct CWayPoint
 {
-    DWORD WayPoint;     // hodnota definovavana v kodu
-    WPARAM CustomData1; // uzivatelska hodnota
-    LPARAM CustomData2; // uzivatelska hodnota
-    DWORD Time;         // cas vlozeni
+    DWORD WayPoint;     // value defined in the code
+    WPARAM CustomData1; // user value
+    LPARAM CustomData2; // user value
+    DWORD Time;         // insertion time
 };
 
 class CWayPointsKeeper
 {
 private:
-    CWayPoint WayPoints[WAYPOINTS_KEEPER_COUNT]; // vlastni waypointy
-    int Index;                                   // index do pole WayPoints na volne misto
-    int Count;                                   // pocet validnich polozek
-    BOOL Stopped;                                // TRUE/FALSE = ukladani waypointu povoleno/zakazano
-    CRITICAL_SECTION CS;                         // sekce pouzita pro synchronizaci dat objektu
+    CWayPoint WayPoints[WAYPOINTS_KEEPER_COUNT]; // actual waypoints
+    int Index;                                   // index of free slot in WayPoints
+    int Count;                                   // number of valid items
+    BOOL Stopped;                                // TRUE/FALSE = storing of waypoints enabled/disabled
+    CRITICAL_SECTION CS;                         // section used to synchronize object data
 
 public:
     CWayPointsKeeper();
     ~CWayPointsKeeper();
 
-    // vlozi do fronty waypoint
+    // inserts a waypoint into the queue
     void Add(DWORD waypoint, WPARAM customData1 = 0, LPARAM customData2 = 0);
 
-    // je-li 'stop' TRUE, ukonci ukladani waypointu (volani metody Add se ignoruje);
-    // je-li 'stop' FALSE, ukladani waypointu se opet povoli
+    // if 'stop' is TRUE, stop storing waypoints (calls to Add are ignored);
+    // if 'stop' is FALSE, storing waypoints is enabled again
     void StopStoring(BOOL stop);
 
-    // vrati pocet validnich waypointu
+    // returns the number of valid waypoints
     int GetCount()
     {
         HANDLES(EnterCriticalSection(&CS));
@@ -900,10 +899,9 @@ public:
         return count;
     }
 
-    // do 'buffer' (velikost bufferu predat v 'buffMax') vlozi polozku dle indexu
-    // 'index': pro hodnotu 0 pujde o nejstarsi polozku, pro hodnotu Count
-    // posledne pridavany waypoint
-    // pokud jde index mimo pole, vlozi text "error"
+    // writes the item at 'index' into 'buffer' (buffer size passed in 'buffMax')
+    // index 0 is the oldest item, Count is the last added waypoint
+    // if the index is out of range, writes the text "error"
     void Print(char* buffer, int buffMax, int index);
 };
 
@@ -911,7 +909,7 @@ public:
 //
 // CITaskBarList3
 //
-// Zapouzdreni ITaskBarList3 interface, ktery MS zavedli od Windows 7
+// Encapsulation of the ITaskBarList3 interface introduced by Microsoft in Windows 7
 //
 
 class CITaskBarList3
@@ -937,7 +935,7 @@ public:
         }
     }
 
-    BOOL Init(HWND hWindow) // volat po obdrzeni zpravy TaskbarBtnCreatedMsg
+    BOOL Init(HWND hWindow) // call after receiving the TaskbarBtnCreatedMsg message
     {
         // Initialize COM for this thread...
         CoInitialize(NULL);
@@ -954,8 +952,8 @@ public:
 
     void SetProgress2(const CQuadWord& progressCurrent, const CQuadWord& progressTotal)
     {
-        // muze se stat, ze progressTotal je 1 a progressCurrent je velke cislo, pak je vypocet
-        // nesmyslny (navic pada diky RTC) a je treba explicitne zadat 0% nebo 100% (hodnotu 1000)
+        // progressTotal can be 1 and progressCurrent a large number; the computation
+        // then makes no sense (and even crashes due to RTC), so explicitly set 0% or 100% (value 1000)
         SetProgressValue(progressCurrent >= progressTotal ? (progressTotal.Value == 0 ? 0 : 1000) : (DWORD)((progressCurrent * CQuadWord(1000, 0)) / progressTotal).Value,
                          1000);
     }
@@ -985,10 +983,10 @@ public:
 //
 // CShellExecuteWnd
 //
-// okno slouzi jako parent pri volani InvokeCommand, SHFileOperation, atd.
-// pokud pred volanim destruktoru nekdo zavola DestroyWindow na tento handle,
-// zobrazi se MessageBox ze nas postrelila nektera shell extension a pozada
-// se o poslani nasledujiciho Break-bug reporu; v nem je vide callstack
+// window used as the parent when calling InvokeCommand, SHFileOperation, etc.
+// if someone calls DestroyWindow on this handle before the destructor,
+// a MessageBox is shown informing that a shell extension injured us and asks
+// for sending the following Break bug report; its call stack can be seen there
 //
 class CShellExecuteWnd : public CWindow
 {
@@ -999,18 +997,18 @@ public:
     CShellExecuteWnd();
     ~CShellExecuteWnd();
 
-    // 'format' je formatovaci retezec pro sprintf; ukazateke na retezce mohou byt NULL, budou prelozeny na "(null)"
-    // v pripade uspechu vraci handle vytvoreneho okna
-    // POZOR: v pripade neuspechu vraci hParent
+    // 'format' is a formatting string for sprintf; pointers to strings may be NULL and are translated to "(null)"
+    // on success returns the handle of the created window
+    // WARNING: on failure returns hParent
     HWND Create(HWND hParent, const char* format, ...);
 
     virtual LRESULT WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam);
 };
 
-// pro okno 'hParent' enumeruje vsechny childy a hleda okna CShellExecuteWnd
-// jejich nazvy vytahne a vklada do bufferu 'text', oddelene koncema radku "\r\n"
-// neprekroci velikost bufferu 'textMax' a konec terminuje znakem 0
-// vraci pocet nalezenych oken
+// enumerates all children of 'hParent' and searches for CShellExecuteWnd windows
+// their names are extracted and inserted into 'text', separated by "\r\n"
+// does not exceed the size 'textMax' and terminates the string with 0
+// returns the number of found windows
 int EnumCShellExecuteWnd(HWND hParent, char* text, int textMax);
 
 //
@@ -1090,75 +1088,75 @@ extern BOOL GotMouseWheelScrollLines;
 // An OS independent method to retrieve the number of wheel scroll lines.
 // Returns: Number of scroll lines where WHEEL_PAGESCROLL indicates to scroll a page at a time.
 UINT GetMouseWheelScrollLines();
-UINT GetMouseWheelScrollChars(); // pro horizontalni scroll
+UINT GetMouseWheelScrollChars(); // for horizontal scrolling
 
 BOOL InitializeMenuWheelHook();
 BOOL ReleaseMenuWheelHook();
 
 #define BUG_REPORT_REASON_MAX 1000
-extern char BugReportReasonBreak[BUG_REPORT_REASON_MAX]; // text zobrazeny pri breaku Salamandera do bug reportu (jako duvod)
+extern char BugReportReasonBreak[BUG_REPORT_REASON_MAX]; // text shown when Salamander breaks into the bug report (reason)
 
-extern CShares Shares; // zde jsou ulozeny nactene sharovane adresare
+extern CShares Shares; // loaded shared directories are stored here
 
-extern CSalamanderSafeFile SalSafeFile; // interface pro komfortni praci se soubory
+extern CSalamanderSafeFile SalSafeFile; // interface for convenient file work
 
-extern const char* SalamanderConfigurationRoots[];                                                           // popis v mainwnd2.cpp
-BOOL GetUpgradeInfo(BOOL* autoImportConfig, char* autoImportConfigFromKey, int autoImportConfigFromKeySize); // popis v mainwnd2.cpp
-BOOL FindLatestConfiguration(BOOL* deleteConfigurations, const char*& loadConfiguration);                    // popis v mainwnd2.cpp
-BOOL FindLanguageFromPrevVerOfSal(char* slgName);                                                            // popis v mainwnd2.cpp
+extern const char* SalamanderConfigurationRoots[];                                                           // see mainwnd2.cpp
+BOOL GetUpgradeInfo(BOOL* autoImportConfig, char* autoImportConfigFromKey, int autoImportConfigFromKeySize); // see mainwnd2.cpp
+BOOL FindLatestConfiguration(BOOL* deleteConfigurations, const char*& loadConfiguration);                    // see mainwnd2.cpp
+BOOL FindLanguageFromPrevVerOfSal(char* slgName);                                                            // see mainwnd2.cpp
 
-// k editline/comboboxu 'ctrlID' vytvori a attachne specialni tridu, ktera umoznuje
-// odchyceni klaves a zaslani zpravy WM_USER_KEYDOWN do dialogu 'hDialog'
-// LOWORD(wParam) obsahuje ctrlID, a lParam obsahuje stistenou klavesu (wParam ze zpravy WM_KEYDOWN/WM_SYSKEYDOWN)
+// creates and attaches a special class to the edit line/combobox 'ctrlID'
+// enabling key interception and sending the WM_USER_KEYDOWN message to the dialog 'hDialog'
+// LOWORD(wParam) contains ctrlID and lParam the pressed key (wParam from WM_KEYDOWN/WM_SYSKEYDOWN)
 BOOL CreateKeyForwarder(HWND hDialog, int ctrlID);
-// volat po doruceni zpravy WM_USER_KEYDOWN; vraci TRUE, pokud byla klavesa zpracovana
+// call after WM_USER_KEYDOWN is received; returns TRUE if the key was handled
 DWORD OnDirectoryKeyDown(DWORD keyCode, HWND hDialog, int editID, int editBufSize, int buttonID);
-// volat po doruceni zpravy WM_USER_BUTTON, zajisti vybaleni menu za tlacitkem 'buttonID'
-// a nasledne naplneni editline 'editID'
+// call after WM_USER_BUTTON is received, opens the menu for button 'buttonID'
+// and then fills the edit line 'editID'
 void OnDirectoryButton(HWND hDialog, int editID, int editBufSize, int buttonID, WPARAM wParam, LPARAM lParam);
 
-// volat po doruceni zpravy WM_USER_BUTTON, zajisti fungovani Ctrl+A na systemech do Windows Vista, kde uz to funguje vsude
+// call after WM_USER_BUTTON is received; enables Ctrl+A on systems prior to Windows Vista where it didn't work everywhere
 DWORD OnKeyDownHandleSelectAll(DWORD keyCode, HWND hDialog, int editID);
 
-//  vraci TRUE, pokud hotKey patri Salamanderu
+//  returns TRUE if the hotKey belongs to Salamander
 BOOL IsSalHotKey(WORD hotKey);
 
 void GetNetworkDrives(DWORD& netDrives, char (*netRemotePath)[MAX_PATH]);
-void GetNetworkDrivesBody(DWORD& netDrives, char (*netRemotePath)[MAX_PATH], char* buffer); // jen pro interni pouziti v bug-reportu
+void GetNetworkDrivesBody(DWORD& netDrives, char (*netRemotePath)[MAX_PATH], char* buffer); // for internal use in bug reports only
 
-// vrati SID (jako retezec) pro nas proces
-// vraceny SID je potreba uvolnit pomoci volani LocalFree
+// returns the SID (as a string) for our process
+// the returned SID must be freed using LocalFree
 //   LPTSTR sid;
 //   if (GetStringSid(&sid))
 //     LocalFree(sid);
 BOOL GetStringSid(LPTSTR* stringSid);
 
-// vrati MD5 hash napocitany ze SID, cimz dostavame z variable-length SIDu pole 16 bajtu
-// 'sidMD5' musi ukazovat do pole 16 bajtu
-// v pripade uspechu vraci TRUE, jinak FALSE a nuluje cele pole 'sidMD5'
+// returns an MD5 hash computed from the SID, producing a 16-byte array
+// 'sidMD5' must point to a 16-byte array
+// returns TRUE on success, otherwise FALSE and zeroes the entire 'sidMD5'
 BOOL GetSidMD5(BYTE* sidMD5);
 
-// pripravi SECURITY_ATTRIBUTES tak aby pomoci nich vytvareny objekt (mutex, mapovana pamet) byl zabezpecny
-// znamena to, ze skupine Everyone je odebran pristup WRITE_DAC | WRITE_OWNER, jinak je vse povoleno
-// jde o tridu lepsi zabezpecni nez "NULL DACL", kde je objekt uplne otevren vsem
-// lze volat pod kazdym OS, ukazatel vrati od W2K vejs, jinak vraci NULL
-// pokud vrati 'psidEveryone' nebo 'paclNewDacl' ruzne od NULL, je treba je destruovat
+// prepares SECURITY_ATTRIBUTES so that an object (mutex, mapped memory) created with them is secure
+// this removes WRITE_DAC | WRITE_OWNER from Everyone; otherwise everything is allowed
+// this is better security than "NULL DACL", where the object is fully open
+// can be called on any OS; returns a pointer from W2K upward, otherwise NULL
+// if 'psidEveryone' or 'paclNewDacl' are returned non-NULL, they must be destroyed
 SECURITY_ATTRIBUTES* CreateAccessableSecurityAttributes(SECURITY_ATTRIBUTES* sa, SECURITY_DESCRIPTOR* sd,
                                                         DWORD allowedAccessMask, PSID* psidEveryone, PACL* paclNewDacl);
 
-// V pripade uspechu vrati TRUE a naplni DWORD na ktery odkazuje 'integrityLevel'
-// jinak (pri selhani nebo pod OS strasima nez Vista) vrati FALSE
+// On success returns TRUE and fills the DWORD referenced by 'integrityLevel'
+// otherwise (on failure or on OS older than Vista) returns FALSE
 BOOL GetProcessIntegrityLevel(DWORD* integrityLevel);
 
-// stejna funkce jako API GetProcessId(), ale funkcni take pod W2K
+// same function as the API GetProcessId(), but works under W2K as well
 DWORD SalGetProcessId(HANDLE hProcess);
 
-// je treba volat po spusteni procesu, uklada diference v env. promennych,
-// aby pozdeji fungovala fce RegenEnvironmentVariables()
+// Call after launching a process; stores environment variable differences
+// so RegenEnvironmentVariables() can work later
 void InitEnvironmentVariablesDifferences();
 
-// nacte aktualni environment promenne a aplikuje diference
+// loads current environment variables and applies the differences
 void RegenEnvironmentVariables();
 
-// pokus o detekce SSD, vice viz CSalamanderGeneralAbstract::IsPathOnSSD()
+// attempt to detect an SSD, see CSalamanderGeneralAbstract::IsPathOnSSD() for more
 BOOL IsPathOnSSD(const char* path);

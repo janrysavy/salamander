@@ -1,7 +1,7 @@
 ﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#include "precomp.h" // include slouzi pouze k prelozitelnosti v Salamanderu
+#include "precomp.h" // include serves only for compilability in Salamander
 
 //#include <assert.h>
 //#include <string.h>

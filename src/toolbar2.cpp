@@ -12,9 +12,9 @@
 // CToolBar
 //
 
-#define TB_SP_WIDTH 6 // sirka separatoru
+#define TB_SP_WIDTH 6 // width of the separator
 
-#define TB_ICON_TB 3 // pocet bodu nad a pod ikonou, vcetne ramecku
+#define TB_ICON_TB 3 // number of pixels above and below the icon including the frame
 #define TB_TEXT_TB 3
 
 void CToolBar::SetFont()
@@ -147,7 +147,7 @@ BOOL CToolBar::HitTest(int xPos, int yPos, int& index, BOOL& dropDown)
             else
             {
                 if (item->Style & TLBI_STYLE_SEPARATOR)
-                    item->Height = Height - 2 * Padding.ToolBarVertical; // separator nema nastavenou vysku - udelam to ted
+                    item->Height = Height - 2 * Padding.ToolBarVertical; // separator height not set - fix it now
                 int yOffset = (Height - item->Height) / 2;
                 if (xPos >= item->Offset && xPos < item->Offset + item->Width &&
                     yPos >= yOffset && yPos < yOffset + item->Height)
@@ -183,7 +183,7 @@ BOOL CToolBar::InsertMarkHitTest(int xPos, int yPos, int& index, BOOL& after)
         {
             item = Items[i];
             if (item->Style & TLBI_STYLE_SEPARATOR)
-                item->Height = Height - 2 * Padding.ToolBarVertical; // separator nema nastavenou vysku - udelam to ted
+                item->Height = Height - 2 * Padding.ToolBarVertical; // separator height not set - fix it now
             int yOffset = (Height - item->Height) / 2;
             if (xPos >= item->Offset && xPos < item->Offset + item->Width &&
                 yPos >= yOffset && yPos < yOffset + item->Height)
@@ -197,7 +197,7 @@ BOOL CToolBar::InsertMarkHitTest(int xPos, int yPos, int& index, BOOL& after)
                 {
                     if (index > 0)
                     {
-                        // prednostne vratime, ze jsem za minulou polozkou (eliminace blikani)
+                        // preferentially return that we are after the previous item (to eliminate flicker)
                         index--;
                         after = TRUE;
                     }
@@ -210,20 +210,20 @@ BOOL CToolBar::InsertMarkHitTest(int xPos, int yPos, int& index, BOOL& after)
                     after = TRUE;
                     return TRUE;
                 }
-                // bod lezi nad tlacitkem, ale ne dost u jeho okraje
+                // the point is above the button but not close enough to its edge
                 return FALSE;
             }
         }
         if (item == NULL)
         {
-            // zadna polozka
+            // no item
             index = -1;
             after = FALSE;
             return TRUE;
         }
         if (xPos >= item->Offset + item->Width)
         {
-            // za posledni polozkou
+            // after the last item
             index = Items.Count - 1;
             after = TRUE;
             return TRUE;
@@ -275,7 +275,7 @@ BOOL CToolBar::Refresh()
         }
         else
         {
-            // musime urcit sirku podle obsahu
+            // we must determine the width from the contents
 
             int textWidth = 0;
 
@@ -289,7 +289,7 @@ BOOL CToolBar::Refresh()
 
             if (!vertical && (Style & TLB_STYLE_TEXT) && (item->Style & TLBI_STYLE_SHOWTEXT) && item->Text != NULL && *item->Text != 0)
             {
-                // pokud polozka obsahuje text, omerime ho
+                // if the item contains text, measure it
                 RECT r;
                 r.left = 0;
                 r.top = 0;
@@ -308,7 +308,7 @@ BOOL CToolBar::Refresh()
             if (!vertical && (item->Style & TLBI_STYLE_SEPARATEDROPDOWN))
                 outterDropPresent = TRUE;
 
-            int width = 1; // levy okraj
+            int width = 1; // left margin
             int height = 0;
 
             if (iconPresent)
@@ -348,7 +348,7 @@ BOOL CToolBar::Refresh()
                 item->InnerX = width;
                 width += SVGArrowDropDown.GetWidth() + Padding.TextRight;
             }
-            width++; // pravy okraj
+            width++; // right margin
 
             if (outterDropPresent)
             {
@@ -358,7 +358,7 @@ BOOL CToolBar::Refresh()
                     width += 2 + SVGArrowDropDown.GetWidth() + 2;
                 }
                 else
-                    item->OutterX = width - (2 + SVGArrowDropDown.GetWidth() + 2); // ukousneme s sirky polozky
+                    item->OutterX = width - (2 + SVGArrowDropDown.GetWidth() + 2); // subtract from the item width
             }
 
             if (!(item->Style & TLBI_STYLE_FIXEDWIDTH))
@@ -373,7 +373,7 @@ BOOL CToolBar::Refresh()
     if (hOldFont != NULL)
         SelectObject(CacheBitmap->HMemDC, hOldFont);
     CacheBitmap->Enlarge(maxWidth, maxHeight);
-    DirtyItems = FALSE; // musim nastavit pred paintem, aby nedoslo k rekurzi
+    DirtyItems = FALSE; // must set before painting to avoid recursion
 
     if (HWindow != NULL)
     {
@@ -404,7 +404,7 @@ void CToolBar::DrawItem(int index)
         return;
     }
     if (Refresh())
-        return; // pokud bylo prekresleno vse, nemusime uz nic delat
+        return; // if everything was repainted, nothing else to do
 
     HDC hDC = HANDLES(GetDC(HWindow));
     DrawItem(hDC, index);
@@ -421,7 +421,7 @@ void CToolBar::DrawItem(HDC hDC, int index)
     }
     if (index < 0 || index >= Items.Count)
     {
-        // meli jsme nekolik padacek v CToolBar::DrawItem
+        // we had several crashes in CToolBar::DrawItem
         TRACE_E("index=" << index << " Items.Count=" << Items.Count);
         return;
     }
@@ -438,7 +438,7 @@ void CToolBar::DrawItem(HDC hDC, int index)
 
     //  TRACE_I("TB DrawItem index:"<<index<<" x:"<<item->Offset);
 
-    // podmazu plochu podkladovou barvou
+    // fill the area with the background color
     RECT r1;
     r1.left = 0;
     r1.top = 0;
@@ -518,14 +518,14 @@ void CToolBar::DrawItem(HDC hDC, int index)
         r.right = width;
         r.bottom = r.top + height;
 
-        BOOL bodyDown = FALSE; // je telo zamackle ?
-        BOOL dropDown = FALSE; // je drop down zamackly?
+        BOOL bodyDown = FALSE; // is the button body pressed?
+        BOOL dropDown = FALSE; // is the drop-down pressed?
         BOOL checked = FALSE;
         BOOL grayed = !Customizing && (item->State & TLBI_STATE_GRAYED);
         if (HelpMode && HotIndex == index)
-            grayed = FALSE; // v helpmode jsou i disabled polozky vysviceny
+            grayed = FALSE; // in help mode even disabled items are highlighted
 
-        // vykreslim ramecek
+        // draw the frame
         if (!grayed && ((HotIndex == index || item->State & TLBI_STATE_CHECKED) || (item->State & TLBI_STATE_PRESSED)))
         {
             if (outterDropPresent)
@@ -538,7 +538,7 @@ void CToolBar::DrawItem(HDC hDC, int index)
             {
                 if (HotIndex != index)
                 {
-                    // ditherovane zamackle pozadi
+                    // dithered pressed background
                     SetBrushOrgEx(CacheBitmap->HMemDC, 0, r.top, NULL);
                     HBRUSH hOldBrush = (HBRUSH)SelectObject(CacheBitmap->HMemDC, HDitherBrush);
                     int oldTextColor = SetTextColor(CacheBitmap->HMemDC, GetSysColor(COLOR_BTNFACE));
@@ -552,13 +552,13 @@ void CToolBar::DrawItem(HDC hDC, int index)
                 checked = TRUE;
             }
 
-            // ramecek kolem tela
+            // frame around the body
             DWORD mode = bodyDown ? BDR_SUNKENOUTER : BDR_RAISEDINNER;
             DrawEdge(CacheBitmap->HMemDC, &r, mode, BF_RECT);
 
             if (HotIndex == index && outterDropPresent)
             {
-                // ramecek kolem drop down
+                // frame around the drop-down
                 r.left = r.right;
                 r.right = width;
                 mode = dropDown ? BDR_SUNKENOUTER : BDR_RAISEDINNER;
@@ -570,7 +570,7 @@ void CToolBar::DrawItem(HDC hDC, int index)
         {
             if (grayed)
             {
-                // kreslime bud s pozadim (rychlejsi) nebo v priade checked transparentne
+                // draw either with background (faster) or transparently when checked
                 int offset = bodyDown ? 1 : 0;
                 int x = item->IconX + offset;
                 int y = centerOffset + (item->Height - imgH) / 2 + offset;
@@ -588,7 +588,7 @@ void CToolBar::DrawItem(HDC hDC, int index)
             }
             else
             {
-                // kreslime bud s pozadim (rychlejsi) nebo v priade checked transparentne
+                // draw either with background (faster) or transparently when checked
                 int offset = bodyDown ? 1 : 0;
                 int x = item->IconX + offset;
                 int y = centerOffset + (item->Height - imgH) / 2 + offset;
@@ -657,7 +657,7 @@ void CToolBar::DrawItem(HDC hDC, int index)
                 int offset = 0;
                 if (!grayed && dropDown)
                     offset = 1;
-                // zde budeme posouvat pouze dolu - mame malo mista
+                // we only shift down here -- space is limited
                 DrawDropDown(CacheBitmap->HMemDC, item->OutterX, y + offset, grayed);
             }
         }
@@ -677,7 +677,7 @@ void CToolBar::DrawAllItems(HDC hDC)
         return;
     }
     if (Refresh())
-        return; // pokud bylo prekresleno vse, nemusime uz nic delat
+        return; // if everything was repainted, nothing else to do
 
     BOOL vertical = (Style & TLB_STYLE_VERTICAL) != 0;
 
@@ -723,7 +723,7 @@ void CToolBar::DrawAllItems(HDC hDC)
         }
         offset += length;
     }
-    // domazu zbytek na konci
+    // clear the remaining area at the end
     if (vertical)
     {
         if (offset < Height)
@@ -771,7 +771,7 @@ void CToolBar::DrawInsertMark(HDC hDC)
     if (InserMarkIndex == -1)
         return;
     int x = 0;
-    // urcime posizici
+    // determine the position
     if (InserMarkIndex >= 0 && InserMarkIndex < Items.Count)
     {
         CToolBarItem* item = Items[InserMarkIndex];
@@ -782,17 +782,17 @@ void CToolBar::DrawInsertMark(HDC hDC)
     x -= 1;
     HPEN hPen = HANDLES(CreatePen(PS_SOLID, 0, RGB(0, 0, 0)));
     HPEN hOldPen = (HPEN)SelectObject(hDC, hPen);
-    // vrchni dve vodorovne cary
+    // top two horizontal lines
     MoveToEx(hDC, x - 2, 0, NULL);
     LineTo(hDC, x + 4, 0);
     MoveToEx(hDC, x - 1, 1, NULL);
     LineTo(hDC, x + 3, 1);
-    // dve svisle cary
+    // two vertical lines
     MoveToEx(hDC, x, 2, NULL);
     LineTo(hDC, x, Height - 2);
     MoveToEx(hDC, x + 1, 2, NULL);
     LineTo(hDC, x + 1, Height - 2);
-    // spodni dve vodorovne cary
+    // bottom two horizontal lines
     MoveToEx(hDC, x - 1, Height - 2, NULL);
     LineTo(hDC, x + 3, Height - 2);
     MoveToEx(hDC, x - 2, Height - 1, NULL);

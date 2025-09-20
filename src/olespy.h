@@ -1,30 +1,29 @@
 ﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
-// CommentsTranslationProject: TRANSLATED
 
 #pragma once
 
-// OLESPY is used for detecting COM/OLE leaks.
-// The bodies of the following functions are empty in the release version
-// (if _DEBUG is not defined).
+// OLESPY is used to detect COM/OLE leaks
+// the bodies of the following functions are empty in release builds
+// (when _DEFINE is not defined)
 //
-// Details on finding OLE leaks are described in OLESPY.CPP.
+// Details about searching for OLE leaks are described in OLESPY.CPP
 
-// Attaches our IMallocSpy to OLE; COM must be initialized first.
-// If it returns TRUE, the followed functions can be called.
+// Connect our IMallocSpy to OLE; COM must be initialized first
+// Returns TRUE if the following functions can be called
 BOOL OleSpyRegister();
 
-// Detaches the Spy from OLE; OleSpyDump can still be called after this function.
+// Disconnect the SPY from OLE; OleSpyDump can still be called afterwards
 void OleSpyRevoke();
 
-// Used to break the application upon reaching the 'alloc' allocation.
-// Call anytime between OleSpyRegister and OleSpyRevoke.
+// Used to break the application when allocation number 'alloc' is reached
+// Call sometime between OleSpyRegister and OleSpyRevoke
 void OleSpySetBreak(int alloc);
 
-// Prints statistics and leaks to the debugger's Debug window and to TRACE_I.
-// For leaks, it displays the allocation order in [n], which can be used for OleSpySetBreak.
+// Prints statistics and leaks to the Debug window and TRACE_I
+// For leaks it shows the allocation order [n] which can be used for OleSpySetBreak
 void OleSpyDump();
 
-// Stress test of the IMallocSpy implementation.
-// Intended for debugging purposes.
+// stress test of IMallocSpy implementation
+// meant for debugging purposes
 // void OleSpyStressTest();

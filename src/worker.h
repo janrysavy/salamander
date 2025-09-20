@@ -3,34 +3,34 @@
 
 #pragma once
 
-#define CREATE_DIR_SIZE CQuadWord(4096, 0) // odhady narocnosti operaci (namereno ne-cachovane podle doby behu worker threadu)
+#define CREATE_DIR_SIZE CQuadWord(4096, 0) // operation cost estimates (measured uncached by worker thread runtime)
 #define MOVE_DIR_SIZE CQuadWord(5050, 0)
 #define DELETE_DIR_SIZE CQuadWord(2400, 0)
 #define DELETE_DIRLINK_SIZE CQuadWord(2400, 0)
 #define MOVE_FILE_SIZE CQuadWord(6500, 0)
-#define COPY_MIN_FILE_SIZE CQuadWord(4096, 0) // nesmi byt mensi nez 1 (duvod: jinak nebude slapat test alokace potrebneho mista pro soubor pred zahajenim kopirovani v DoCopyFile)
+#define COPY_MIN_FILE_SIZE CQuadWord(4096, 0) // must be at least 1 so the allocation check for copy works in DoCopyFile
 #define CONVERT_MIN_FILE_SIZE CQuadWord(4096, 0)
 #define COMPRESS_ENCRYPT_MIN_FILE_SIZE CQuadWord(4096, 0)
 #define DELETE_FILE_SIZE CQuadWord(2300, 0)
 #define CHATTRS_FILE_SIZE CQuadWord(500, 0)
-#define MAX_OP_FILESIZE 6500 // POZOR: maximalni hodnota z teto skupiny
+#define MAX_OP_FILESIZE 6500 // WARNING: highest allowed value from this group
 
-// 4/2012 - zvetsuji buffer na desetinasobek, pri kterem se u velkych souboru po siti dostavame na prenosove
-// rychlosti srovnatelne s Total Commander, coz jsou 2-3x lepsi casy nez s desetinovym bufferem
-// testoval jsem na lokalnich discich i po siti a nevidim zadnou nevyhodu ve zvetseni bufferu
-#define OPERATION_BUFFER (10 * 32768)          // 320KB buffer pro copy a move
-#define REMOVABLE_DISK_COPY_BUFFER 65536       // 64KB buffer pro copy a move na vymennych mediich (floppy, ZIP)
-#define ASYNC_COPY_BUF_SIZE_512KB (128 * 1024) // 128KB buffer pro soubory do 512KB
-#define ASYNC_COPY_BUF_SIZE_2MB (256 * 1024)   // 256KB buffer pro soubory do 2MB
-#define ASYNC_COPY_BUF_SIZE_8MB (512 * 1024)   // 512KB buffer pro soubory do 8MB
-#define ASYNC_COPY_BUF_SIZE (1024 * 1024)      // maximalni velikost bufferu pro asynchronni copy (podle Explorera max. 1MB); POZOR: musi byt >= nez RETRYCOPY_TAIL_MINSIZE
-#define ASYNC_SLOW_COPY_BUF_SIZE (8 * 1024)    // 8KB buffer pro pomale kopirovani (hlavne sitove disky pres VPN)
+// 4/2012 - buffer increased tenfold; with large files over the network we reach
+// transfer rates comparable to Total Commander, roughly 2-3x faster than with
+// the previous one. Tested on local and network disks with no disadvantages.
+#define OPERATION_BUFFER (10 * 32768)          // 320KB buffer for copy and move
+#define REMOVABLE_DISK_COPY_BUFFER 65536       // 64KB buffer for copy and move on removable media (floppy, ZIP)
+#define ASYNC_COPY_BUF_SIZE_512KB (128 * 1024) // 128KB buffer for files up to 512KB
+#define ASYNC_COPY_BUF_SIZE_2MB (256 * 1024)   // 256KB buffer for files up to 2MB
+#define ASYNC_COPY_BUF_SIZE_8MB (512 * 1024)   // 512KB buffer for files up to 8MB
+#define ASYNC_COPY_BUF_SIZE (1024 * 1024)      // maximum buffer for async copy (Explorer uses up to 1MB); must be >= RETRYCOPY_TAIL_MINSIZE
+#define ASYNC_SLOW_COPY_BUF_SIZE (8 * 1024)    // 8KB buffer for slow copies (mainly network disks via VPN)
 #define ASYNC_SLOW_COPY_BUF_MINBLOCKS 12
 
-// POZOR: HIGH_SPEED_LIMIT musi byt vetsi nebo rovno nejvetsimu z predchozi skupiny (OPERATION_BUFFER,
-//        REMOVABLE_DISK_COPY_BUFFER, ASYNC_COPY_BUF_SIZE)
-#define HIGH_SPEED_LIMIT (1024 * 1024) // je-li speed-limit >= toto cislo, omezujeme rychlost tak, ze po preneseni (speed-limit / HIGH_SPEED_LIMIT_BRAKE_DIV) bytu vlozime brzdici Sleep (je-li treba)
-#define HIGH_SPEED_LIMIT_BRAKE_DIV 10  // popis viz HIGH_SPEED_LIMIT
+// WARNING: HIGH_SPEED_LIMIT must be at least as large as the maximum of
+//          OPERATION_BUFFER, REMOVABLE_DISK_COPY_BUFFER and ASYNC_COPY_BUF_SIZE
+#define HIGH_SPEED_LIMIT (1024 * 1024) // if the speed limit is >= this value we throttle by inserting a sleep after transferring (speed-limit / HIGH_SPEED_LIMIT_BRAKE_DIV) bytes when needed
+#define HIGH_SPEED_LIMIT_BRAKE_DIV 10  // see HIGH_SPEED_LIMIT for details
 
 void InitWorker();
 void ReleaseWorker();
@@ -48,7 +48,7 @@ struct CChangeAttrsData
     FILETIME TimeAccessed;
 };
 
-struct CConvertData // data pro ocConvert
+struct CConvertData // data for ocConvert
 {
     char CodeTable[256];
     int EOFType;
@@ -66,8 +66,8 @@ struct CStartProgressDialogData
     CProgressDlgArrItem* NewDlg;
     BOOL OperationWasStarted;
     HANDLE ContEvent;
-    RECT MainWndRectClipR; // pouziva se pro centrovani progress dialogu bez parenta (backgroundove operace)
-    RECT MainWndRectByR;   // pouziva se pro centrovani progress dialogu bez parenta (backgroundove operace)
+    RECT MainWndRectClipR; // used to center a progress dialog without a parent (background operations)
+    RECT MainWndRectByR;   // used to center a progress dialog without a parent (background operations)
 };
 
 struct CProgressData
@@ -82,58 +82,58 @@ struct CProgressData
 // ****************************************************************************
 // CTransferSpeedMeter
 //
-// objekt pro vypocet rychlosti prenosu dat (prevzaty z FTP pluginu)
+// object that calculates data transfer speed (adapted from the FTP plugin)
 
-#define TRSPMETER_ACTSPEEDSTEP 200        // pro vypocet prenosove rychlosti: velikost kroku v milisekundach (nesmi byt 0)
-#define TRSPMETER_ACTSPEEDNUMOFSTEPS 25   // pro vypocet prenosove rychlosti: pocet pouzitych kroku (vic kroku = jemnejsi zmeny rychlosti pri "vypadku" prvniho kroku ve fronte)
-#define TRSPMETER_NUMOFSTOREDPACKETS 40   // pro vypocet prenosove rychlosti: kolik poslednich "paketu" se ma pamatovat (pri nizkych rychlostech se z nich pocita rychlost) (nesmi byt 0)
-#define TRSPMETER_STPCKTSMININTERVAL 2000 // pro vypocet prenosove rychlosti: minimalni doba mezi prijetim prvniho a posledniho ulozeneho "paketu", kdy je lze pouzit pro vypocet rychlosti (nizke rychlosti)
+#define TRSPMETER_ACTSPEEDSTEP 200        // transfer-speed calculation step size in milliseconds (must not be 0)
+#define TRSPMETER_ACTSPEEDNUMOFSTEPS 25   // number of stored steps (more steps = smoother changes if the first step "drops" from the queue)
+#define TRSPMETER_NUMOFSTOREDPACKETS 40   // how many recent "packets" to remember for speed computation at low transfer rates (must not be 0)
+#define TRSPMETER_STPCKTSMININTERVAL 2000 // minimum time between the first and last stored packet required to use them for speed computation (slow transfer rates)
 
 class CTransferSpeedMeter
 {
 protected:
-    // POZOR: pristup do objektu je mozny jen v kriticke sekci COperations::StatusCS
+    // WARNING: access to this object is allowed only inside COperations::StatusCS
 
-    // vypocet prenosove rychlosti:
-    DWORD TransferedBytes[TRSPMETER_ACTSPEEDNUMOFSTEPS + 1]; // kruhova fronta s poctem bytu prenesenych v poslednich N krocich (cas. intervalech) + jeden "pracovni" krok navic (nascitava se v nem hodnota za akt. interval)
-    int ActIndexInTrBytes;                                   // index posledniho (aktualniho) zaznamu v TransferedBytes
-    DWORD ActIndexInTrBytesTimeLim;                          // casova hranice (v ms) posledniho zaznamu v TransferedBytes (do tohoto casu se nacitaji byty do posl. zaznamu)
-    int CountOfTrBytesItems;                                 // pocet kroku v TransferedBytes (uzavrene + jeden "pracovni")
+    // data transfer speed calculation:
+    DWORD TransferedBytes[TRSPMETER_ACTSPEEDNUMOFSTEPS + 1]; // circular queue holding the number of bytes transferred in the last N time steps plus one extra "working" slot accumulating the current interval
+    int ActIndexInTrBytes;                                   // index of the last (current) entry in TransferedBytes
+    DWORD ActIndexInTrBytesTimeLim;                          // time limit (ms) of the last entry in TransferedBytes (bytes accumulate into the last entry until this time)
+    int CountOfTrBytesItems;                                 // number of steps in TransferedBytes (closed ones plus one "working")
 
-    DWORD LastPacketsSize[TRSPMETER_NUMOFSTOREDPACKETS + 1]; // kruhova fronta s velikosti poslednich N+1 "paketu"
-    DWORD LastPacketsTime[TRSPMETER_NUMOFSTOREDPACKETS + 1]; // kruhova fronta s casem prijeti poslednich N+1 "paketu"
-    int ActIndexInLastPackets;                               // index v LastPacketsSize a LastPacketsTime pro zapis dalsiho prijateho "paketu" (pri plne fronte je to zaroven index nejstarsiho "paketu")
-    int CountOfLastPackets;                                  // pocet "paketu" v LastPacketsSize a LastPacketsTime (pocet platnych zaznamu)
-    DWORD MaxPacketSize;                                     // velikost nejvetsiho paketu, ktery muzeme ocekavat
+    DWORD LastPacketsSize[TRSPMETER_NUMOFSTOREDPACKETS + 1]; // circular queue with sizes of the last N+1 "packets"
+    DWORD LastPacketsTime[TRSPMETER_NUMOFSTOREDPACKETS + 1]; // circular queue with timestamps of the last N+1 "packets"
+    int ActIndexInLastPackets;                               // index in LastPacketsSize/Time for storing the next received packet (also the index of the oldest packet when full)
+    int CountOfLastPackets;                                  // number of packets in LastPacketsSize and LastPacketsTime (valid entries count)
+    DWORD MaxPacketSize;                                     // size of the largest packet we can expect
 
 public:
-    BOOL ResetSpeed; // TRUE = pravdepodobne by se pred dalsim merenim rychlosti mel resetnout merak (volat JustConnected) - pokles rychlosti byl prilis velky, zobrazovali jsme proto nulovou rychlost
+    BOOL ResetSpeed; // TRUE if the meter should probably be reset before the next measurement (call JustConnected); a huge speed drop was detected so we displayed zero
 
 public:
     CTransferSpeedMeter();
 
-    // vynuluje objekt (priprava pro dalsi pouziti)
-    // volani mozne z libovolneho threadu
+    // clears the object (preparation for another use)
+    // can be called from any thread
     void Clear();
 
-    // ve 'speed' (nesmi byt NULL) vraci rychlost spojeni v bytech za sekundu
-    // volani mozne z libovolneho threadu
+    // returns the connection speed in bytes per second in 'speed' (must not be NULL)
+    // can be called from any thread
     void GetSpeed(CQuadWord* speed);
 
-    // vola se v okamziku, kdy se ma zacit merit rychlost
-    // volani mozne z libovolneho threadu
+    // called when speed measurement should start
+    // may be called from any thread
     void JustConnected();
 
-    // vola se po uskutecneni prenosu casti dat; v 'count' je o kolik dat slo; 'time' je
-    // casu prenosu; 'maxPacketSize' je maximalni ocekavana velikost dat, ktera prijdou
-    // dalsim volanim BytesReceived()
+    // called after part of the data has been transferred; 'count' is how much data,
+    // 'time' is the transfer duration; 'maxPacketSize' is the maximum expected
+    // size of data blocks to arrive in subsequent BytesReceived() calls
     void BytesReceived(DWORD count, DWORD time, DWORD maxPacketSize);
 
-    // upravi 'progressBufferLimit' podle aktualnich dat o prijatych paketech;
-    // 'lastFileBlockCount' je pocet paketu, pres ktery nesmime jit (bereme jen souvisle
-    // kopirovani jednoho souboru, 'lastFileBlockCount' je chranene pred pretecenim,
-    // pocet > 1000000 znamena "hafo", kolik presne neni dulezite); 'lastFileStartTime'
-    // je GetTickCount() z okamziku, kdy jsme zacali kopirovat posledni soubor
+    // adjusts 'progressBufferLimit' according to the packets received so far;
+    // 'lastFileBlockCount' is the packet count we must not exceed (continuous
+    // copy of a single file, protected against overflow;
+    // a count > 1000000 means "a lot," the exact value is unimportant). 'lastFileStartTime'
+    // is GetTickCount() when we started copying the last file
     void AdjustProgressBufferLimit(DWORD* progressBufferLimit, DWORD lastFileBlockCount,
                                    DWORD lastFileStartTime);
 };
@@ -142,49 +142,47 @@ public:
 // ****************************************************************************
 // CProgressSpeedMeter
 //
-// objekt pro vypocet rychlosti progresu - pro vypocet time-left
+// object for computing progress speed - used to estimate time remaining
 
-#define PRSPMETER_ACTSPEEDSTEP 500         // pro vypocet rychlosti progresu: velikost kroku v milisekundach (nesmi byt 0)
-#define PRSPMETER_ACTSPEEDNUMOFSTEPS 60    // pro vypocet rychlosti progresu: pocet pouzitych kroku (vic kroku = jemnejsi zmeny rychlosti pri "vypadku" prvniho kroku ve fronte)
-#define PRSPMETER_NUMOFSTOREDPACKETS 100   // pro vypocet rychlosti progresu: kolik poslednich "paketu" se ma pamatovat (pri nizkych rychlostech se z nich pocita rychlost) (nesmi byt 0)
-#define PRSPMETER_STPCKTSMININTERVAL 10000 // pro vypocet rychlosti progresu: minimalni doba mezi prijetim prvniho a posledniho ulozeneho "paketu", kdy je lze pouzit pro vypocet rychlosti (nizke rychlosti)
+#define PRSPMETER_ACTSPEEDSTEP 500         // progress-speed calculation step size in milliseconds (must not be 0)
+#define PRSPMETER_ACTSPEEDNUMOFSTEPS 60    // number of steps used for progress speed (more steps = smoother changes if the first one drops out)
+#define PRSPMETER_NUMOFSTOREDPACKETS 100   // how many of the most recent "packets" to remember when calculating progress speed (low transfer rates) (must not be 0)
+#define PRSPMETER_STPCKTSMININTERVAL 10000 // minimum time between the first and last stored packet necessary to compute progress speed (slow transfer rates)
 
 class CProgressSpeedMeter
 {
 protected:
-    // POZOR: pristup do objektu je mozny jen v kriticke sekci COperations::StatusCS
+    // WARNING: access to this object is allowed only inside COperations::StatusCS
 
-    // vypocet prenosove rychlosti:
-    DWORD TransferedBytes[PRSPMETER_ACTSPEEDNUMOFSTEPS + 1]; // kruhova fronta s poctem bytu prenesenych v poslednich N krocich (cas. intervalech) + jeden "pracovni" krok navic (nascitava se v nem hodnota za akt. interval)
-    int ActIndexInTrBytes;                                   // index posledniho (aktualniho) zaznamu v TransferedBytes
-    DWORD ActIndexInTrBytesTimeLim;                          // casova hranice (v ms) posledniho zaznamu v TransferedBytes (do tohoto casu se nacitaji byty do posl. zaznamu)
-    int CountOfTrBytesItems;                                 // pocet kroku v TransferedBytes (uzavrene + jeden "pracovni")
+    // data transfer speed calculation:
+    DWORD TransferedBytes[PRSPMETER_ACTSPEEDNUMOFSTEPS + 1]; // circular queue with bytes transferred during the last N time steps plus one extra working slot accumulating the current interval
+    int ActIndexInTrBytes;                                   // index of the last (current) entry in TransferedBytes
+    DWORD ActIndexInTrBytesTimeLim;                          // time limit (ms) of the last entry in TransferedBytes (bytes accumulate into the last entry until this time)
+    int CountOfTrBytesItems;                                 // number of steps in TransferedBytes (closed ones plus one "working")
 
-    DWORD LastPacketsSize[PRSPMETER_NUMOFSTOREDPACKETS + 1]; // kruhova fronta s velikosti poslednich N+1 "paketu"
-    DWORD LastPacketsTime[PRSPMETER_NUMOFSTOREDPACKETS + 1]; // kruhova fronta s casem prijeti poslednich N+1 "paketu"
-    int ActIndexInLastPackets;                               // index v LastPacketsSize a LastPacketsTime pro zapis dalsiho prijateho "paketu" (pri plne fronte je to zaroven index nejstarsiho "paketu")
-    int CountOfLastPackets;                                  // pocet "paketu" v LastPacketsSize a LastPacketsTime (pocet platnych zaznamu)
-    DWORD MaxPacketSize;                                     // velikost nejvetsiho paketu, ktery muzeme ocekavat
+    DWORD LastPacketsSize[PRSPMETER_NUMOFSTOREDPACKETS + 1]; // circular queue with the size of the last N+1 "packets"
+    DWORD LastPacketsTime[PRSPMETER_NUMOFSTOREDPACKETS + 1]; // circular queue with the time each of the last N+1 packets was received
+    int ActIndexInLastPackets;                               // index in LastPacketsSize/Time to store the next packet (also the index of the oldest packet when full)
+    int CountOfLastPackets;                                  // number of packets stored in LastPacketsSize and LastPacketsTime
+    DWORD MaxPacketSize;                                     // size of the largest packet we can expect
 
 public:
     CProgressSpeedMeter();
 
-    // vynuluje objekt (priprava pro dalsi pouziti)
-    // volani mozne z libovolneho threadu
+    // clears the object (preparation for another use)
+    // can be called from any thread
     void Clear();
 
-    // ve 'speed' (nesmi byt NULL) vraci rychlost spojeni v bytech za sekundu
-    // volani mozne z libovolneho threadu
+    // stores the connection speed in bytes per second in 'speed' (must not be NULL)
+    // can be called from any thread
     void GetSpeed(CQuadWord* speed);
 
-    // vola se v okamziku, kdy se ma zacit merit rychlost
-    // volani mozne z libovolneho threadu
+    // called when speed measurement should begin
+    // can be called from any thread
     void JustConnected();
 
-    // vola se po uskutecneni prenosu casti dat; v 'count' je o kolik dat slo; 'time' je
-    // casu prenosu; 'maxPacketSize' je maximalni ocekavana velikost dat, ktera prijdou
-    // dalsim volanim BytesReceived()
-    void BytesReceived(DWORD count, DWORD time, DWORD maxPacketSize);
+    // called after a portion of data has been transferred; 'count' is the number of bytes and 'time'
+    // is the transfer time; 'maxPacketSize' is the largest expected block size for upcoming BytesReceived() calls
 };
 
 enum COperationCode
@@ -196,112 +194,112 @@ enum COperationCode
     ocMoveDir,
     ocDeleteDir,
     ocDeleteDirLink,
-    ocChangeAttrs, // POZOR: pozadovane atributy jsou ulozeny v TargetName (pouziti bez ohledu na typ, proste DWORD)
+    ocChangeAttrs, // WARNING: desired attributes are stored in TargetName (used regardless of type, simply a DWORD)
     ocCountSize,
     ocConvert,
-    ocLabelForSkipOfCreateDir, // znacka, ke ktere se ma skipnout skript pri skipu na ocCreateDirXXX; POZOR: v SourceName a TargetName je LO- a HI-DWORD souctu velikosti souboru (vcetne ADS) obsazenych ve skipovanem adresari; POZOR: v Attr je index ocCreateDirXXX v poli COperations pro skipovany adresar
-    ocCopyDirTime,             // Move/Copy: pri filterCriteria->PreserveDirTime==TRUE: kopirovani casu&datumu adresare; POZOR: lastWrite je ulozen v SourceName a Attr (pouziti bez ohledu na typ, proste dva DWORDy)
+    ocLabelForSkipOfCreateDir, // marker to which the script jumps when skipping ocCreateDirXXX; WARNING: SourceName and TargetName contain the low and high DWORDs of the total size (including ADS) of the skipped directory; Attr stores the index of ocCreateDirXXX in the COperations array for the skipped directory
+    ocCopyDirTime,             // Move/Copy: when filterCriteria->PreserveDirTime==TRUE copy directory timestamps; WARNING: lastWrite is stored in SourceName and Attr (two DWORDs used regardless of type)
 };
 
-#define OPFL_OVERWROLDERALRTESTED 0x00000001 // test na skipnuti u "overwrite older, skip other existing" uz se delal
-#define OPFL_AS_ENCRYPTED 0x00000002         // cilovy soubor/adresar by mel mit nastaveny atribut Encrypted
-#define OPFL_COPY_ADS 0x00000004             // zkopirovat i ADS souboru/adresare
-#define OPFL_SRCPATH_IS_NET 0x00000008       // zdrojova cesta je sitova
-#define OPFL_SRCPATH_IS_FAST 0x00000010      // zdrojova cesta je disk, disk na USB, flashka, flash-card-reader, CD, DVD nebo ram-disk (nejde o: sit a disketu)
-#define OPFL_TGTPATH_IS_NET 0x00000020       // cilova cesta je sitova
-#define OPFL_TGTPATH_IS_FAST 0x00000040      // cilova cesta je disk, disk na USB, flashka, flash-card-reader, CD, DVD nebo ram-disk (nejde o: sit a disketu)
-#define OPFL_IGNORE_INVALID_NAME 0x00000080  // skipnout test na validitu jmena (pouziva se u adresaru: nemenili jsme nazev = nerveme, ze je invalidni)
+#define OPFL_OVERWROLDERALRTESTED 0x00000001 // the skip check for "overwrite older, skip other existing" was already done
+#define OPFL_AS_ENCRYPTED 0x00000002         // target file/directory should have the Encrypted attribute set
+#define OPFL_COPY_ADS 0x00000004             // copy ADS of files/directories as well
+#define OPFL_SRCPATH_IS_NET 0x00000008       // the source path is a network location
+#define OPFL_SRCPATH_IS_FAST 0x00000010      // the source path is a disk, USB disk, flash, flash-card reader, CD, DVD or RAM disk (not a network or floppy)
+#define OPFL_TGTPATH_IS_NET 0x00000020       // the target path is a network location
+#define OPFL_TGTPATH_IS_FAST 0x00000040      // the target path is a disk, USB disk, flash, flash-card reader, CD, DVD or RAM disk (not a network or floppy)
+#define OPFL_IGNORE_INVALID_NAME 0x00000080  // skip the name validity check (used for directories: since we didn't change the name we don't complain it's invalid)
 
 struct COperation
 {
     COperationCode Opcode;
     CQuadWord Size;
-    CQuadWord FileSize; // velikost souboru, platne jen pro ocCopyFile a ocMoveFile
+    CQuadWord FileSize; // file size, valid only for ocCopyFile and ocMoveFile
     char *SourceName,
         *TargetName;
     DWORD Attr;
-    DWORD OpFlags; // kombinace OPFL_xxx, viz vyse
+    DWORD OpFlags; // combination of OPFL_xxx, see above
 };
 
 class COperations : public TDirectArray<COperation>
 {
 public:
-    CQuadWord TotalSize;      // POZOR: neni velikost souboru v bytech (je zde velikost pouzitelna jen pro progress)
-    CQuadWord CompressedSize; // soucet velikosti souboru po kompresi
-    CQuadWord OccupiedSpace;  // zabrane misto na disku
-    CQuadWord TotalFileSize;  // soucet velikosti souboru na disku
-    CQuadWord FreeSpace;      // volne misto na disku (copy, move) pro kontrolu
-    DWORD BytesPerCluster;    // pro vypocet obsazeneho mista
+    CQuadWord TotalSize;      // WARNING: not the file size in bytes, only a value usable for progress estimation
+    CQuadWord CompressedSize; // total size of files after compression
+    CQuadWord OccupiedSpace;  // occupied disk space
+    CQuadWord TotalFileSize;  // sum of file sizes on disk
+    CQuadWord FreeSpace;      // free disk space (copy, move) for checks
+    DWORD BytesPerCluster;    // for computing occupied space
 
-    // velikosti jednotlivych souboru pro odhad pri zadane velikosti clusteru
+    // sizes of individual files for estimates with the given cluster size
     TDirectArray<CQuadWord> Sizes;
 
-    DWORD ClearReadonlyMask; // pro automaticke cisteni read-only flagu z CD-ROMu
-    BOOL InvertRecycleBin;   // invertovat pouziti RecycleBinu
+    DWORD ClearReadonlyMask; // for automatic clearing of the read-only flag from CD-ROMs
+    BOOL InvertRecycleBin;   // invert Recycle Bin usage
 
     int FilesCount;
     int DirsCount;
 
-    const char* RemapNameFrom; // jen pro vypisy na obrazovku:
-    int RemapNameFromLen;      // mapovani jmen pro MoveFiles (From -> To)
+    const char* RemapNameFrom; // for screen output only:
+    int RemapNameFromLen;      // name mapping for MoveFiles (From -> To)
     const char* RemapNameTo;
     int RemapNameToLen;
 
-    BOOL RemovableTgtDisk;      // jde o zapis na vymenne medium?
-    BOOL RemovableSrcDisk;      // jde o cteni z vymenneho media?
-    BOOL CanUseRecycleBin;      // lze pouzivat Recycle Bin? (jen local-fixed-drives)
-    BOOL SameRootButDiffVolume; // TRUE pokud jde o Move mezi cestami se stejnym rootem, ale ruznymi svazky (aspon jedna cesta s junction-pointem)
-    BOOL TargetPathSupADS;      // TRUE pokud cil kopirovani/presouvani podporuje ADS (je nutne mazat ADSka souboru (nebo cele soubory) pred prepisem)
-                                //    BOOL TargetPathSupEFS;       // TRUE pokud cil kopirovani/presouvani podporuje EFS (aneb trochu mene obecne: je NTFS a ne FAT)
+    BOOL RemovableTgtDisk;      // is the target a removable medium?
+    BOOL RemovableSrcDisk;      // is the source a removable medium?
+    BOOL CanUseRecycleBin;      // can we use the Recycle Bin? (local fixed drives only)
+    BOOL SameRootButDiffVolume; // TRUE when moving between paths with the same root but different volumes (at least one path uses a junction point)
+    BOOL TargetPathSupADS;      // TRUE when the copy/move target supports ADS (streams must be deleted before overwriting files or entire files)
+                                //    BOOL TargetPathSupEFS;       // TRUE when the copy/move target supports EFS (in short: NTFS rather than FAT)
 
-    // pro Copy/Move operace
-    BOOL IsCopyOrMoveOperation; // TRUE = jde o Copy/Move operaci (budeme ji pridavat do fronty diskovych Copy/Move operaci)
-    BOOL OverwriteOlder;        // prepsat starsi a preskocit novejsi bez ptani
-    BOOL CopySecurity;          // zachovat NTFS prava, FALSE = don't care = nic se nema extra resit, na vysledku nam nezalezi
-    BOOL CopyAttrs;             // zachovat Archive, Encrypt a Compress atributy, FALSE = don't care = nic se nema extra resit, na vysledku nam nezalezi
-    BOOL PreserveDirTime;       // zachovat datumy a casy adresaru (pouziva se pri Move: detekujeme jestli se nahodou nemeni cas, pokud ano, opravujeme ho "rucne", dela napr. na Sambe)
-    BOOL StartOnIdle;           // ma se spustit az nic jineho nepobezi
-    BOOL SourcePathIsNetwork;   // TRUE = zdrojova cesta je sitova (UNC nebo mapovany disk)
+    // for Copy/Move operations
+    BOOL IsCopyOrMoveOperation; // TRUE = this is a Copy/Move operation (it will be queued with disk Copy/Move operations)
+    BOOL OverwriteOlder;        // overwrite older files and skip newer ones without asking
+    BOOL CopySecurity;          // preserve NTFS permissions, FALSE = don't care, the outcome doesn't matter
+    BOOL CopyAttrs;             // preserve Archive, Encrypt and Compress attributes, FALSE = don't care
+    BOOL PreserveDirTime;       // keep directory dates/times (used by Move: we detect if times change and fix them manually, works e.g. on Samba)
+    BOOL StartOnIdle;           // start only when nothing else is running
+    BOOL SourcePathIsNetwork;   // TRUE when the source path is network based (UNC or mapped drive)
 
-    // pro status radek v progress dialogu (jen Copy a Move)
-    BOOL ShowStatus;       // ma se pod druhym progress-barem zobrazovat status operace (rychlost kopirovani, atd.)
+    // for the status line in the progress dialog (Copy/Move only)
+    BOOL ShowStatus;       // show operation status under the second progress bar (copy speed, etc.)
     BOOL IsCopyOperation;  // TRUE = copy, FALSE = move
-    BOOL FastMoveUsed;     // dela se "rename" aspon jednoho souboru nebo adresare? (pak nema smysl zobrazovat celkovou velikost presouvanych dat)
-    BOOL ChangeSpeedLimit; // TRUE = bude se mozna menit speed-limit (worker by mel dobehnout do stavu, kde je to snadne)
+    BOOL FastMoveUsed;     // was at least one file or directory renamed? then showing total moved size is pointless
+    BOOL ChangeSpeedLimit; // TRUE if the speed limit might change (worker should reach a state where this is easy)
 
-    BOOL SkipAllCountSizeErrors; // maji se skipnout vsechny dalsi count-size-errory?
+    BOOL SkipAllCountSizeErrors; // skip all remaining count-size errors?
 
-    char WorkPath1[MAX_PATH];  // jde-li o neprazdny retezec, je to prvni cesta, na ktere se pracovalo (pouziva se pro hlaseni zmen)
-    BOOL WorkPath1InclSubDirs; // TRUE/FALSE = vcetne/bez podadresaru (prvni cesta)
-    char WorkPath2[MAX_PATH];  // jde-li o neprazdny retezec, je to druha cesta, na ktere se pracovalo (pouziva se pro hlaseni zmen)
-    BOOL WorkPath2InclSubDirs; // TRUE/FALSE = vcetne/bez podadresaru (druha cesta)
+    char WorkPath1[MAX_PATH];  // if not empty, the first path on which work was performed (used for change reports)
+    BOOL WorkPath1InclSubDirs; // TRUE/FALSE = include/exclude subdirectories (first path)
+    char WorkPath2[MAX_PATH];  // if not empty, the second path on which work was performed (used for change reports)
+    BOOL WorkPath2InclSubDirs; // TRUE/FALSE = include/exclude subdirectories (second path)
 
-    char* WaitInQueueSubject; // text pro stav "waiting in queue": titulek dialogu
-    char* WaitInQueueFrom;    // text pro stav "waiting in queue": horni radek (From)
-    char* WaitInQueueTo;      // text pro stav "waiting in queue": dolni radek (To)
+    char* WaitInQueueSubject; // text for the "waiting in queue" state: dialog caption
+    char* WaitInQueueFrom;    // text for the "waiting in queue" state: top line (From)
+    char* WaitInQueueTo;      // text for the "waiting in queue" state: bottom line (To)
 
 private:
-    // pro status radek v progress dialogu (jen Copy a Move)
-    CRITICAL_SECTION StatusCS;              // kriticka sekce pro pristup k TransferSpeedMeter, ProgressSpeedMeter a
-    CTransferSpeedMeter TransferSpeedMeter; // merak pro prenos dat (Read/WriteFile)
-    CProgressSpeedMeter ProgressSpeedMeter; // merak pro vypocet "time left" (meri i rychlosti vytvareni adresaru, kopirovani prazdnych souboru, atd. - pracuje se stejnymi velikostmi operaci jako progress)
-    CQuadWord TransferredFileSize;          // kolik bytu uz bylo realne prekopirovano/preneseno (konecny soucet by mel vyjit TotalFileSize, ovsem pokud se nezmeni data na disku)
-    CQuadWord ProgressSize;                 // progres vyjadreny v prekopirovanych/prenesenych "bytech" (pracuje se stejnymi velikostmi operaci jako progress)
+    // for the status line in the progress dialog (Copy/Move only)
+    CRITICAL_SECTION StatusCS;              // critical section guarding TransferSpeedMeter and ProgressSpeedMeter
+    CTransferSpeedMeter TransferSpeedMeter; // meter measuring data transfer (Read/WriteFile)
+    CProgressSpeedMeter ProgressSpeedMeter; // meter computing "time left" (also measures directory creation, copying empty files, etc.; uses same operation sizes as the progress bar)
+    CQuadWord TransferredFileSize;          // number of bytes actually copied/transferred so far (final sum should match TotalFileSize unless data change on disk)
+    CQuadWord ProgressSize;                 // progress expressed in copied/transferred "bytes" (uses the same operation sizes as the progress bar)
 
-    // data pro speed-limit, pouzivaji se jen v sekci StatusCS
-    BOOL UseSpeedLimit;             // TRUE = pouzivame speed-limit
-    DWORD SpeedLimit;               // hodnota speed-limitu (v bytech za vterinu), POZOR: nikdy nesmi byt nula!
-    DWORD SleepAfterWrite;          // kolik ms se ma cekat po paketu o velikosti LastBufferLimit; -1 = hodnotu je potreba vypocitat (po prvnim paketu)
-    int LastBufferLimit;            // velikost paketu, POZOR: nikdy nesmi byt nula!
-    DWORD LastSetupTime;            // GetTickCount() z okamziku posledniho vypoctu parametru speed-limitu + pripadneho dobrzdeni
-    CQuadWord BytesTrFromLastSetup; // kolik bytu bylo preneseno od okamziku LastSetupTime
+    // speed-limit data, used only inside StatusCS
+    BOOL UseSpeedLimit;             // TRUE = speed limit is active
+    DWORD SpeedLimit;               // speed-limit value in bytes per second, WARNING: must never be zero
+    DWORD SleepAfterWrite;          // how many ms to wait after a packet of size LastBufferLimit; -1 means it must be computed (after the first packet)
+    int LastBufferLimit;            // packet size, WARNING: must never be zero
+    DWORD LastSetupTime;            // GetTickCount() when speed-limit parameters were last computed and possibly throttled
+    CQuadWord BytesTrFromLastSetup; // bytes transferred since LastSetupTime
 
-    // jen pro asynchroni kopirovani: data pro omezovac velikosti bufferu (aby se hybal progress, nesmi byt buffer moc velky), pouzivaji se jen v sekci StatusCS
-    BOOL UseProgressBufferLimit;  // TRUE = ma se pouzivat omezovac velikosti bufferu (asynchroni kopirovani)
-    DWORD ProgressBufferLimit;    // limit velikosti bufferu pro kopirovani, zajistuje rozumnou frekvenci udaju pro progres
-    DWORD LastProgBufLimTestTime; // GetTickCount() z okamziku posledniho testu velikosti ProgressBufferLimit
-    DWORD LastFileBlockCount;     // kolik bloku uz se prekopirovalo od zacatku posledniho souboru (POZOR: je chranene pred pretecenim, pocet > 1000000 znamena "hafo", kolik presne neni dulezite)
-    DWORD LastFileStartTime;      // GetTickCount() z okamziku, kdy jsme zacali kopirovat posledni soubor
+    // async copies only: buffer limit data (progress must move, buffer must not be too large), used only inside StatusCS
+    BOOL UseProgressBufferLimit;  // TRUE if the buffer limit for async copies should be used
+    DWORD ProgressBufferLimit;    // buffer size limit for copying, keeps progress updates reasonably frequent
+    DWORD LastProgBufLimTestTime; // GetTickCount() when ProgressBufferLimit was last checked
+    DWORD LastFileBlockCount;     // how many blocks have been copied from the last file (protected against overflow; a value > 1000000 means "a lot")
+    DWORD LastFileStartTime;      // GetTickCount() when copying of the last file started
 
 public:
     COperations(int base, int delta, char* waitInQueueSubject, char* waitInQueueFrom, char* waitInQueueTo);
@@ -346,14 +344,14 @@ public:
     void GetSpeedLimit(BOOL* useSpeedLimit, DWORD* speedLimit);
 };
 
-class COperationsQueue // fronta diskovych Copy/Move operaci
+class COperationsQueue // queue of disk Copy/Move operations
 {
 protected:
-    CRITICAL_SECTION QueueCritSect; // kriticka sekce objektu
+    CRITICAL_SECTION QueueCritSect; // object's critical section
 
-    // pole OperDlgs a OperPaused maji stejny pocet prvku a stejne indexovani (jedna operace ma jeden index v obou polich)
-    TDirectArray<HWND> OperDlgs;    // pole typu HWND: dialogy operaci ve fronte
-    TDirectArray<DWORD> OperPaused; // pole typu int: stav operace ve fronte: 2/1/0 = "manually-paused"/"auto-paused"/"running"
+    // arrays OperDlgs and OperPaused have the same number of items and indices (one index per operation)
+    TDirectArray<HWND> OperDlgs;    // HWND array: operation dialogs in the queue
+    TDirectArray<DWORD> OperPaused; // int array: state of each operation: 2/1/0 = "manually-paused"/"auto-paused"/"running"
 
 public:
     COperationsQueue() : OperDlgs(5, 10), OperPaused(5, 10)
@@ -367,32 +365,32 @@ public:
         HANDLES(DeleteCriticalSection(&QueueCritSect));
     }
 
-    // prida operaci do fronty; vraci TRUE pri uspechu, jinak se pridani nepodarilo (malo pameti);
-    // 'dlg' je handle okna dialogu operace; 'startOnIdle' je TRUE pokud ma dojit ke spusteni
-    // operace az nic jineho nepobezi; ve 'startPaused' (nesmi byt NULL) vraci TRUE pokud
-    // se ma pridana operace spustit v "paused" rezimu, jinak se spousti v "running" rezimu
+    // adds an operation to the queue; returns TRUE on success, otherwise adding failed (out of memory)
+    // 'dlg' is the handle of the operation dialog; 'startOnIdle' is TRUE when it should start
+    // once nothing else is running; 'startPaused' (must not be NULL) returns TRUE if
+    // the added operation should start in "paused" mode, otherwise it starts in "running" mode
     BOOL AddOperation(HWND dlg, BOOL startOnIdle, BOOL* startPaused);
 
-    // vyhodi operaci z fronty (operace se dokoncila); je-li 'doNotResume' FALSE, postne
-    // "resume" prvni operace ve fronte v pripade, ze vsechny operace z fronty jsou "paused";
-    // neni-li 'foregroundWnd' NULL, ulozi se do nej handle dialogu operace, ktery je potreba
-    // aktivovat (pokud neni potreba nic aktivovat, hodnota se nemeni)
+    // removes an operation from the queue once it finishes; if 'doNotResume' is FALSE it posts
+    // a "resume" to the first operation in the queue when all queued operations are paused;
+    // if 'foregroundWnd' is not NULL it receives the handle of the dialog that should be
+    // activated (value remains unchanged when no activation is needed)
     void OperationEnded(HWND dlg, BOOL doNotResume, HWND* foregroundWnd);
 
-    // nastavi operaci 'dlg' stav na 'paused' (2/1/0 = "manually-paused"/"auto-paused"/"running")
+    // sets operation 'dlg' state to 'paused' (2/1/0 = "manually-paused"/"auto-paused"/"running")
     void SetPaused(HWND dlg, BOOL paused);
 
-    // presune operaci 'dlg' na konec seznamu + nastavi ji stav na "auto-paused"
+    // moves operation 'dlg' to the end of the list and sets it to "auto-paused"
     void AutoPauseOperation(HWND dlg, HWND* foregroundWnd);
 
-    // vraci TRUE pokud ve fronte neni zadna operace
+    // returns TRUE when no operation is in the queue
     BOOL IsEmpty();
 
-    // vraci aktualni pocet operaci ve fronte
+    // returns the current number of operations in the queue
     int GetNumOfOperations();
 };
 
-extern COperationsQueue OperationsQueue; // fronta diskovych Copy/Move operaci
+extern COperationsQueue OperationsQueue; // queue of disk Copy/Move operations
 
 HANDLE StartWorker(COperations* script, HWND hDlg, CChangeAttrsData* attrsData,
                    CConvertData* convertData, HANDLE wContinue, HANDLE workerNotSuspended,
@@ -504,22 +502,22 @@ typedef struct
 } FILE_STREAM_INFORMATION, *PFILE_STREAM_INFORMATION;
 #pragma pack()
 
-// zjisti jak je to s alternate-data-streamy (ADS) souboru/adresare ('isDir' je FALSE/TRUE)
-// 'fileName', ma smysl volat jen na NTFS discich; neni-li 'adsSize' NULL, vraci se v nem
-// soucet velikosti vsech ADS; neni-li 'streamNames' NULL, vraci se v nem alokovane pole
-// Unicodovych jmen vsech ADS (krome defaultniho ADS) - prvky pole jsou alokovane, volajici
-// musi zajistit jejich dealokaci i dealokaci samotneho pole - pole jmen se vraci jen
-// pokud nenastala zadna chyba (viz 'lowMemory' a 'winError') a zaroven byly nalezeny ADS
-// (funkce vraci TRUE); neni-li 'streamNamesCount' NULL, vraci se v nem pocet prvku v poli
-// 'streamNames'; neni-li 'lowMemory' NULL, vraci se v nem TRUE pokud dojde k chybe diky
-// nedostatku pameti (muze vratit TRUE jen pokud neni 'streamNames' NULL); neni-li
-// 'winError' NULL, vraci se v nem kod windowsove chyby (NO_ERROR v pripade, ze zadna
-// nenastala - pokud nastane windows chyba, funkce vzdy vraci FALSE); funkce vraci TRUE
-// pokud soubor/adresar obsahuje nejake ADS, jinak vraci FALSE; 'bytesPerCluster' je
-// velikost clusteru pro vypocet mista na disku zabraneho ADS (0 = neznama velikost);
-// v 'adsOccupiedSpace' (neni-li NULL) vraci velikost mista na disku zabraneho ADS;
-// v 'onlyDiscardableStreams'  (neni-li NULL) vraci TRUE pokud byly nalezeny jen
-// ADS, ktere se muzou bez dotazu zahodit (zatim jen thumbnaily z W2K)
+// queries alternate data streams (ADS) of a file or directory ('isDir' is FALSE/TRUE)
+// 'fileName' should only be used on NTFS volumes; if 'adsSize' is not NULL it returns
+// the total size of all ADS; if 'streamNames' is not NULL it returns an allocated array
+// of Unicode names of all ADS (except the default ADS) - the caller must free each
+// element and the array itself. The array is returned only when no error occurred
+// (see 'lowMemory' and 'winError') and ADS were found (the function returns TRUE).
+// If 'streamNamesCount' is not NULL it receives the number of items in 'streamNames'.
+// If 'lowMemory' is not NULL it becomes TRUE when a memory shortage occurs (it can
+// return TRUE only if 'streamNames' is not NULL). If 'winError' is not NULL it
+// receives the Windows error code (NO_ERROR if none; if a Windows error occurs the
+// function always returns FALSE). The function returns TRUE if the file/directory
+// contains any ADS, otherwise FALSE. 'bytesPerCluster' is the cluster size used to
+// compute disk space occupied by the ADS (0 = unknown size). If 'adsOccupiedSpace'
+// is not NULL it returns the disk space used by the ADS. If 'onlyDiscardableStreams'
+// is not NULL it returns TRUE when only discardable streams were found (currently
+// thumbnails from Windows 2000).
 BOOL CheckFileOrDirADS(const char* fileName, BOOL isDir, CQuadWord* adsSize, wchar_t*** streamNames,
                        int* streamNamesCount, BOOL* lowMemory, DWORD* winError,
                        DWORD bytesPerCluster, CQuadWord* adsOccupiedSpace,

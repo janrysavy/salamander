@@ -6,44 +6,44 @@
 //
 // ****************************************************************************
 
-// TRUE = prvni bezici instance verze 3.0 nebo novejsi
-// urcuje se na zaklade mutexu v globalnim namespace, takze se vidi s mutexty
-// z ostatnich sessions (remote desktop, fast user switching)
+// TRUE = the first running instance of version 3.0 or newer
+// determined via a mutex in the global namespace so it is shared
+// across other sessions (remote desktop, fast user switching)
 extern BOOL FirstInstance_3_or_later;
 
-// sdilena pamet obsahuje:
-//  DWORD                  - PID procesu, ktery se ma breaknout
-//  DWORD                  - pocet polozek v listu
-//  MAX_TL_ITEMS * CTLItem - list polozek
+// shared memory holds:
+//  DWORD                  - PID of the process to break into
+//  DWORD                  - item count in the list
+//  MAX_TL_ITEMS * CTLItem - list of items
 
-#define MAX_TL_ITEMS 500 // maximalni pocet polozek ve sdilene pameti, nelze menit!
+#define MAX_TL_ITEMS 500 // maximum number of items in shared memory; cannot change
 
-#define TASKLIST_TODO_HIGHLIGHT 1 // okno procesu daneho v 'PID' se ma vysvitit
-#define TASKLIST_TODO_BREAK 2     // proces dany v 'PID' se ma breaknout
-#define TASKLIST_TODO_TERMINATE 3 // proces dany v 'PID' se ma terminovat
-#define TASKLIST_TODO_ACTIVATE 4  // proces dany v 'PID' se ma aktivovat
+#define TASKLIST_TODO_HIGHLIGHT 1 // highlight the window of the process in 'PID'
+#define TASKLIST_TODO_BREAK 2     // break the process in 'PID'
+#define TASKLIST_TODO_TERMINATE 3 // terminate the process in 'PID'
+#define TASKLIST_TODO_ACTIVATE 4  // activate the process in 'PID'
 
-#define TASKLIST_TODO_TIMEOUT 5000 // 5 vterin, ktere maji procesy pro zpracovani todo
+#define TASKLIST_TODO_TIMEOUT 5000 // 5 seconds for processes to handle the todo
 
-#define PROCESS_STATE_STARTING 1 // nas proces startuje, jeste neexistuje hlavni okno
-#define PROCESS_STATE_RUNNING 2  // nas proces bezi, mame hlavni okno
-#define PROCESS_STATE_ENDING 3   // nas proces konci, nemame uz hlavni okno
+#define PROCESS_STATE_STARTING 1 // our process is starting, the main window does not exist yet
+#define PROCESS_STATE_RUNNING 2  // our process is running, the main window exists
+#define PROCESS_STATE_ENDING 3   // our process is ending, the main window is already gone
 
-#pragma pack(push, enter_include_tasklist) // aby byly struktury nezavisle na nastavenem zarovnavani
+#pragma pack(push, enter_include_tasklist) // keep structures independent of packing alignment
 #pragma pack(4)
 
 extern HANDLE HSalmonProcess;
 
-// POZOR, pomoci struktury komunikuji x64 a x86 procesy, pozor na typy (napr. HANDLE), ktere maji ruzne sirky
+// NOTE: x64 and x86 processes communicate through this structure, so watch for types (e.g. HANDLE) that have different widths
 struct CProcessListItem
 {
-    DWORD PID;            // ProcessID, unikatni po dobu behu procesu, pak muze byt znovu pouzito
-    SYSTEMTIME StartTime; // Kdy byl proces nastartovan
-    DWORD IntegrityLevel; // Integrity Level procesu, slouzi k rozliseni procesu spustenych na ruzne urovni opravneni
-    BYTE SID_MD5[16];     // MD5 napocitana ze SID procesu, slouzi nam k rozliseni procesu bezicich pod ruznymi uzivateli; SID ma neznamou delku, proto tato obezlicka
-    DWORD ProcessState;   // Stav v jakem se Salamander nachazi, viz PROCESS_STATE_xxx
-    UINT64 HMainWindow;   // (x64 friendly) Handle hlavniho okna, pokud jiz/jeste existuje (nastavuje se pri jeho vytvareni/destrukci)
-    DWORD SalmonPID;      // ProcessID salmonu, aby mu brakujici proces mohl garantovat pravo pro SetForegroundWindow
+    DWORD PID;            // ProcessID; unique while the process runs and may be reused later
+    SYSTEMTIME StartTime; // time when the process was started
+    DWORD IntegrityLevel; // integrity level used to tell processes running under different privileges apart
+    BYTE SID_MD5[16];     // MD5 computed from the process SID so we can identify processes of different users; SID length is unknown so only the hash is stored
+    DWORD ProcessState;   // state of Salamander, see PROCESS_STATE_xxx
+    UINT64 HMainWindow;   // (x64 friendly) handle of the main window if it already/still exists (set on create/destroy)
+    DWORD SalmonPID;      // PID of Salmon so the breaking process can guarantee SetForegroundWindow rights
 
     CProcessListItem()
     {
@@ -55,31 +55,30 @@ struct CProcessListItem
         HMainWindow = NULL;
         SalmonPID = 0;
         if (HSalmonProcess != NULL)
-            SalmonPID = SalGetProcessId(HSalmonProcess); // v tuto dobu jiz Salmon bezi
+            SalmonPID = SalGetProcessId(HSalmonProcess); // Salmon is already running at this time
     }
 };
 
-// POZOR, ke strukture lze pouze pridavat polozky, protoze na ni chodi i starsi verze Salamandera
-// POZOR, pomoci struktury komunikuji x64 a x86 procesy, pozor na typy (napr. HANDLE), ktere maji ruzne sirky
-// POZOR, nejspis nema smysl zvedat verzi a rozsirovat strukturu, protoze pridana data v tom pripade
-//        nebudou vzdy k dispozici (stara verze Salama nahozena jako prvni = ve sdilene pameti nove
-//        polozky vubec nebudou) => spravne reseni je nejspis zmena AS_PROCESSLIST_NAME a spol. +
-//        uprava dat dle libosti (klidne zvetsovani, promazavani, zmena poradi, atd.)
+// NOTE: only add fields to this structure because older Salamander versions read it too
+// NOTE: x64 and x86 processes communicate via this structure, so mind types (e.g. HANDLE) that differ in size
+// NOTE: Increasing the version and enlarging the structure makes little sense, because
+//       older Salamanders started first won't provide the new fields in shared memory.
+//       The recommended approach is to change AS_PROCESSLIST_NAME and modify the data as needed
 struct CCommandLineParams
 {
-    DWORD Version;               // novejsi verze Salamandera mohou zvysovat 'Version' a zacit vyuzivat promenne ReservedX
-    DWORD RequestUID;            // unikatni (zvysujici se) ID pozadavku o aktivaci
-    DWORD RequestTimestamp;      // GetTickCount() hodnota ze chvile, kdy byl zakladan pozadavek pro aktivaci
-    char LeftPath[2 * MAX_PATH]; // cesty do panelu (levy, pravy, pripadne aktivni); pokud jsou prazdne, nemaji se nastavit
+    DWORD Version;               // newer Salamander versions may increase 'Version' and start using ReservedX
+    DWORD RequestUID;            // unique increasing ID of the activation request
+    DWORD RequestTimestamp;      // GetTickCount() value from the time the activation request was created
+    char LeftPath[2 * MAX_PATH]; // panel paths (left, right or active); if empty, they should not be set
     char RightPath[2 * MAX_PATH];
     char ActivePath[2 * MAX_PATH];
-    DWORD ActivatePanel;         // ktery panel se ma aktivovat 0-zadny, 1-levy, 2-pravy
-    BOOL SetTitlePrefix;         // pokud je TRUE, nastavi se prefix titulku podle TitlePrefix
-    char TitlePrefix[MAX_PATH];  // prefix titulku, pokud je prazdny, nemenit; delku radeji deklaruji na MAX_PATH, misto TITLE_PREFIX_MAX, ktery by se mohl pod rukama zmenit
-    BOOL SetMainWindowIconIndex; // pokud je TRUE, nastavi se ikona hlavniho okna podle MainWindowIconIndex
-    DWORD MainWindowIconIndex;   // 0: prvni ikona, 1: druha ikona, ...
-    // POZOR, strukturu lze rozsirovat pouze v pripade, ze je stale zadeklarovana jako posledni v CProcessList,
-    // jinak uz je pozde a nesmi se ji dotknout
+    DWORD ActivatePanel;         // which panel to activate: 0-none, 1-left, 2-right
+    BOOL SetTitlePrefix;         // if TRUE, set the title prefix according to TitlePrefix
+    char TitlePrefix[MAX_PATH];  // title prefix; if empty, keep the existing one; MAX_PATH is used instead of TITLE_PREFIX_MAX which could change
+    BOOL SetMainWindowIconIndex; // if TRUE, set the main window icon according to MainWindowIconIndex
+    DWORD MainWindowIconIndex;   // 0: first icon, 1: second icon, ...
+    // NOTE: the structure can be extended only while it remains the last member in CProcessList;
+    // otherwise it is too late and must not be modified
 
     CCommandLineParams()
     {
@@ -88,22 +87,22 @@ struct CCommandLineParams
 };
 
 // Open Salamander Process List
-// !!! POZOR, ke strukture lze pouze pridavat polozky, protoze na ni chodi i starsi verze Salamandera
+// WARNING: only append new fields to this structure because older versions of Salamander expect the existing layout
 struct CProcessList
 {
-    DWORD Version; // novejsi verze Salamandera mohou zvysovat 'Version' a zacit vyuzivat promenne ReservedX
+    DWORD Version; // newer Salamander versions may increase 'Version' and start using the ReservedX variables
 
-    DWORD ItemsCount;    // pocet validnich polozek v poli Items
-    DWORD ItemsStateUID; // "verze" Items seznamu; zvysuje se s kazdou zmenou; slouzi pro Tasks dialog jako signal, ze se ma refreshnout
+    DWORD ItemsCount;    // number of valid entries in the Items array
+    DWORD ItemsStateUID; // "version" of the Items list; increases with each change and signals the Tasks dialog to refresh
     CProcessListItem Items[MAX_TL_ITEMS];
 
-    DWORD Todo;                           // urcuje co se ma delat po odpaleni eventu pomoci FireEvent, obsahuje jednu z hodnot TASKLIST_TODO_*
-    DWORD TodoUID;                        // poradi zaslaneho pozadavku, pro kazdy dalsi pozadavek ze zvysuje
-    DWORD TodoTimestamp;                  // GetTickCount() hodnota ze chvile, kdy byl zakladan Todo pozadavek
-    DWORD PID;                            // PID, pro ktery se ma provest cinnost z Todo
-    CCommandLineParams CommandLineParams; // cesty pro panely a dalsi parametry pro aktivaci
-                                          // POZOR, pokud bude potreba rozsirovat tuto strukturu, bylo by rozumne napred rozsirit CCommandLineParams, napriklad
-                                          // reservovat nejake MAX_PATH buffery a par DWORDu, pokud bychom chteli predavat nove command line parametry
+    DWORD Todo;                           // determines what to do after FireEvent; contains one of TASKLIST_TODO_*
+    DWORD TodoUID;                        // sequence number of the request, increases for each new one
+    DWORD TodoTimestamp;                  // GetTickCount() value when the Todo request was created
+    DWORD PID;                            // PID for which the Todo action should be performed
+    CCommandLineParams CommandLineParams; // panel paths and other activation parameters
+                                          // NOTE: if this structure needs to grow, first extend CCommandLineParams
+                                          // and reserve some MAX_PATH buffers and a few DWORDs for additional command line parameters
 };
 
 #pragma pack(pop, enter_include_tasklist)
@@ -111,16 +110,16 @@ struct CProcessList
 class CTaskList
 {
 protected:
-    HANDLE FMO;                // file-mapping-object, sdilena pamet
-    CProcessList* ProcessList; // ukazatel do sdilene pameti
-    HANDLE FMOMutex;           // mutex pro reseni pristupu k FMO
-    HANDLE Event;              // event, je-li signaled, mely by se ostatni procesy podivat,
-                               // jestli se nemaji provest cinnost danou v Todo
-    HANDLE EventProcessed;     // pokud jeden z procesu provede cinnost v Todo, nastavi tento
-                               // event na signaled na znameni ridicimu procesu, ze je hotovo
-    HANDLE TerminateEvent;     // event pro ukonceni break-threadu
-    HANDLE ControlThread;      // control-thread (ceka na eventy, ktere obratem odbavi)
-    BOOL OK;                   // probehla konstrukce o.k.?
+    HANDLE FMO;                // file-mapping object, shared memory
+    CProcessList* ProcessList; // pointer to the shared memory
+    HANDLE FMOMutex;           // mutex that guards access to the FMO
+    HANDLE Event;              // event signaled so other processes check
+                               // if they should perform the action in Todo
+    HANDLE EventProcessed;     // set to signaled by a process after it performs the Todo
+                               // to notify the controlling process that it finished
+    HANDLE TerminateEvent;     // event used to terminate the break thread
+    HANDLE ControlThread;      // control thread waiting for events and dispatching them
+    BOOL OK;                   // did construction succeed?
 
 public:
     CTaskList();
@@ -128,28 +127,29 @@ public:
 
     BOOL Init();
 
-    // naplni polozky task-listu, items - pole alespon MAX_TL_ITEMS struktur CTLItem, vraci pocet polozek
-    // 'items' muze byt NULL, pokud nas zajima pouze 'itemsStateUID'
-    // vrati "verzi" sestavy procesu; verze se zvysuje s kazdou zmenou v seznamu (pokud je pridana nebo odebrana polozka)
-    // slouzi pro dialog jako informace, ze ma refreshnout seznam; 'itemsStateUID' muze byt NULL
-    // pokud je 'timeouted' ruzny od NULL, nastavi zda k neuspechu vedl timeout pri cekani na sdilenou pamet
+    // fills the task-list items; 'items' must be an array of at least MAX_TL_ITEMS structures and
+    // the function returns the number of items
+    // 'items' may be NULL if only 'itemsStateUID' is needed
+    // returns the "version" of the process list; it increases whenever the list changes
+    // and is used by the dialog to know when to refresh; 'itemsStateUID' may be NULL
+    // if 'timeouted' is not NULL, it reports whether waiting on shared memory timed out
     int GetItems(CProcessListItem* items, DWORD* itemsStateUID, BOOL* timeouted = NULL);
 
-    // pozada proces 'pid' o provedeni akce dle 'todo' (mimo TASKLIST_TODO_ACTIVATE)
-    // pokud je 'timeouted' ruzny od NULL, nastavi zda k neuspechu vedl timeout pri cekani na sdilenou pamet
+    // asks process 'pid' to perform the action according to 'todo' (except TASKLIST_TODO_ACTIVATE)
+    // if 'timeouted' is not NULL, it reports whether waiting on shared memory timed out
     BOOL FireEvent(DWORD todo, DWORD pid, BOOL* timeouted = NULL);
 
-    // pokud je 'timeouted' ruzny od NULL, nastavi zda k neuspechu vedl timeout pri cekani na sdilenou pamet
+    // if 'timeouted' is not NULL, it reports whether waiting on shared memory timed out
     BOOL ActivateRunningInstance(const CCommandLineParams* cmdLineParams, BOOL* timeouted = NULL);
 
-    // v seznamu procesu dohleda nas a nastavi 'ProcessState' a 'HMainWindow'; vraci TRUE v pripade uspechu, jinak FALSE
-    // pokud je 'timeouted' ruzny od NULL, nastavi zda k neuspechu vedl timeout pri cekani na sdilenou pamet
+    // searches the process list for this instance and sets 'ProcessState' and 'HMainWindow'; returns TRUE on success
+    // if 'timeouted' is not NULL, it reports whether waiting on shared memory timed out
     BOOL SetProcessState(DWORD processState, HWND hMainWindow, BOOL* timeouted = NULL);
 
 protected:
-    // projde seznam procesu a vytridi neexistujici polozky
-    // nutne volat po uspesnem vstupu kriticke sekce 'FMOMutex'!
-    // nastavi 'changed' na TRUE, pokud byla nejaka polozka zahozena, jinak na FALSE
+    // walks the process list and removes non-existing entries
+    // must be called only after successfully entering the 'FMOMutex' critical section
+    // sets 'changed' to TRUE if some item was dropped, otherwise FALSE
     BOOL RemoveKilledItems(BOOL* changed);
 
     friend DWORD WINAPI FControlThread(void* param);
@@ -157,9 +157,9 @@ protected:
 
 extern CTaskList TaskList;
 
-// ochrana pristupu do CommandLineParams
+// protects access to CommandLineParams
 extern CRITICAL_SECTION CommandLineParamsCS;
-// slouzi k predani parametru pro aktivaci Salamander z Control threadu do hlavniho thradu
+// used to pass activation parameters from the control thread to the main thread
 extern CCommandLineParams CommandLineParams;
-// event je "signaled" jakmile hlavni thread prevezme paramtery
+// event becomes signaled once the main thread consumes the parameters
 extern HANDLE CommandLineParamsProcessed;

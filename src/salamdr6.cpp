@@ -12,24 +12,24 @@
 #include "tasklist.h"
 #include "md5.h"
 
-CProgressDlgArray ProgressDlgArray; // pole dialogu diskovych operaci (jen dialogy bezici ve svych threadech)
+CProgressDlgArray ProgressDlgArray; // array of disk-operation dialogs (only dialogs running in their own threads)
 
-// sekce pro volani GetNextFileNameForViewer, GetPreviousFileNameForViewer,
-// IsFileNameForViewerSelected a SetSelectionOnFileNameForViewer
+// section for calling GetNextFileNameForViewer, GetPreviousFileNameForViewer,
+// IsFileNameForViewerSelected and SetSelectionOnFileNameForViewer
 CRITICAL_SECTION FileNamesEnumSect;
-// sekce pro praci s daty spojenymi s enumeraci (FileNamesEnumSources, FileNamesEnumData,
-// FileNamesEnumDone, NextRequestUID a NextSourceUID)
+// section for working with enumeration data (FileNamesEnumSources, FileNamesEnumData,
+// FileNamesEnumDone, NextRequestUID and NextSourceUID)
 CRITICAL_SECTION FileNamesEnumDataSect;
 
-// pole zdroju pro enumeraci: sude indexy (i nula): UID, liche indexy: HWND
+// sources for enumeration: even indices (including zero) are UID, odd indices are HWND
 TDirectArray<HWND> FileNamesEnumSources(10, 10);
-// struktura s pozadavkem+vysledky enumerace
+// structure with enumeration request and results
 CFileNamesEnumData FileNamesEnumData;
-// event je "signaled" jakmile zdroj naplni vysledek do FileNamesEnumData
+// event becomes signaled once the source fills FileNamesEnumData with results
 HANDLE FileNamesEnumDone;
-// dalsi volne UID pozadavku
+// next free request UID
 int NextRequestUID = 0;
-// dalsi volne UID zdroje
+// next free source UID
 int NextSourceUID = 0;
 
 HWND GetWndToFlash(HWND parent)
@@ -76,7 +76,7 @@ BOOL CALLBACK CloseAllOwnedEnabledDialogsEnumProc(HWND wnd, LPARAM lParam)
             }
         }
     }
-    return TRUE; // projdu vsechny okna, muze byt vic dialogu od jednoho vlastnika vedle sebe
+    return TRUE; // enumerate all windows; multiple dialogs from one owner may be side by side
 }
 
 void CloseAllOwnedEnabledDialogs(HWND parent, DWORD tid)
@@ -118,7 +118,7 @@ BOOL IsFileEnumSourcePanel(int srcUID, int* panel)
         if ((int)(UINT_PTR)(FileNamesEnumSources[i]) == srcUID)
         {
             if (i + 1 < FileNamesEnumSources.Count &&
-                MainWindow != NULL && MainWindow->LeftPanel != NULL && MainWindow->RightPanel != NULL) // trocha paranoi
+                MainWindow != NULL && MainWindow->LeftPanel != NULL && MainWindow->RightPanel != NULL) // a bit of paranoia
             {
                 HWND hWnd = FileNamesEnumSources[i + 1];
                 if (MainWindow->LeftPanel->HWindow == hWnd)
@@ -156,7 +156,7 @@ BOOL GetFileNameForViewer(CFileNamesEnumRequestType requestType, int srcUID, int
     if (isFileSelected != NULL)
         *isFileSelected = FALSE;
     if (FileNamesEnumDone == NULL)
-        return FALSE; // asi nikdy nenastane, ale stejne resime (chyba: "zdroj neexistuje")
+        return FALSE; // probably never happens, but handle it anyway ("source does not exist" error)
 
     BOOL ret = FALSE;
     HANDLES(EnterCriticalSection(&FileNamesEnumSect));
@@ -211,11 +211,11 @@ BOOL GetFileNameForViewer(CFileNamesEnumRequestType requestType, int srcUID, int
             ret = FileNamesEnumData.Found;
             HANDLES(LeaveCriticalSection(&FileNamesEnumDataSect));
         }
-        else // mozna timeout
+        else // maybe a timeout
         {
             HANDLES(EnterCriticalSection(&FileNamesEnumDataSect));
             waitRes = WaitForSingleObject(FileNamesEnumDone, 0);
-            if (waitRes == WAIT_OBJECT_0) // done (timeout byl plany poplach, zprava se stihla dorucit, jen se nestihlo dokoncit hledani jmena)
+            if (waitRes == WAIT_OBJECT_0) // done (timeout was a false alarm; the message arrived but name lookup wasn't finished yet)
             {
                 *lastFileIndex = FileNamesEnumData.LastFileIndex;
                 if (fileName != NULL)
@@ -228,7 +228,7 @@ BOOL GetFileNameForViewer(CFileNamesEnumRequestType requestType, int srcUID, int
                     *isFileSelected = FileNamesEnumData.IsFileSelected;
                 ret = FileNamesEnumData.Found;
             }
-            else // skutecny timeout (timeout doruceni zpravy zdroji)
+            else // real timeout (the source didn't receive the message)
             {
                 FileNamesEnumData.TimedOut = TRUE;
                 if (srcBusy != NULL)
@@ -399,12 +399,12 @@ BOOL IsPathOnVolumeSupADS(const char* path, BOOL* isFAT32)
     if (!MyGetVolumeInformation(path, NULL, NULL, NULL, NULL, 0, NULL, NULL, &fileSystemFlags, fileSystemNameBuffer, 100))
     {
         TRACE_E("MyGetVolumeInformation failed for: " << path);
-        return TRUE; // budeme radsi predpokladat, ze FS podporuje ADS, pokud ne, selze neco pozdeji
+        return TRUE; // better assume the FS supports ADS; failure will appear later if not
     }
     if (isFAT32 != NULL)
         *isFAT32 = StrICmp(fileSystemNameBuffer, "FAT32") == 0;
-    return (fileSystemFlags & FILE_NAMED_STREAMS) != 0 && StrICmp(fileSystemNameBuffer, "FAT") != 0 || // flag pro podporu ADS (+ nejde o FATku - chybne hlaseni podpory ADS na Windows DFS serveru) nebo
-           StrICmp(fileSystemNameBuffer, "NTFS") == 0 && fileSystemFlags == 0x1F;                      // NTFS z NT 4.0
+    return (fileSystemFlags & FILE_NAMED_STREAMS) != 0 && StrICmp(fileSystemNameBuffer, "FAT") != 0 || // ADS flag (+ exclude FAT - Windows DFS server incorrectly reports ADS support)
+           StrICmp(fileSystemNameBuffer, "NTFS") == 0 && fileSystemFlags == 0x1F;                      // NTFS from NT 4.0
 }
 
 //******************************************************************************
@@ -429,20 +429,20 @@ char* PrintDiskSize(char* buf, const CQuadWord& size2, int mode)
     {
     case 0: //mode==0 "1.23 MB"
     case 1: //mode==1 "1 230 000 bytes, 1.23 MB"
-    case 4: //mode==4; vzdy aspon 3 platne cislice, napr. "2.00 MB"
+    case 4: //mode==4; always at least 3 valid digits, e.g. "2.00 MB"
     {
         int i = 0;
-        while (size > CQuadWord(0xFFFFFFFF, 0)) // nejprve zredukujeme, aby se dalo pohodlne prevest na double
+        while (size > CQuadWord(0xFFFFFFFF, 0)) // first reduce so it can be easily converted to double
         {
-            size /= CQuadWord(1024, 0); // celociselne deleni! (sel by i rolovanim, ale...)
+            size /= CQuadWord(1024, 0); // integer division! (looping would also work, but...)
             i++;
         }
 
-        double sizeDouble = size.GetDouble(); // zbytek vypoctu udelame v doublu, protoze nas zajimaji desetinna mista
+        double sizeDouble = size.GetDouble(); // perform the rest of the computation in double, we need decimals
         for (; i < 6; i++)
         {
             if (sizeDouble >= 1023.5)
-                sizeDouble /= 1024; // doublove deleni!
+                sizeDouble /= 1024; // double division!
             else
                 break;
         }
@@ -479,12 +479,12 @@ char* PrintDiskSize(char* buf, const CQuadWord& size2, int mode)
         if (s != NULL)
         {
             if (sizeDouble > 0.01)
-                sizeDouble += 1E-7; // bereme pouze prvni tri mista, toto opatreni zrusi 0.9999999 chyby
+                sizeDouble += 1E-7; // keep only the first three digits, this avoids 0.9999999 errors
             else
                 sizeDouble = 0;
             char n[30];
             if (sizeDouble >= 999.5 && sizeDouble < 1000)
-                sizeDouble = 1000; // "zaokrouhleni" se neprovede automaticky
+                sizeDouble = 1000; // the "rounding" is not done automatically
             if (sizeDouble >= 1000)
                 sprintf(n, "%.4g", sizeDouble);
             else
@@ -517,10 +517,10 @@ char* PrintDiskSize(char* buf, const CQuadWord& size2, int mode)
         break;
     }
 
-    case 3: //mode==3 (vzdy v celych KB)
+    case 3: //mode==3 (always in whole KB)
     {
         size += CQuadWord(1023, 0);
-        size /= CQuadWord(1024, 0); // celociselne deleni! (sel by i rolovanim, ale...)
+        size /= CQuadWord(1024, 0); // integer division! (looping would also work, but...)
         NumberToStr(buf, size);
         strcat(buf, " ");
         strcat(buf, HLanguage != NULL ? LoadStr(IDS_SIZE_KB) : "KB");
@@ -623,7 +623,7 @@ LABEL_SortNames:
         }
     } while (i <= j);
 
-    // nasledujici "hezky" kod jsme nahradili kodem podstatne setricim stack (max. log(N) zanoreni rekurze)
+    // the following "nice" code was replaced with a stack-friendly version (max. log(N) recursion depth)
     //  if (left < j) SortNames(files, left, j);
     //  if (i < right) SortNames(files, i, right);
 
@@ -631,7 +631,7 @@ LABEL_SortNames:
     {
         if (i < right)
         {
-            if (j - left < right - i) // je potreba seradit obe "poloviny", tedy do rekurze posleme tu mensi, tu druhou zpracujeme pres "goto"
+            if (j - left < right - i) // both "halves" must be sorted; recurse on the smaller one, process the other via "goto"
             {
                 SortNames(files, left, j);
                 left = i;
@@ -685,7 +685,7 @@ LABEL_SortNamesCaseSensitive:
         }
     } while (i <= j);
 
-    // nasledujici "hezky" kod jsme nahradili kodem podstatne setricim stack (max. log(N) zanoreni rekurze)
+    // the following "nice" code was replaced with a stack-friendly version (max. log(N) recursion depth)
     //  if (left < j) SortNamesCaseSensitive(files, left, j);
     //  if (i < right) SortNamesCaseSensitive(files, i, right);
 
@@ -693,7 +693,7 @@ LABEL_SortNamesCaseSensitive:
     {
         if (i < right)
         {
-            if (j - left < right - i) // je potreba seradit obe "poloviny", tedy do rekurze posleme tu mensi, tu druhou zpracujeme pres "goto"
+            if (j - left < right - i) // both "halves" must be sorted; recurse on the smaller one, process the other via "goto"
             {
                 SortNamesCaseSensitive(files, left, j);
                 left = i;
@@ -733,20 +733,20 @@ BOOL FindNameInArray(TDirectArray<char*>* items, const char* name, BOOL caseSens
         {
             if (foundOnIndex != NULL)
                 *foundOnIndex = m;
-            return TRUE; // nalezeno
+            return TRUE; // found
         }
         else
         {
             if (res > 0)
             {
                 if (l == r || l > m - 1)
-                    return FALSE; // nenalezeno
+                    return FALSE; // not found
                 r = m - 1;
             }
             else
             {
                 if (l == r)
-                    return FALSE; // nenalezeno
+                    return FALSE; // not found
                 l = m + 1;
             }
         }
@@ -755,7 +755,7 @@ BOOL FindNameInArray(TDirectArray<char*>* items, const char* name, BOOL caseSens
 
 void CNames::Sort()
 {
-    if (!NeedSort) // neni treba, mame serazeno
+    if (!NeedSort) // no need, already sorted
         return;
 
     if (Dirs.Count > 1)
@@ -858,18 +858,18 @@ BOOL CNames::LoadFromClipboard(HWND hWindow)
             const WCHAR* textW = (const WCHAR*)HANDLES(GlobalLock(handle));
             if (textW != NULL)
             {
-                SIZE_T size = GlobalSize(handle); // velikost v bytech
+                SIZE_T size = GlobalSize(handle); // size in bytes
                 if (size == 0)
                     TRACE_E("CNames::LoadFromClipboard(): unexpected situation: size == 0!");
 
-                // napriklad miranda pridava za text jeste nejaka unicode data, takze si
-                // radeji dohledame sami konec stringu zakonceny pomoci nuly, neprekrocime
-                // ovsem konec alokovaneho bloku pameti
+                // for example Miranda appends additional Unicode data after the text,
+                // so we locate the null-terminated end ourselves without crossing
+                // the allocated memory block
                 const WCHAR* s = textW;
                 const WCHAR* end = textW + size / sizeof(WCHAR);
                 while (s < end && *s != 0)
                     s++;
-                size = s - textW; // ted uz ve WCHARech
+                size = s - textW; // now in WCHARs
 
                 text = ConvertAllocU2A(textW, (int)size);
                 if (text != NULL)
@@ -879,7 +879,7 @@ BOOL CNames::LoadFromClipboard(HWND hWindow)
                 HANDLES(GlobalUnlock(handle));
             }
         }
-        if (text == NULL) // asi neni unicode, zkusime ANSI (kdyz unicode je, byva ANSI rozbite - bez diakritiky)
+        if (text == NULL) // probably not Unicode, so try ANSI (when Unicode is present the ANSI text is often garbled and lacks accents)
         {
             handle = GetClipboardData(CF_TEXT);
             if (handle != NULL)
@@ -897,9 +897,9 @@ BOOL CNames::LoadFromClipboard(HWND hWindow)
                 if (size == 0)
                     TRACE_E("CNames::LoadFromClipboard(): unexpected situation: size == 0!");
 
-                // napriklad miranda pridava za text jeste nejaka unicode data, takze si
-                // radeji dohledame sami konec stringu zakonceny pomoci nuly, neprekrocime
-                // ovsem konec alokovaneho bloku pameti
+                // for example Miranda appends additional Unicode data after the text,
+                // so we locate the null-terminated end ourselves without crossing
+                // the allocated memory block
                 textEnd = text + size;
                 const char* s = text;
                 while (s < textEnd && *s != 0)
@@ -907,14 +907,14 @@ BOOL CNames::LoadFromClipboard(HWND hWindow)
                 textEnd = s;
             }
 
-            // zleva hledame CR | LF | CRLF nebo konec pameti
-            // nalezene nazvy souboru/adresaru pridame do pole
+            // search from the left for CR | LF | CRLF or end of memory
+            // add the found file or directory names to the array
             char name[2 * MAX_PATH];
             const char* s = text;
             const char* begin = s;
             while (s <= textEnd)
             {
-                // !pozor! 's' a 'begin' bude na konci ukazovat mimo validni pamet => NECIST
+                // !warning! 's' and 'begin' will point past valid memory at the end => DO NOT READ
                 if (s >= textEnd || *s == '\r' || *s == '\n' || *s == 0)
                 {
                     if (s - begin > 0)
@@ -923,26 +923,26 @@ BOOL CNames::LoadFromClipboard(HWND hWindow)
                         {
                             memcpy(name, begin, s - begin);
                             name[s - begin] = 0;
-                            // orizneme backslash na konci cesty
+                            // trim the trailing backslash
                             char* end = name + (s - begin) - 1;
                             if (*end == '\\')
                             {
                                 *end = 0;
                                 end--;
                             }
-                            // orizneme smeti na konci cesty
+                            // trim garbage at the end of the path
                             while (end > name && *end <= ' ')
                             {
                                 *end = 0;
                                 end--;
                             }
-                            // orizneme plne cesty
+                            // trim the full path
                             while (end > name && *end != '\\')
                                 end--;
                             if (*end == '\\')
                                 end++;
 
-                            // orizneme smeti na zacatku cesty
+                            // trim garbage at the beginning of the path
                             while (*end != 0 && *end <= ' ')
                                 end++;
 
@@ -955,15 +955,15 @@ BOOL CNames::LoadFromClipboard(HWND hWindow)
                         else
                             TRACE_E("CNames::LoadFromClipboard(): path is too long, skipping.");
                     }
-                    begin = s + 1; // jsme na terminatoru, posuneme za nej pocatek
+                    begin = s + 1; // we are on the terminator, move the start after it
                 }
                 s++;
             }
 
             if (textIsAlloc)
-                free((void*)text); // pouzivame alokovanou ANSI kopii unicode textu z clipboardu
+                free((void*)text); // using an allocated ANSI copy of Unicode text from the clipboard
             else
-                HANDLES(GlobalUnlock(handle)); // pouzivame primo text z clipboardu (je na nem lock)
+                HANDLES(GlobalUnlock(handle)); // using the clipboard text directly (it is locked)
         }
         CloseClipboard();
     }
@@ -983,7 +983,7 @@ CDirectorySizes::CDirectorySizes(const char* path, BOOL caseSensitive)
 {
     Path = DupStr(path);
     if (Path == NULL)
-        TRACE_E(LOW_MEMORY); // IsGood vrati FALSE
+        TRACE_E(LOW_MEMORY); // IsGood will return FALSE
     CaseSensitive = caseSensitive;
     NeedSort = FALSE;
 }
@@ -1050,7 +1050,7 @@ CDirectorySizes::GetSize(const char* name)
 
 void CDirectorySizes::Sort()
 {
-    if (!NeedSort) // neni treba, mame serazeno
+    if (!NeedSort) // no need, already sorted
         return;
 
     SortNames(Names.GetData(), 0, Names.Count - 1);
@@ -1075,19 +1075,19 @@ int CDirectorySizes::GetIndex(const char* name)
         m = (l + r) / 2;
         int res = CaseSensitive ? strcmp(Names[m], name) : StrICmp(Names[m], name);
         if (res == 0)
-            return m; // nalezeno
+            return m; // found
         else
         {
             if (res > 0)
             {
                 if (l == r || l > m - 1)
-                    return -1; // nenalezeno
+                    return -1; // not found
                 r = m - 1;
             }
             else
             {
                 if (l == r)
-                    return -1; // nenalezeno
+                    return -1; // not found
                 l = m + 1;
             }
         }
@@ -1129,12 +1129,12 @@ void CDirectorySizesHolder::Clean()
 CDirectorySizes*
 CDirectorySizesHolder::Add(const char* path)
 {
-    // pokusime se vyhledat pozadovanou cestu
+    // try to find the requested path
     int index = GetIndex(path);
     if (index != -1)
         return Items[index];
 
-    // cesta neexistuje, alokujeme ji
+    // path does not exist, allocate it
     CDirectorySizes* item = new CDirectorySizes(path, FALSE);
     if (item == NULL)
     {
@@ -1150,17 +1150,17 @@ CDirectorySizesHolder::Add(const char* path)
 
     if (ItemsCount >= DIRECOTRY_SIZES_COUNT)
     {
-        // pole je plne
-        // vyhodime polozku na nultem indexu
+        // the array is full
+        // remove the item at index zero
         delete Items[0];
-        // a pole setrepeme
+        // shift the array
         memmove(Items, Items + 1, sizeof(void*) * (DIRECOTRY_SIZES_COUNT - 1));
-        // polozku pripojime na konec
+        // append the item at the end
         Items[ItemsCount] = item;
     }
     else
     {
-        // polozku pripojime na konec
+        // append the item at the end
         Items[ItemsCount] = item;
         ItemsCount++;
     }
@@ -1195,10 +1195,10 @@ BOOL CDirectorySizesHolder::Store(CFilesWindow* panel)
     if (item == NULL)
         return FALSE;
 
-    // predesle adresare+velikosti vyhazime
+    // discard previous directories and sizes
     item->Clean();
 
-    // pridame adresare, pro ktere je znama velikost
+    // add directories with known size
     int first = 0;
     if (panel->Dirs->Count > 0 && strcmp(panel->Dirs->At(0).Name, "..") == 0)
         first = 1;
@@ -1328,7 +1328,7 @@ int CProgressDlgArray::RemoveFinishedDlgs()
         DWORD code;
         if (dlg->DlgThread != NULL &&
             (!GetExitCodeThread(dlg->DlgThread, &code) || code != STILL_ACTIVE))
-        { // nalezen dokonceny thread, vyhodime ho z pole
+        { // finished thread found, remove it from the array
             HANDLES(CloseHandle(dlg->DlgThread));
             Dlgs.Delete(i);
             if (!Dlgs.IsGood())
@@ -1380,12 +1380,12 @@ HWND CProgressDlgArray::GetNextOpenedDlg(int* index)
             if (ret != NULL)
             {
                 (*index)++;
-                break; // nalezen otevreny dialog, vratime ho
+                break; // found an open dialog, return it
             }
-            else // narazili jsme na zavreny dialog, ten musime preskocit
+            else // encountered a closed dialog, need to skip it
             {
                 if (++attempts >= Dlgs.Count)
-                    break; // vsechny dialogy v poli jsou zavrene
+                    break; // all dialogs in the array are closed
                 (*index)++;
                 if (*index >= Dlgs.Count)
                     *index = 0;
@@ -1458,26 +1458,26 @@ HWND CShellExecuteWnd::Create(HWND hParent, const char* format, ...)
         char buff[2 * MAX_PATH];
         _vsnprintf_s(buff, _TRUNCATE, format, args);
 
-        // prevezmeme velikost parent okna, protoze nekteri uzivatele si stezovali, ze se jim emaily
-        // otevirane ze SS (pres Mozillu) zobrazuji v malickem okenku; nektere shell extension pravdepodobne
-        // berou velikost CMINVOKECOMMANDINFOEX::hwnd v potaz pri konstrukci sveho okna a 1x1 pixel nebyla
-        // optimalni velikost
+        // take the size of the parent window because some users complained
+        // that e-mails opened from SS (via Mozilla) show in a tiny window; some shell extensions probably
+        // consider CMINVOKECOMMANDINFOEX::hwnd when creating their window and 1x1 pixel was not
+        // an optimal size
         RECT r;
         if (!IsWindow(hParent) || !GetClientRect(hParent, &r))
         {
-            // snad dobry default...
+            // hopefully a good default...
             r.right = 800;
             r.bottom = 600;
         }
 
-        // okno bude roztazene pres plochu MainWindow/Findu a musi byt pruhledne (jinak se nevykresli pozadi dialogu)
-        // priklad: pokud vyhodim WS_EX_TRANSPARENT, otevru Find a dam Delete (do kose), staci nasledne zahejbat s
-        // konfirmacnim dialogem pro mazani do kose a nebude se pod nim prekreslovat pozadi Find okna (bude tam
-        // zobrazeno toto shell okenko, ktere ma zatluceny WM_ERASEBKGND/WM_PAINT
+        // the window will stretch across the MainWindow/Find area and must be transparent
+        // otherwise the dialog background is not repainted. Example: if WS_EX_TRANSPARENT is removed,
+        // opening Find and pressing Delete (to recycle) then moving the confirmation dialog
+        // leaves this shell window drawn under it because WM_ERASEBKGND/WM_PAINT are blocked
         CWindow::CreateEx(WS_EX_TRANSPARENT,
                           SHELLEXECUTE_CLASSNAME,
                           buff,
-                          WS_CHILDWINDOW | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_VISIBLE, // bez WS_CLIPSIBLINGS hlavni okno bliklo
+                          WS_CHILDWINDOW | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_VISIBLE, // without WS_CLIPSIBLINGS the main window blinked
                           0, 0, r.right, r.bottom,
                           hParent,
                           (HMENU)0,
@@ -1488,7 +1488,7 @@ HWND CShellExecuteWnd::Create(HWND hParent, const char* format, ...)
     if (HWindow != NULL)
         return HWindow;
     else
-        return hParent; // v pripade chyby vratime alespon praveho parenta
+        return hParent; // on error return at least the given parent
 }
 
 LRESULT
@@ -1500,7 +1500,7 @@ CShellExecuteWnd::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
     case WM_ERASEBKGND:
     {
-        // okno sice bude zasunute pod ostatni childy, ale pro jistotu zakazeme erase
+        // the window will be placed under other children, but disable erase just in case
         return TRUE;
     }
 
@@ -1508,8 +1508,8 @@ CShellExecuteWnd::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         if (!CanClose)
         {
-            MSG msg; // vypumpujeme message queue (WMP9 bufferoval Enter a odmacknul nam OK)
-            // while (PeekMessage(&msg, HWindow, 0, 0, PM_REMOVE));  // Petr: nahradil jsem jen zahozenim zprav z klavesky (bez TranslateMessage a DispatchMessage hrozi nekonecny cyklus, zjisteno pri unloadu Automationu s memory leaky, pred zobrazenim msgboxu s hlaskou o leakach doslo k nekonecnemu cyklu, do fronty porad pridavali WM_PAINT a my ho z ni zase zahazovali)
+            MSG msg; // drain the message queue (WMP9 buffered Enter and dismissed OK)
+            // while (PeekMessage(&msg, HWindow, 0, 0, PM_REMOVE));  // Petr: replaced by simply discarding key messages (without TranslateMessage and DispatchMessage there is a risk of an endless loop, discovered when unloading Automation with memory leaks; before the leak message box appeared, WM_PAINT kept being queued and we just removed it)
             while (PeekMessage(&msg, NULL, WM_KEYFIRST, WM_KEYLAST, PM_REMOVE))
                 ;
 
@@ -1521,19 +1521,19 @@ CShellExecuteWnd::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             params.Text = LoadStr(IDS_SHELLEXTBREAK2);
             SalMessageBoxEx(&params);
 
-            // breakneme se
+            // break here
             char text[200];
             GetWindowText(HWindow, text, 200);
             sprintf(BugReportReasonBreak, "Some faulty shell extension has destroyed our window.\r\n%s", text);
             TaskList.FireEvent(TASKLIST_TODO_BREAK, GetCurrentProcessId());
 
-            // zamrazime tento thread
+            // freeze this thread
             while (1)
                 Sleep(1000);
             /*
-        // spustilo se vytvareni bug reportu ve zvlastnim threadu
-        // nyni zajistime zakousnuti tohoto threadu, dokud bude bug report dialog otevren
-        // tento thread zamrzne na nasledujicim makru diky proemnnym DontSuspend a ExceptionExists
+        // bug report creation started in a separate thread
+        // now ensure this thread is halted while the bug report dialog stays open
+        // this thread freezes at the following macro thanks to DontSuspend and ExceptionExists variables
         CALL_STACK_MESSAGE1("CShellExecuteWnd::WindowProc: LOCK");
 */
         }
@@ -1545,24 +1545,24 @@ CShellExecuteWnd::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 struct EnumWndStruct
 {
-    char* Iterator; // od tohoto mista pridat dalsi okno
-    int Remains;    // kolik znaku zbyva do konce bufferu?
+    char* Iterator; // add another window starting from this position
+    int Remains;    // how many characters remain until the buffer end?
     int Count;
 };
 
 BOOL CALLBACK EnumChildProc(HWND hwnd, LPARAM lParam)
 {
-    // jde o okno s class==SHELLEXECUTE_CLASSNAME?
+    // is this a window with class==SHELLEXECUTE_CLASSNAME?
     char className[100];
     if (GetClassName(hwnd, className, 100) > 0 && stricmp(className, SHELLEXECUTE_CLASSNAME) == 0)
     {
         EnumWndStruct* data = (EnumWndStruct*)lParam;
-        // titulek okna drzi pozadovany string
+        // the window title holds the required string
         if (data->Remains > 2)
         {
             if (GetWindowTextLength(hwnd) > 0)
             {
-                strcpy(data->Iterator, "\r\n"); // nemusime osetrovat preteceni bufferu, mame rezervu tri znaku
+                strcpy(data->Iterator, "\r\n"); // no need to check for buffer overflow, we have a three-character margin
                 data->Remains -= 2;
                 data->Iterator += 2;
                 int chars = GetWindowText(hwnd, data->Iterator, data->Remains);
@@ -1575,15 +1575,15 @@ BOOL CALLBACK EnumChildProc(HWND hwnd, LPARAM lParam)
         }
         data->Count++;
     }
-    return TRUE; // pokracujeme v hledani, chceme vsechna okna
+    return TRUE; // continue searching, we want all windows
 }
 
 int EnumCShellExecuteWnd(HWND hParent, char* text, int textMax)
 {
-    // enum vsech child oken od hParent (zabehne i do sub-childu)
+    // enumerate all child windows of hParent (descends into sub-children)
     EnumWndStruct data;
     data.Iterator = text;
-    data.Remains = textMax - 3; // rezerva
+    data.Remains = textMax - 3; // reserve
     data.Count = 0;
     EnumChildWindows(hParent, EnumChildProc, (LPARAM)&data);
     *data.Iterator = 0; // terminator
@@ -1592,7 +1592,7 @@ int EnumCShellExecuteWnd(HWND hParent, char* text, int textMax)
 
 int IsFileLink(const char* fileExtension)
 {
-    // znaky pripony konvertujeme do malych pismen a zjistime jestli jde o link
+    // convert extension characters to lowercase and detect if it's a link
     char lowerExt[7];
     char* dstExt = lowerExt;
     if (*fileExtension != 0)
@@ -1602,7 +1602,7 @@ int IsFileLink(const char* fileExtension)
     if (*fileExtension != 0)
         *dstExt++ = LowerCase[*fileExtension++];
     if (*fileExtension != 0)
-        return 0; // pripona je delsi nez tri znaky => nemuze byt .lnk, .url ani .pif
+        return 0; // extension longer than three characters => cannot be .lnk, .url or .pif
     *((DWORD*)dstExt) = 0;
     return (*(DWORD*)lowerExt == *(DWORD*)"lnk" ||
             *(DWORD*)lowerExt == *(DWORD*)"pif" ||
@@ -1628,9 +1628,9 @@ BOOL IsSambaDrivePath(const char* path)
 
 BOOL AddToListOfNames(char** list, char* listEnd, const char* name, int nameLen)
 {
-    if (strchr(name, ' ') != NULL) // pokud obsahuje mezeru, dame ho do uvozovek
+    if (strchr(name, ' ') != NULL) // if it contains a space, wrap it in quotes
     {
-        if (*list + nameLen + 2 /* za uvozovky */ <= listEnd)
+        if (*list + nameLen + 2 /* for the quotes */ <= listEnd)
         {
             *(*list)++ = '"';
             memcpy(*list, name, nameLen);
@@ -1663,7 +1663,7 @@ CTargetPathState GetTargetPathState(CTargetPathState upperDirState, const char* 
         if (attr == INVALID_FILE_ATTRIBUTES)
         {
             TRACE_E("GetTargetPathState(): unexpected situation, target path should always exists!");
-            return tpsNotEncryptedNotExisting; // pokud cesta skutecne neexistuje, stejne se nic neprovede + pokud "jen" nejdou cist atributy, predpokladame cestu bez Encrypted atributu
+            return tpsNotEncryptedNotExisting; // if the path truly doesn't exist nothing happens; if attributes just can't be read we assume no Encrypted attribute
         }
         if (attr & FILE_ATTRIBUTE_ENCRYPTED)
             return tpsEncryptedExisting;
@@ -1675,7 +1675,7 @@ CTargetPathState GetTargetPathState(CTargetPathState upperDirState, const char* 
     case tpsNotEncryptedExisting:
     {
         DWORD attr = SalGetFileAttributes(targetPath);
-        if (attr == INVALID_FILE_ATTRIBUTES) // dalsi podadresar uz neexistuje, podedime Encrypted atribut
+        if (attr == INVALID_FILE_ATTRIBUTES) // next subdirectory does not exist, inherit the Encrypted attribute
             return upperDirState == tpsEncryptedExisting ? tpsEncryptedNotExisting : tpsNotEncryptedNotExisting;
         if (attr & FILE_ATTRIBUTE_ENCRYPTED)
             return tpsEncryptedExisting;
@@ -1696,8 +1696,8 @@ BOOL SafeGetOpenFileName(LPOPENFILENAME lpofn)
     BOOL ret = GetOpenFileName(lpofn);
     if (!ret && FNERR_INVALIDFILENAME == CommDlgExtendedError())
     {
-        // Window odmitaji otevrit dialog pro cestu jako je "C:\" pripadne pro neexistujici cestu.
-        // V tomto pripade vnutime Documents
+        // Windows refuses to open a dialog for a path like "C:\" or for a non-existent path.
+        // In this case force Documents
         char initDir[MAX_PATH];
         const char* oldInitDir = lpofn->lpstrInitialDir;
         lpofn->lpstrInitialDir = initDir;
@@ -1707,7 +1707,7 @@ BOOL SafeGetOpenFileName(LPOPENFILENAME lpofn)
         ret = GetOpenFileName(lpofn);
         lpofn->lpstrInitialDir = oldInitDir;
     }
-    if (!ret && CommDlgExtendedError() != 0 /* jen pokud nejde o Cancel v dialogu */)
+    if (!ret && CommDlgExtendedError() != 0 /* only if it wasn't Cancel in the dialog */)
         TRACE_E("Cannot open OpenFile dialog box. CommDlgExtendedError()=" << CommDlgExtendedError());
     return ret;
 }
@@ -1717,8 +1717,8 @@ BOOL SafeGetSaveFileName(LPOPENFILENAME lpofn)
     BOOL ret = GetSaveFileName(lpofn);
     if (!ret && FNERR_INVALIDFILENAME == CommDlgExtendedError())
     {
-        // Window odmitaji otevrit dialog pro cestu jako je "C:\" pripadne pro neexistujici cestu.
-        // V tomto pripade vnutime Documents
+        // Windows refuses to open a dialog for a path like "C:\" or for a non-existent path.
+        // In this case force Documents
         char initDir[MAX_PATH];
         const char* oldInitDir = lpofn->lpstrInitialDir;
         lpofn->lpstrInitialDir = initDir;
@@ -1728,7 +1728,7 @@ BOOL SafeGetSaveFileName(LPOPENFILENAME lpofn)
         ret = GetSaveFileName(lpofn);
         lpofn->lpstrInitialDir = oldInitDir;
     }
-    if (!ret && CommDlgExtendedError() != 0 /* jen pokud nejde o Cancel v dialogu */)
+    if (!ret && CommDlgExtendedError() != 0 /* only if it wasn't Cancel in the dialog */)
         TRACE_E("Cannot open SaveFile dialog box. CommDlgExtendedError()=" << CommDlgExtendedError());
     return ret;
 }
@@ -1763,14 +1763,14 @@ void GetIfPathIsInaccessibleGoTo(char* path, BOOL forceIsMyDocs)
 
 HICON SalLoadImage(int vistaResID, int otherResID, int cx, int cy, UINT flags)
 {
-    // JRYFIXME - prevest na volani SalLoadIcon
+    // JRYFIXME - convert to a SalLoadIcon call
     return SalLoadIcon(ImageResDLL, vistaResID, cx);
     //return (HICON)HANDLES(LoadImage(ImageResDLL, MAKEINTRESOURCE(vistaResID), IMAGE_ICON, cx, cy, flags));
 }
 
 HICON LoadArchiveIcon(int cx, int cy, UINT flags)
 {
-    // JRYFIXME - prevest na volani SalLoadIcon
+    // JRYFIXME - convert to a SalLoadIcon call
     return SalLoadIcon(ImageResDLL, 174, cx);
     //return (HICON)HANDLES(LoadImage(ImageResDLL, MAKEINTRESOURCE(174), IMAGE_ICON, cx, cy, flags));
 }
@@ -1796,14 +1796,14 @@ BOOL DuplicateBackslashes(char* buffer, int bufferSize)
         {
             if (l + 1 < bufferSize)
             {
-                memmove(s + 1, s, l - (s - buffer) + 1); // zdvojime '\\'
+                memmove(s + 1, s, l - (s - buffer) + 1); // duplicate '\\'
                 l++;
                 s++;
             }
-            else // nevejde se, orizneme buffer
+            else // doesn't fit, trim the buffer
             {
                 ret = FALSE;
-                memmove(s + 1, s, l - (s - buffer)); // zdvojime '\\', orizneme o znak
+                memmove(s + 1, s, l - (s - buffer)); // duplicate '\\', trim one character
                 buffer[l] = 0;
                 s++;
             }
@@ -1834,14 +1834,14 @@ BOOL DuplicateDollars(char* buffer, int bufferSize)
         {
             if (l + 1 < bufferSize)
             {
-                memmove(s + 1, s, l - (s - buffer) + 1); // zdvojime '$'
+                memmove(s + 1, s, l - (s - buffer) + 1); // duplicate '$'
                 l++;
                 s++;
             }
-            else // nevejde se, orizneme buffer
+            else // doesn't fit, trim the buffer
             {
                 ret = FALSE;
-                memmove(s + 1, s, l - (s - buffer)); // zdvojime '$', orizneme o znak
+                memmove(s + 1, s, l - (s - buffer)); // duplicate '$', trim one character
                 buffer[l] = 0;
                 s++;
             }
@@ -1865,10 +1865,10 @@ BOOL AddDoubleQuotesIfNeeded(char* buf, int bufSize)
         char* sp = beg;
         while (*++sp > ' ')
             ;
-        if (sp < end) // jmeno obsahuje aspon jednu mezeru, je potreba pridat uvozovky
+        if (sp < end) // the name contains at least one space, quotes are needed
         {
             if ((bufEnd - buf) + 2 >= bufSize)
-                return FALSE; // malo mista v bufferu
+                return FALSE; // not enough space in the buffer
             memmove(end + 2, end, (bufEnd - end) + 1);
             memmove(beg + 1, beg, end - beg);
             *beg = '"';
@@ -1916,7 +1916,7 @@ BOOL GetStringSid(LPTSTR* stringSid)
         return FALSE;
     }
 
-    // volajici musi uvolnit vracenou pamet pomoci LocalFree, viz MSDN
+    // caller must free the returned memory using LocalFree, see MSDN
     ConvertSidToStringSid(pTokenUser->User.Sid, stringSid);
 
     free(pTokenUser);
@@ -1972,11 +1972,11 @@ BOOL GetSidMD5(BYTE* sidMD5)
     return TRUE;
 }
 
-// Vice informaci viz:
+// For more information see:
 //   http://www.codeguru.com/cpp/w-p/win32/tutorials/print.php/c4545 (A NotQuiteNullDacl Class)
-//   http://forums.microsoft.com/msdn/ShowPost.aspx?PostID=748596&SiteID=1 (uz resi vistu)
+//   http://forums.microsoft.com/msdn/ShowPost.aspx?PostID=748596&SiteID=1 (already addresses Vista)
 //   Programming Server-Side Applications for Microsoft Windows 2000, Richter/Clark, Microsoft Press 2000, Chapter 10, pp 458-460
-//   Ask Dr. Gui #49 (nemuzu ho poradne najit online, tak radeji vkladam sem):
+//   Ask Dr. Gui #49 (I couldn't find it online properly, so I'm including it here):
 // Mutex Madness
 // Dear Dr. GUI:
 // I'm a French engineer and my English isn't perfect so I hope that you understand my question.
@@ -2006,8 +2006,8 @@ BOOL GetSidMD5(BYTE* sidMD5)
 // Dr. GUI thinks that in your case you should only set the security for specific objects because you are developing a DLL, which may not want to change the security for every object in the process.
 // The following function wraps CreateMutex with the additional functionality of creating security that is more relaxed than is the default for a service:
 /*
-    // pridelime mutexu vsechna mozna prava (aby napriklad fungovalo otevirani mezi AsAdmin a User ucty)
-    // cistejsi by bylo zavolani funkce ObtainAccessableMutex(), viz jeji obsahly komentar
+    // grant the mutex all possible rights (for example to allow opening between AsAdmin and User accounts)
+    // it would be cleaner to call ObtainAccessableMutex(), see its extensive comment
     SECURITY_ATTRIBUTES secAttr;
     char secDesc[ SECURITY_DESCRIPTOR_MIN_LENGTH ];
     secAttr.nLength = sizeof(secAttr);
@@ -2019,13 +2019,13 @@ BOOL GetSidMD5(BYTE* sidMD5)
 */
 
 /*
-// podle http://forums.microsoft.com/msdn/ShowPost.aspx?PostID=748596&SiteID=1
-// by se pod vistou mel nastavit integrity level, ale nedokazal jsem problem na Viste/Serveru2008 navodit
-// takze zatim nechavam pouze v komentari, dokud na to nenarazime
+// according to http://forums.microsoft.com/msdn/ShowPost.aspx?PostID=748596&SiteID=1
+// integrity level should be set under Vista, but I couldn't reproduce the issue on Vista/Server 2008
+// so for now I'm leaving it just in a comment until we encounter it
 //
 // Windows Integrity Mechanism Design
 // http://msdn.microsoft.com/en-us/library/bb625963.aspx
-if (windowsVistaAndLater) // FIXME: nenarazil jsem na viste na to, ze bych musel integrity level resit (mezi AdAdmin / normalni aplikaci)
+if (windowsVistaAndLater) // FIXME: I haven't encountered the need to handle integrity level on Vista (between AsAdmin and normal app)
 {
   PSECURITY_DESCRIPTOR pSD;
   ConvertStringSecurityDescriptorToSecurityDescriptor(
@@ -2114,9 +2114,9 @@ ErrorExit:
 
 //****************************************************************************
 //
-// GetProcessIntegrityLevel (vytazeno z MSDN)
-// V pripade uspechu vrati TRUE a naplni DWORD na ktery odkazuje 'integrityLevel'
-// jinak (pri selhani nebo pod OS strasima nez Vista) vrati FALSE
+// GetProcessIntegrityLevel (taken from MSDN)
+// On success returns TRUE and fills the DWORD pointed to by 'integrityLevel'
+// otherwise (if it fails or under OS versions older than Vista) returns FALSE
 //
 
 BOOL GetProcessIntegrityLevel(DWORD* integrityLevel)
@@ -2132,7 +2132,7 @@ BOOL GetProcessIntegrityLevel(DWORD* integrityLevel)
 
     BOOL ret = FALSE;
 
-    if (WindowsVistaAndLater) // integrity levels byly zavedeny od Windows Vista
+    if (WindowsVistaAndLater) // integrity levels were introduced with Windows Vista
     {
         hProcess = GetCurrentProcess();
         if (OpenProcessToken(hProcess, TOKEN_QUERY, &hToken))
@@ -2196,20 +2196,20 @@ LONG SalRegQueryValue(HKEY hKey, LPCSTR lpSubKey, LPSTR lpData, PLONG lpcbData)
     if (lpcbData != NULL &&
         (ret == ERROR_MORE_DATA || lpData == NULL && ret == ERROR_SUCCESS))
     {
-        (*lpcbData)++; // rekneme si radsi o pripadny null-terminator navic
+        (*lpcbData)++; // request an extra null terminator just in case
     }
     if (ret == ERROR_SUCCESS && lpData != NULL)
     {
         if (*lpcbData < 1 || ((char*)lpData)[*lpcbData - 1] != 0)
         {
-            if ((DWORD)*lpcbData < dataBufSize) // lezou sem jen hodnoty typu REG_SZ a REG_EXPAND_SZ, takze jeden null-terminator staci
+            if ((DWORD)*lpcbData < dataBufSize) // only REG_SZ and REG_EXPAND_SZ values appear here, so one null terminator is enough
             {
                 ((char*)lpData)[*lpcbData] = 0;
                 (*lpcbData)++;
             }
-            else // nedostatek mista pro null-terminator v bufferu
+            else // not enough room for the null terminator in the buffer
             {
-                (*lpcbData)++; // rekneme si o potrebny null-terminator
+                (*lpcbData)++; // request the needed null terminator
                 return ERROR_MORE_DATA;
             }
         }
@@ -2231,7 +2231,7 @@ LONG SalRegQueryValueEx(HKEY hKey, LPCSTR lpValueName, LPDWORD lpReserved,
             lpcbData != NULL &&
             (ret == ERROR_MORE_DATA || lpData == NULL && ret == ERROR_SUCCESS))
         {
-            (*lpcbData) += type == REG_MULTI_SZ ? 2 : 1; // rekneme si radsi o pripadny null-terminator(y) navic
+            (*lpcbData) += type == REG_MULTI_SZ ? 2 : 1; // request possible extra null terminator(s)
             return ret;
         }
         if (ret == ERROR_SUCCESS && lpData != NULL)
@@ -2243,9 +2243,9 @@ LONG SalRegQueryValueEx(HKEY hKey, LPCSTR lpValueName, LPDWORD lpReserved,
                     ((char*)lpData)[*lpcbData] = 0;
                     (*lpcbData)++;
                 }
-                else // nedostatek mista pro null-terminator v bufferu
+                else // not enough space for the null terminator in the buffer
                 {
-                    (*lpcbData) += type == REG_MULTI_SZ ? 2 : 1; // rekneme si o potrebny null-terminator(y)
+                    (*lpcbData) += type == REG_MULTI_SZ ? 2 : 1; // request the needed null terminator(s)
                     return ERROR_MORE_DATA;
                 }
             }
@@ -2256,9 +2256,9 @@ LONG SalRegQueryValueEx(HKEY hKey, LPCSTR lpValueName, LPDWORD lpReserved,
                     ((char*)lpData)[*lpcbData] = 0;
                     (*lpcbData)++;
                 }
-                else // nedostatek mista pro druhy null-terminator v bufferu
+                else // not enough space for the second null terminator in the buffer
                 {
-                    (*lpcbData)++; // rekneme si o potrebny null-terminator
+                    (*lpcbData)++; // request the needed null terminator
                     return ERROR_MORE_DATA;
                 }
             }
@@ -2271,17 +2271,16 @@ LONG SalRegQueryValueEx(HKEY hKey, LPCSTR lpValueName, LPDWORD lpReserved,
 //
 // SalGetProcessId
 //
-// Funkcni take pod W2K (SDK7.1 se tvari, ze GetProcessId je pod W2K pritomna,
-// ale jde o chybu a SDK8 uz vyzaduje pro GetProcessId _WIN32_WINNT >= 0x0501
+// Works under W2K as well (SDK7.1 pretends GetProcessId is present under W2K,
+// but that's an error and SDK8 requires _WIN32_WINNT >= 0x0501 for GetProcessId)
 //
-// Dokud chceme podporovat Windows 2000, nemuzeme ani GetProcessId() ani ZwQueryInformationProcess
-// staticky linkovat.
+// As long as we want to support Windows 2000 we cannot statically link GetProcessId() or ZwQueryInformationProcess.
 //
 
 DWORD SalGetProcessId(HANDLE hProcess)
 {
-    // volaji nas na zacatku procesu, proto se nemuzeme spolehat na globalni promenne nastavene nekdy pozdeji, jako
-    // je WindowsVistaAndLater nebo NtDLL
+    // called at process startup so we cannot rely on global variables set later, such as
+    // WindowsVistaAndLater or NtDLL
     static BOOL osDetected = FALSE;
     static BOOL vistaAndLater = FALSE;
     if (!osDetected)
@@ -2292,7 +2291,7 @@ DWORD SalGetProcessId(HANDLE hProcess)
     DWORD ret = 0xffffffff;
     if (vistaAndLater)
     {
-        // funkce byla uz v XPSP1, ale tam jeste 100% fungovala ZwQueryInformationProcess, viz nize
+        // the function was already in XPSP1, but ZwQueryInformationProcess still worked perfectly there; see below
         typedef DWORD(WINAPI * PGetProcessId)(IN HANDLE Process);
         HINSTANCE hDLL = NOHANDLES(LoadLibrary("kernel32.dll"));
         if (hDLL != NULL)
@@ -2307,8 +2306,8 @@ DWORD SalGetProcessId(HANDLE hProcess)
     }
     else
     {
-// pro W2K a XP pouzijeme "nedokumentovane" API http://msdn.microsoft.com/en-us/library/windows/desktop/ms687420%28v=vs.85%29.aspx
-// u ktereho MS vyhrozuji, ze ho casem zrusi
+// for W2K and XP we use the "undocumented" API http://msdn.microsoft.com/en-us/library/windows/desktop/ms687420%28v=vs.85%29.aspx
+// which Microsoft threatens to remove over time
 #if !defined PROCESSINFOCLASS
         typedef LONG PROCESSINFOCLASS;
 #endif

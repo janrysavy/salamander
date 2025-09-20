@@ -38,7 +38,7 @@ void CCfgPageArchivers::Transfer(CTransferInfo& ti)
 CCfgPagePackers::CCfgPagePackers()
     : CCommonPropSheetPage(NULL, HLanguage, IDD_CFGPAGE_PACKERS, IDD_CFGPAGE_PACKERS, PSP_USETITLE, NULL)
 {
-    Config = new CPackerConfig /*(TRUE)*/; // bez default hodnot
+    Config = new CPackerConfig /*(TRUE)*/; // without default values
     if (Config == NULL)
         return;
     Config->Load(PackerConfig);
@@ -62,7 +62,7 @@ void CCfgPagePackers::Transfer(CTransferInfo& ti)
                            (LPARAM)LoadStr(IDS_PUT_EXTERNAL));
         int count = 0;
         int index;
-        while ((index = Plugins.GetCustomPackerIndex(count++)) != -1) // dokud existuji "custom pack" plug-iny
+        while ((index = Plugins.GetCustomPackerIndex(count++)) != -1) // while "custom pack" plug-ins exist
         {
             CPluginData* p = Plugins.Get(index);
             if (p != NULL)
@@ -158,7 +158,7 @@ void CCfgPagePackers::LoadControls()
 
     SendDlgItemMessage(HWindow, IDC_P1_CPARG, WM_SETTEXT, 0,
                        (LPARAM)(copy ? Config->GetPackerCmdArgsCopy((int)index) : ""));
-    SendDlgItemMessage(HWindow, IDC_P1_CPARG, EM_SETSEL, 0, -1); // aby browse prepsal obsah
+    SendDlgItemMessage(HWindow, IDC_P1_CPARG, EM_SETSEL, 0, -1); // select all so the browse button overwrites the text
 
     BOOL move = copy && Config->GetPackerSupMove((int)index);
 
@@ -167,7 +167,7 @@ void CCfgPagePackers::LoadControls()
                        (LPARAM)(move ? Config->GetPackerCmdExecMove((int)index) : ""));
     SendDlgItemMessage(HWindow, IDC_P1_MVARG, WM_SETTEXT, 0,
                        (LPARAM)(move ? Config->GetPackerCmdArgsMove((int)index) : ""));
-    SendDlgItemMessage(HWindow, IDC_P1_MVARG, EM_SETSEL, 0, -1); // aby browse prepsal obsah
+    SendDlgItemMessage(HWindow, IDC_P1_MVARG, EM_SETSEL, 0, -1); // select all so the browse button overwrites the text
 
     BOOL longNames = !empty && Config->GetPackerSupLongNames((int)index);
     CheckDlgButton(HWindow, IDC_P1_LONG, longNames ? BST_CHECKED : BST_UNCHECKED);
@@ -260,7 +260,7 @@ void CCfgPagePackers::EnableControls()
     if (!empty)
         cmbSel = (int)SendDlgItemMessage(HWindow, IDC_P1_TYPE, CB_GETCURSEL, 0, 0);
 
-    BOOL external = !empty && cmbSel == 0; //pteExternal
+    BOOL external = !empty && cmbSel == 0; // external packer type
     BOOL copy = !empty && external;
     EnableWindow(GetDlgItem(HWindow, IDC_P1_CPCMD), copy);
     EnableWindow(GetDlgItem(HWindow, IDC_P1_CPCMD_BROWSE), copy);
@@ -303,7 +303,7 @@ CCfgPagePackers::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         SendDlgItemMessage(HWindow, IDC_P1_MVCMD, EM_LIMITTEXT, MAX_PATH, 0);
         SendDlgItemMessage(HWindow, IDC_P1_MVARG, EM_LIMITTEXT, MAX_PATH, 0);
 
-        // prvky dialogu se maji natahovat podle jeho velikosti, nastavime delici controly
+        // dialog controls should stretch with the window size, set the splitter controls
         ElasticVerticalLayout(1, IDC_P1_LIST);
 
         break;
@@ -411,7 +411,7 @@ CCfgPagePackers::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
               int index;
               EditLB->GetCurSel(index);
               Config->SwapPackers(index, index + (dispInfo->Up ? -1 : 1));
-              SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE);  // povolim prohozeni
+              SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE);  // allow swapping
               return TRUE;
             }
 */
@@ -421,7 +421,7 @@ CCfgPagePackers::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 int index;
                 EditLB->GetCurSel(index);
                 Config->MovePacker(index, dispInfo->NewIndex);
-                SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE); // povolime zmenu
+                SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE); // allow change
                 return TRUE;
             }
 
@@ -430,7 +430,7 @@ CCfgPagePackers::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 int index;
                 EditLB->GetCurSel(index);
                 Config->DeletePacker(index);
-                SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE); // povolim smazani
+                SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE); // allow deletion
                 return TRUE;
             }
             }
@@ -462,7 +462,7 @@ CCfgPagePackers::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 CCfgPageUnpackers::CCfgPageUnpackers()
     : CCommonPropSheetPage(NULL, HLanguage, IDD_CFGPAGE_UNPACKERS, IDD_CFGPAGE_UNPACKERS, PSP_USETITLE, NULL)
 {
-    Config = new CUnpackerConfig /*(TRUE)*/; // bez default hodnot
+    Config = new CUnpackerConfig /*(TRUE)*/; // without default values
     if (Config == NULL)
         return;
     Config->Load(UnpackerConfig);
@@ -486,7 +486,7 @@ void CCfgPageUnpackers::Transfer(CTransferInfo& ti)
                            (LPARAM)LoadStr(IDS_PUT_EXTERNAL));
         int count = 0;
         int index;
-        while ((index = Plugins.GetCustomUnpackerIndex(count++)) != -1) // dokud existuji "custom unpack" plug-iny
+        while ((index = Plugins.GetCustomUnpackerIndex(count++)) != -1) // while "custom unpack" plug-ins exist
         {
             CPluginData* p = Plugins.Get(index);
             if (p != NULL)
@@ -606,7 +606,7 @@ void CCfgPageUnpackers::LoadControls()
                        (LPARAM)(copy ? Config->GetUnpackerCmdExecExtract((int)index) : ""));
     SendDlgItemMessage(HWindow, IDC_P2_EXARG, WM_SETTEXT, 0,
                        (LPARAM)(copy ? Config->GetUnpackerCmdArgsExtract((int)index) : ""));
-    SendDlgItemMessage(HWindow, IDC_P2_EXARG, EM_SETSEL, 0, -1); // aby browse prepsal obsah
+    SendDlgItemMessage(HWindow, IDC_P2_EXARG, EM_SETSEL, 0, -1); // select all so the browse button overwrites the text
 
     BOOL longNames = !empty && Config->GetUnpackerSupLongNames((int)index);
     CheckDlgButton(HWindow, IDC_P2_LONG, longNames ? BST_CHECKED : BST_UNCHECKED);
@@ -687,7 +687,7 @@ void CCfgPageUnpackers::EnableControls()
     if (!empty)
         cmbSel = (int)SendDlgItemMessage(HWindow, IDC_P2_TYPE, CB_GETCURSEL, 0, 0);
 
-    BOOL external = !empty && cmbSel == 0; //uteExternal
+    BOOL external = !empty && cmbSel == 0; // external unpacker type
     BOOL copy = !empty && external;
     EnableWindow(GetDlgItem(HWindow, IDC_P2_EXCMD), copy);
     EnableWindow(GetDlgItem(HWindow, IDC_P2_EXCMD_BROWSE), copy);
@@ -721,7 +721,7 @@ CCfgPageUnpackers::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         if (hl != NULL)
             hl->SetActionShowHint(LoadStr(IDS_MASKS_HINT));
 
-        // prvky dialogu se maji natahovat podle jeho velikosti, nastavime delici controly
+        // dialog controls should stretch with the window size, set the splitter controls
         ElasticVerticalLayout(1, IDC_P2_LIST);
 
         break;
@@ -815,7 +815,7 @@ CCfgPageUnpackers::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
               int index;
               EditLB->GetCurSel(index);
               Config->SwapUnpackers(index, index + (dispInfo->Up ? -1 : 1));
-              SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE);  // povolim prohozeni
+              SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE);  // allow swapping
               return TRUE;
             }
 */
@@ -825,7 +825,7 @@ CCfgPageUnpackers::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 int index;
                 EditLB->GetCurSel(index);
                 Config->MoveUnpacker(index, dispInfo->NewIndex);
-                SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE); // povolime zmenu
+                SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE); // allow change
                 return TRUE;
             }
 
@@ -834,7 +834,7 @@ CCfgPageUnpackers::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 int index;
                 EditLB->GetCurSel(index);
                 Config->DeleteUnpacker(index);
-                SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE); // povolim smazani
+                SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE); // allow deletion
                 return TRUE;
             }
             }
@@ -866,7 +866,7 @@ CCfgPageUnpackers::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 CCfgPageExternalArchivers::CCfgPageExternalArchivers()
     : CCommonPropSheetPage(NULL, HLanguage, IDD_CFGPAGE_ARCHIVERSLOCATIONS, IDD_CFGPAGE_ARCHIVERSLOCATIONS, PSP_USETITLE, NULL)
 {
-    Config = new CArchiverConfig /*(TRUE)*/; // bez default hodnot
+    Config = new CArchiverConfig /*(TRUE)*/; // without default values
     if (Config == NULL)
         return;
     Config->Load(ArchiverConfig);
@@ -1019,7 +1019,7 @@ CCfgPageExternalArchivers::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         ChangeToArrowButton(HWindow, IDC_P3_VIEW_BROWSE);
         ChangeToArrowButton(HWindow, IDC_P3_EDIT_BROWSE);
 
-        // prvky dialogu se maji natahovat podle jeho velikosti, nastavime delici controly
+        // dialog controls should stretch with the window size, set the splitter controls
         ElasticVerticalLayout(1, IDC_P3_LIST);
 
         break;
@@ -1088,7 +1088,7 @@ CCfgPageExternalArchivers::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 CCfgPageArchivesAssoc::CCfgPageArchivesAssoc()
     : CCommonPropSheetPage(NULL, HLanguage, IDD_CFGPAGE_ASSOCIATIONS, IDD_CFGPAGE_ASSOCIATIONS, PSP_USETITLE, NULL)
 {
-    Config = new CPackerFormatConfig /*(TRUE)*/; // bez default hodnot
+    Config = new CPackerFormatConfig /*(TRUE)*/; // without default values
     if (Config == NULL)
         return;
     Config->Load(PackerFormatConfig);
@@ -1120,7 +1120,7 @@ void CCfgPageArchivesAssoc::Transfer(CTransferInfo& ti)
         int count = 0;
         int index;
         char buf[MAX_PATH];
-        while ((index = Plugins.GetPanelViewIndex(count++)) != -1) // dokud existuji "panel view" plug-iny
+        while ((index = Plugins.GetPanelViewIndex(count++)) != -1) // while "panel view" plug-ins exist
         {
             CPluginData* p = Plugins.Get(index);
             if (p != NULL)
@@ -1133,7 +1133,7 @@ void CCfgPageArchivesAssoc::Transfer(CTransferInfo& ti)
         }
 
         count = 0;
-        while ((index = Plugins.GetPanelEditIndex(count++)) != -1) // dokud existuji "panel edit" plug-iny
+        while ((index = Plugins.GetPanelEditIndex(count++)) != -1) // while "panel edit" plug-ins exist
         {
             CPluginData* p = Plugins.Get(index);
             if (p != NULL)
@@ -1273,7 +1273,7 @@ CCfgPageArchivesAssoc::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         if (hl != NULL)
             hl->SetActionShowHint(LoadStr(IDS_EXTENDED_MASKS_HINT));
 
-        // prvky dialogu se maji natahovat podle jeho velikosti, nastavime delici controly
+        // dialog controls should stretch with the window size, set the splitter controls
         ElasticVerticalLayout(1, IDC_P4_LIST);
 
         break;
@@ -1354,7 +1354,7 @@ CCfgPageArchivesAssoc::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
               int index;
               EditLB->GetCurSel(index);
               Config->SwapFormats(index, index + (dispInfo->Up ? -1 : 1));
-              SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE);  // povolim prohozeni
+              SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE);  // allow swapping
               return TRUE;
             }
 */
@@ -1364,7 +1364,7 @@ CCfgPageArchivesAssoc::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 int index;
                 EditLB->GetCurSel(index);
                 Config->MoveFormat(index, dispInfo->NewIndex);
-                SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE); // povolime zmenu
+                SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE); // allow change
                 return TRUE;
             }
 
@@ -1373,7 +1373,7 @@ CCfgPageArchivesAssoc::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 int index;
                 EditLB->GetCurSel(index);
                 Config->DeleteFormat(index);
-                SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE); // povolim smazani
+                SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE); // allow deletion
                 return TRUE;
             }
             }

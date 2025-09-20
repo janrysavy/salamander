@@ -16,7 +16,7 @@
 #include "shellib.h"
 #include "filesbox.h"
 
-// pomocne promenne pro dialogy v BuildScriptXXX()
+// helper variables for the BuildScriptXXX() dialogs
 BOOL ConfirmADSLossAll = FALSE;
 BOOL ConfirmADSLossSkipAll = FALSE;
 BOOL ConfirmCopyLinkContentAll = FALSE;
@@ -37,24 +37,24 @@ BOOL ErrGetFileSizeOfLnkTgtIgnAll = FALSE;
 // CFilesWindow
 //
 
-// pomocne promenne pro testy pokusu o preruseni stavby scriptu
+// helper variables for tests attempting to interrupt script building
 DWORD LastTickCount;
 
 void CFilesWindow::Activate(BOOL shares)
 {
     CALL_STACK_MESSAGE_NONE
     //  TRACE_I("CFilesWindow::Activate");
-    LastInactiveRefreshStart = LastInactiveRefreshEnd; // aktivaci se rusi udaje o poslednim refreshi v neaktivnim okne
+    LastInactiveRefreshStart = LastInactiveRefreshEnd; // activation cancels information about the last refresh in the inactive window
     BOOL needToRefreshIcons = InactWinOptimizedReading;
-    if (Is(ptDisk) || Is(ptZIPArchive)) // disky a archivy
+    if (Is(ptDisk) || Is(ptZIPArchive)) // disks and archives
     {
         if (!SkipOneActivateRefresh && (!GetNetworkDrive() || !Configuration.DrvSpecRemoteDoNotRefreshOnAct) ||
-            InactiveRefreshTimerSet) // odlozeny refresh pri neaktivnim okne se musi pri aktivaci okna provest ihned
+            InactiveRefreshTimerSet) // delayed refresh in an inactive window must be performed immediately on activation
         {
             DWORD checkPathRet;
             if ((checkPathRet = CheckPath(FALSE)) != ERROR_SUCCESS)
             {
-                if (checkPathRet == ERROR_USER_TERMINATED) // user dal ESC -> zmena na fixed drive
+                if (checkPathRet == ERROR_USER_TERMINATED) // user pressed ESC -> switch to fixed drive
                 {
                     if (MainWindow->LeftPanel == this)
                     {
@@ -67,7 +67,7 @@ void CFilesWindow::Activate(BOOL shares)
                             ChangeRightPanelToFixedWhenIdle = TRUE;
                     }
                 }
-                else // jina chyba na ceste, dame si refresh
+                else // another path error, schedule a refresh
                 {
                     HANDLES(EnterCriticalSection(&TimeCounterSection));
                     int t1 = MyTimeCounter++;
@@ -76,13 +76,13 @@ void CFilesWindow::Activate(BOOL shares)
                 }
                 needToRefreshIcons = FALSE;
             }
-            else // cesta vypada o.k.
+            else // path appears to be OK
             {
-                if (!AutomaticRefresh && !GetNetworkDrive() ||           // manualni refresh disku (krom sitoveho disku)
-                    GetNetworkDrive() &&                                 // u sit. disku provadime refresh pri kazde
-                        !Configuration.DrvSpecRemoteDoNotRefreshOnAct || // aktivaci, neni-li to zakazano (resi Sambu)
-                    shares && !GetNetworkDrive() ||                      // obnova sharu (na sit. discich nema vyznam)
-                    InactiveRefreshTimerSet)                             // odlozeny refresh pri neaktivnim okne se musi pri aktivaci okna provest ihned
+                if (!AutomaticRefresh && !GetNetworkDrive() ||           // manual disk refresh (except network disks)
+                    GetNetworkDrive() &&                                 // on network drives we refresh after every
+                        !Configuration.DrvSpecRemoteDoNotRefreshOnAct || // on activation unless disabled (works around Samba)
+                    shares && !GetNetworkDrive() ||                      // refresh shares (pointless on network disks)
+                    InactiveRefreshTimerSet)                             // delayed refresh in inactive window must run on activation
                 {
                     if (InactiveRefreshTimerSet)
                     {
@@ -93,10 +93,10 @@ void CFilesWindow::Activate(BOOL shares)
                     HANDLES(EnterCriticalSection(&TimeCounterSection));
                     int t1 = MyTimeCounter++;
                     HANDLES(LeaveCriticalSection(&TimeCounterSection));
-                    PostMessage(HWindow, WM_USER_REFRESH_DIR_EX, FALSE, t1); // vime, ze jde pravdepodobne o zbytecny refresh
+                    PostMessage(HWindow, WM_USER_REFRESH_DIR_EX, FALSE, t1); // we know this is probably an unnecessary refresh
                     needToRefreshIcons = FALSE;
                 }
-                else // na automaticky obnovovanych discich obnovime alespon disk-free-space
+                else // on automatically refreshed drives update at least disk-free-space
                 {
                     RefreshDiskFreeSpace(FALSE, TRUE);
                 }
@@ -105,7 +105,7 @@ void CFilesWindow::Activate(BOOL shares)
     }
     else
     {
-        if (Is(ptPluginFS)) // plug-in FS: zasleme FSE_ACTIVATEREFRESH, aby si plug-in mohl refreshnout
+        if (Is(ptPluginFS)) // plug-in FS: send FSE_ACTIVATEREFRESH so the plug-in can refresh itself
         {
             if (!SkipOneActivateRefresh)
                 PostMessage(HWindow, WM_USER_REFRESH_PLUGINFS, 0, 0);
@@ -160,7 +160,7 @@ BOOL CFilesWindow::MakeFileList(HANDLE hFile)
         int dirs = 0;
         CFileData* f;
 
-        // v prvni fazi napocitame maximalni sirky promennych (pokud nejaka pouziva $(name:max))
+        // in the first phase compute maximum variable widths (if some use $(name:max))
         int maxSizes[100];
         int maxSizesCount = 100;
         ZeroMemory(maxSizes, sizeof(maxSizes));
@@ -180,7 +180,7 @@ BOOL CFilesWindow::MakeFileList(HANDLE hFile)
                 }
             }
         }
-        // v druhe fazi tyto sirky aplikujeme
+        // in the second phase apply these widths
         for (i = 0; i < alloc; i++)
         {
             if (indexes[i] >= 0 && indexes[i] < Dirs->Count + Files->Count)
@@ -233,9 +233,9 @@ DWORD GetPathFlagsForCopyOp(const char* path, DWORD netFlag, DWORD fixedFlag)
         else if (drvType == DRIVE_FIXED || drvType == DRIVE_RAMDISK || drvType == DRIVE_CDROM)
             return fixedFlag;
         else if (drvType == DRIVE_REMOVABLE && UpperCase[path[0]] >= 'A' && UpperCase[path[0]] <= 'Z' && path[1] == ':' &&
-                 GetDriveFormFactor(UpperCase[path[0]] - 'A' + 1) == 0 /* neni to floppy */)
+                 GetDriveFormFactor(UpperCase[path[0]] - 'A' + 1) == 0 /* not a floppy */)
         {
-            return fixedFlag; // removable ale neni to floppy, napr. USB stick, fotak pres USB (napr. FZ45) - ty bereme jako fixed, jsou dost rychle
+            return fixedFlag; // removable but not a floppy, e.g. USB stick or a camera via USB (e.g. FZ45) - we treat them as fixed, they're fast enough
         }
     }
     return 0;
@@ -253,7 +253,7 @@ BOOL CFilesWindow::MoveFiles(const char* source, const char* target, const char*
 
         FilesActionInProgress = TRUE;
 
-        SetCurrentDirectory(source); // pro rychlejsi move (system to ma rad)
+        SetCurrentDirectory(source); // for a faster move (the system prefers it)
 
         ConfirmADSLossAll = FALSE;
         ConfirmADSLossSkipAll = FALSE;
@@ -270,7 +270,7 @@ BOOL CFilesWindow::MoveFiles(const char* source, const char* target, const char*
         ErrTooBigFileFAT32SkipAll = FALSE;
         ErrGetFileSizeOfLnkTgtIgnAll = FALSE;
 
-        //---  vytvoreni objektu scriptu
+        //---  create the script object
         COperations* script = new COperations(100, 50, NULL, NULL, NULL);
         if (script == NULL)
         {
@@ -288,31 +288,31 @@ BOOL CFilesWindow::MoveFiles(const char* source, const char* target, const char*
         script->SameRootButDiffVolume = sameRootPath && !HasTheSameRootPathAndVolume(source, target);
         script->ShowStatus = !sameRootPath || script->SameRootButDiffVolume;
         script->IsCopyOperation = FALSE;
-        // script->IsCopyOrMoveOperation = TRUE;   // zakomentovano, protoze tenhle Move nechceme pridavat do fronty Copy/Move operaci
+        // script->IsCopyOrMoveOperation = TRUE;   // commented out because we don't want to add this Move to the Copy/Move queue
 
         BOOL fastDirectoryMove = TRUE;          // Configuration.FastDirectoryMove;
-        if (fastDirectoryMove &&                // fast-dir-move neni globalne vypnute
-            HasTheSameRootPath(source, target)) // + v ramci jednoho drivu
+        if (fastDirectoryMove &&                // fast-dir-move is not globally disabled
+            HasTheSameRootPath(source, target)) // + within the same drive
         {
             UINT sourceType = DRIVE_REMOTE;
-            if (source[0] != '\\') // neni to UNC cesta (ta je vzdy "remote")
+            if (source[0] != '\\') // not a UNC path (that is always "remote")
             {
                 char root[4] = " :\\";
                 root[0] = source[0];
                 sourceType = GetDriveType(root);
             }
 
-            if (sourceType == DRIVE_REMOTE) // sitovy disk
-            {                               // provedeme detekci NOVELLskych disku - nefunguje na nich fast-directory-move
+            if (sourceType == DRIVE_REMOTE) // network disk
+            {                               // detect Novell disks - fast-directory-move doesn't work on them
                 if (IsNOVELLDrive(source))
                     fastDirectoryMove = Configuration.NetwareFastDirMove;
             }
         }
 
-        //---  inicializace testu na preruseni buildu
+        //---  initialize build interruption test
         LastTickCount = GetTickCount();
 
-        //---  enumerace souboru/adresaru source adresare
+        //---  enumerate files/directories of the source directory
         char sourceDir[MAX_PATH + 4];
         int len = (int)strlen(source);
         if (source[len - 1] == '\\')
@@ -337,7 +337,7 @@ BOOL CFilesWindow::MoveFiles(const char* source, const char* target, const char*
             CreateSafeWaitWindow(LoadStr(IDS_ANALYSINGDIRTREEESC), NULL, 1000, TRUE, MainWindow->HWindow);
             HCURSOR oldCur = SetCursor(LoadCursor(NULL, IDC_WAIT));
 
-            GetAsyncKeyState(VK_ESCAPE); // init GetAsyncKeyState - viz help
+            GetAsyncKeyState(VK_ESCAPE); // initialize GetAsyncKeyState - see help
 
             char targetDir[MAX_PATH];
             strcpy(targetDir, target);
@@ -356,11 +356,11 @@ BOOL CFilesWindow::MoveFiles(const char* source, const char* target, const char*
             if (MyGetDiskFreeSpace(targetDir, &d1, &d2, &d3, &d4))
             {
                 script->BytesPerCluster = d1 * d2;
-                // W2K a novejsi: nasobek d1 * d2 * d3 nefungoval na DFS stromech, reportil Ludek.Vydra@k2atmitec.cz
+                // W2K and later: the product d1 * d2 * d3 didn't work on DFS trees, reported by Ludek.Vydra@k2atmitec.cz
                 script->FreeSpace = MyGetDiskFreeSpace(targetDir);
             }
 
-            BOOL scriptOK = TRUE; // vysledek stavby scriptu, uspech?
+            BOOL scriptOK = TRUE; // result of script creation, success?
             do
             {
                 if (file.cFileName[0] != 0 &&
@@ -400,7 +400,7 @@ BOOL CFilesWindow::MoveFiles(const char* source, const char* target, const char*
                 script->TotalSize += script->At(i).Size;
             SetCursor(oldCur);
             DestroySafeWaitWindow();
-            // script je sestaven, nechame ho provest
+            // script built, let it execute
             if (script->Count != 0)
             {
                 CProgressDialog dlg(HWindow, script, LoadStr(IDS_UNPACKTMPMOVE), NULL, NULL, FALSE, NULL);
@@ -449,7 +449,7 @@ BOOL ContainsString(TIndirectArray<char>* usedNames, const char* name, int* inde
             m = (l + r) / 2;
             char* hw = usedNames->At(m);
             int res = StrICmp(hw, name);
-            if (res == 0) // nalezeno
+            if (res == 0) // found
             {
                 if (index != NULL)
                     *index = m;
@@ -459,20 +459,20 @@ BOOL ContainsString(TIndirectArray<char>* usedNames, const char* name, int* inde
             {
                 if (res > 0)
                 {
-                    if (l == r || l > m - 1) // nenalezeno
+                    if (l == r || l > m - 1) // not found
                     {
                         if (index != NULL)
-                            *index = m; // mel by byt na teto pozici
+                            *index = m; // should be at this position
                         return FALSE;
                     }
                     r = m - 1;
                 }
                 else
                 {
-                    if (l == r) // nenalezeno
+                    if (l == r) // not found
                     {
                         if (index != NULL)
-                            *index = m + 1; // mel by byt az za touto pozici
+                            *index = m + 1; // should be after this position
                         return FALSE;
                     }
                     l = m + 1;
@@ -538,7 +538,7 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
     char fsName[MAX_PATH];
     DWORD dummy, flags;
 
-    //---  inicializace testu na preruseni buildu
+    //---  initialize the build interruption test
     LastTickCount = GetTickCount();
 
     BOOL fastDirectoryMove = TRUE; // Configuration.FastDirectoryMove;
@@ -547,7 +547,7 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
         char* name = data->At(0)->FileName;
         UINT sourceType = DRIVE_REMOTE;
         if (name != NULL && LowerCase[*name] >= 'a' && LowerCase[*name] <= 'z' &&
-            *(name + 1) == ':') // neni UNC cesta (ta je vzdy "remote")
+            *(name + 1) == ':') // not a UNC path (UNC paths are always "remote")
         {
             sourceType = MyGetDriveType(name);
         }
@@ -561,10 +561,10 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
             else
                 SetCurrentDirectory(targetDir);
 
-            if (fastDirectoryMove &&                   // fast-dir-move neni globalne vypnute
-                !copy && sourceType == DRIVE_REMOTE && // + move operace + sitovy disk
-                HasTheSameRootPath(name, targetDir))   // + v ramci jednoho drivu
-            {                                          // provedeme detekci NOVELLskych disku - nefunguje na nich fast-directory-move
+            if (fastDirectoryMove &&                   // fast-dir-move is not disabled globally
+                !copy && sourceType == DRIVE_REMOTE && // + move operation + network disk
+                HasTheSameRootPath(name, targetDir))   // + within one drive
+            {                                          // detect Novell disks - fast-directory-move doesn't work on them
                 if (IsNOVELLDrive(name))
                     fastDirectoryMove = Configuration.NetwareFastDirMove;
             }
@@ -593,7 +593,7 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
         }
     }
 
-    // zjistime jestli je cilem vymenne medium (floppy, ZIP) -> pro urychleni se pouziva vetsi buffer
+    // check if the target is a removable medium (floppy, ZIP) -> larger buffer is used for speed
     if (LowerCase[*targetDir] >= 'a' && LowerCase[*targetDir] <= 'z' &&
         *(targetDir + 1) == ':')
     {
@@ -606,12 +606,12 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
     }
 
     CActionType type = (copy ? atCopy : atMove);
-    char sourcePath[2 * MAX_PATH];     // + MAX_PATH je rezerva (Windows delaji cesty delsi nez MAX_PATH)
-    char lastSourcePath[2 * MAX_PATH]; // + MAX_PATH je rezerva (Windows delaji cesty delsi nez MAX_PATH)
+    char sourcePath[2 * MAX_PATH];     // + MAX_PATH reserve (Windows create paths longer than MAX_PATH)
+    char lastSourcePath[2 * MAX_PATH]; // + MAX_PATH reserve (Windows create paths longer than MAX_PATH)
     lastSourcePath[0] = 0;
     BOOL sourceSupADS = FALSE;
-    char targetPath[2 * MAX_PATH + 200]; // + 200 je rezerva (Windows delaji cesty delsi nez MAX_PATH)
-    char mapNameBuf[2 * MAX_PATH];       // + MAX_PATH je rezerva (Windows delaji cesty delsi nez MAX_PATH)
+    char targetPath[2 * MAX_PATH + 200]; // +200 reserve (Windows create paths longer than MAX_PATH)
+    char mapNameBuf[2 * MAX_PATH];       // + MAX_PATH reserve (Windows create paths longer than MAX_PATH)
     strcpy(targetPath, targetDir);
     SalPathAddBackslash(targetPath, 2 * MAX_PATH);
     BOOL targetIsFAT32 /*, targetSupEFS*/;
@@ -622,7 +622,7 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
     CTargetPathState targetPathState = GetTargetPathState(tpsUnknown, targetPath);
     char* targetName = targetPath + strlen(targetPath);
     BOOL makeCopyOfName = data->MakeCopyOfName;
-    TIndirectArray<char>* usedNames = NULL; // seznam vsech nove vytvorenych jmen (pouziva makeCopyOfName==TRUE)
+    TIndirectArray<char>* usedNames = NULL; // list of all newly created names (used when makeCopyOfName==TRUE)
     if (makeCopyOfName)
         usedNames = new TIndirectArray<char>(100, 50);
 
@@ -630,7 +630,7 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
     if (MyGetDiskFreeSpace(targetPath, &d1, &d2, &d3, &d4))
     {
         script->BytesPerCluster = d1 * d2;
-        // W2K a novejsi: nasobek d1 * d2 * d3 nefungoval na DFS stromech, reportil Ludek.Vydra@k2atmitec.cz
+        // W2K and later: the product d1 * d2 * d3 did not work on DFS trees, reported by Ludek.Vydra@k2atmitec.cz
         script->FreeSpace = MyGetDiskFreeSpace(targetPath);
     }
 
@@ -659,15 +659,15 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
                     srcAndTgtPathsFlags |= GetPathFlagsForCopyOp(lastSourcePath, OPFL_SRCPATH_IS_NET, OPFL_SRCPATH_IS_FAST);
                     lastSourcePath[s - fileName] = 0;
                 }
-                if (IsTheSamePath(sourcePath, targetPath) && // "Copy of..." se dela jen pri shode cest
-                    makeCopyOfName)                          // testneme, jestli nebude treba udelat "Copy of..." jmeno
+                if (IsTheSamePath(sourcePath, targetPath) && // "Copy of..." is done only for identical paths
+                    makeCopyOfName)                          // test whether we will need a "Copy of..." name
                 {
-                    strcpy(targetName, s + 1); // do targetPath dame navrhovane cilove plne jmeno
+                    strcpy(targetName, s + 1); // copy the proposed full target name into targetPath
                     BOOL isKnown;
-                    // mapName tu musi byt NULL, jinak by data->MakeCopyOfName nemohlo byt TRUE
+                    // mapName must be NULL here, otherwise data->MakeCopyOfName could not be TRUE
                     if ((isKnown = ContainsString(usedNames, targetName)) != 0 ||
                         SalGetFileAttributes(targetPath) != 0xFFFFFFFF)
-                    { // jmeno jiz existuje, musime vygenerovat nove
+                    { // name already exists, we must generate a new one
                         if (!isKnown)
                             AddStringToNames(usedNames, targetName);
                         char copyTxt[100];
@@ -685,9 +685,9 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
                         if (WindowsVistaAndLater)
                         {
                             int len = (int)strlen(targetName);
-                            char* ext = (attrs & FILE_ATTRIBUTE_DIRECTORY) ? NULL : strrchr(s + 1, '.'); // adresare nemaji pripony (okopirovane chovani Visty)
+                            char* ext = (attrs & FILE_ATTRIBUTE_DIRECTORY) ? NULL : strrchr(s + 1, '.'); // directories have no extensions (copied Vista behavior)
                             if (ext != NULL && strchr(ext, ' ') != NULL)
-                                ext = NULL; // pripona s mezerou neni pripona (okopirovane chovani Visty)
+                                ext = NULL; // extension with a space isn't an extension (copied Vista behavior)
                             char* numBeg = s + 1;
                             char* numEnd = NULL;
                             while (1)
@@ -704,17 +704,17 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
                                     else
                                     {
                                         numEnd++;
-                                        break; // "(cislo)" nalezeno
+                                        break; // "(number)" found
                                     }
                                 }
                                 else
                                 {
                                     numBeg = NULL;
-                                    break; // "(cislo)" tam neni
+                                    break; // "(number)" not present
                                 }
                             }
 
-                        _VISTA_NEXT_1: // "name - Copy.ext" a "name - Copy (++val).ext"
+                        _VISTA_NEXT_1: // "name - Copy.ext" and "name - Copy (++val).ext"
 
                             if (++val > 1 && numBeg != NULL)
                             {
@@ -723,42 +723,42 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
                                 {
                                     if (numBeg < ext)
                                     {
-                                        lstrcpyn(targetName + (numBeg - (s + 1)), number, (int)(1 + MAX_PATH - (numBeg - (s + 1))));                                 // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
-                                        lstrcpyn(targetName + strlen(targetName), numEnd, (int)min((DWORD)((ext - numEnd) + 1), 1 + MAX_PATH - strlen(targetName))); // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
-                                        lstrcpyn(targetName + strlen(targetName), hyphenCopy, (int)(1 + MAX_PATH - strlen(targetName)));                             // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
-                                        lstrcpyn(targetName + strlen(targetName), ext, (int)(1 + MAX_PATH - strlen(targetName)));                                    // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
+                                        lstrcpyn(targetName + (numBeg - (s + 1)), number, (int)(1 + MAX_PATH - (numBeg - (s + 1))));                                 // "1 +" ensures that overly long names result in exactly MAX_PATH
+                                        lstrcpyn(targetName + strlen(targetName), numEnd, (int)min((DWORD)((ext - numEnd) + 1), 1 + MAX_PATH - strlen(targetName))); // "1 +" ensures that overly long names result in exactly MAX_PATH
+                                        lstrcpyn(targetName + strlen(targetName), hyphenCopy, (int)(1 + MAX_PATH - strlen(targetName)));                             // "1 +" ensures that overly long names result in exactly MAX_PATH
+                                        lstrcpyn(targetName + strlen(targetName), ext, (int)(1 + MAX_PATH - strlen(targetName)));                                    // "1 +" ensures that overly long names result in exactly MAX_PATH
                                     }
                                     else
                                     {
-                                        lstrcpyn(targetName + (ext - (s + 1)), hyphenCopy, (int)(1 + MAX_PATH - (ext - (s + 1))));                                // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
-                                        lstrcpyn(targetName + strlen(targetName), ext, (int)min((DWORD)((numBeg - ext) + 1), 1 + MAX_PATH - strlen(targetName))); // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
-                                        lstrcpyn(targetName + strlen(targetName), number, (int)(1 + MAX_PATH - strlen(targetName)));                              // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
-                                        lstrcpyn(targetName + strlen(targetName), numEnd, (int)(1 + MAX_PATH - strlen(targetName)));                              // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
+                                        lstrcpyn(targetName + (ext - (s + 1)), hyphenCopy, (int)(1 + MAX_PATH - (ext - (s + 1))));                                // "1 +" ensures that overly long names result in exactly MAX_PATH
+                                        lstrcpyn(targetName + strlen(targetName), ext, (int)min((DWORD)((numBeg - ext) + 1), 1 + MAX_PATH - strlen(targetName))); // "1 +" ensures that overly long names result in exactly MAX_PATH
+                                        lstrcpyn(targetName + strlen(targetName), number, (int)(1 + MAX_PATH - strlen(targetName)));                              // "1 +" ensures that overly long names result in exactly MAX_PATH
+                                        lstrcpyn(targetName + strlen(targetName), numEnd, (int)(1 + MAX_PATH - strlen(targetName)));                              // "1 +" ensures that overly long names result in exactly MAX_PATH
                                     }
                                 }
                                 else
                                 {
-                                    lstrcpyn(targetName + (numBeg - (s + 1)), number, (int)(1 + MAX_PATH - (numBeg - (s + 1))));     // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
-                                    lstrcpyn(targetName + strlen(targetName), numEnd, (int)(1 + MAX_PATH - strlen(targetName)));     // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
-                                    lstrcpyn(targetName + strlen(targetName), hyphenCopy, (int)(1 + MAX_PATH - strlen(targetName))); // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
+                                    lstrcpyn(targetName + (numBeg - (s + 1)), number, (int)(1 + MAX_PATH - (numBeg - (s + 1))));     // "1 +" ensures that overly long names result in exactly MAX_PATH
+                                    lstrcpyn(targetName + strlen(targetName), numEnd, (int)(1 + MAX_PATH - strlen(targetName)));     // "1 +" ensures that overly long names result in exactly MAX_PATH
+                                    lstrcpyn(targetName + strlen(targetName), hyphenCopy, (int)(1 + MAX_PATH - strlen(targetName))); // "1 +" ensures that overly long names result in exactly MAX_PATH
                                 }
                             }
                             else
                             {
                                 if (ext == NULL)
-                                    lstrcpyn(targetName + len, hyphenCopy, 1 + MAX_PATH - len); // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
+                                    lstrcpyn(targetName + len, hyphenCopy, 1 + MAX_PATH - len); // "1 +" ensures that overly long names result in exactly MAX_PATH
                                 else
-                                    lstrcpyn(targetName + (ext - (s + 1)), hyphenCopy, (int)(1 + MAX_PATH - (ext - (s + 1)))); // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
+                                    lstrcpyn(targetName + (ext - (s + 1)), hyphenCopy, (int)(1 + MAX_PATH - (ext - (s + 1)))); // "1 +" ensures that overly long names result in exactly MAX_PATH
                                 if (val > 1)
                                 {
                                     sprintf(number, " (%d)", val);
-                                    lstrcpyn(targetName + strlen(targetName), number, (int)(1 + MAX_PATH - strlen(targetName))); // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
+                                    lstrcpyn(targetName + strlen(targetName), number, (int)(1 + MAX_PATH - strlen(targetName))); // "1 +" ensures that overly long names result in exactly MAX_PATH
                                 }
                                 if (ext != NULL)
-                                    lstrcpyn(targetName + strlen(targetName), ext, (int)(1 + MAX_PATH - strlen(targetName))); // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
+                                    lstrcpyn(targetName + strlen(targetName), ext, (int)(1 + MAX_PATH - strlen(targetName))); // "1 +" ensures that overly long names result in exactly MAX_PATH
                             }
 
-                            if (strlen(targetName) < MAX_PATH) // slozeni jmena probehlo o.k., jinak na to kasleme
+                            if (strlen(targetName) < MAX_PATH) // name assembly succeeded, otherwise we ignore the result
                             {
                                 if ((isKnown = ContainsString(usedNames, targetName)) != 0 ||
                                     SalGetFileAttributes(targetPath) != 0xFFFFFFFF)
@@ -785,13 +785,13 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
                                 {
                                     val = 1;
 
-                                _NEXT_1: // typ "copy (++val)*"
+                                _NEXT_1: // pattern "copy (++val)*"
 
                                     lstrcpyn(targetName, copyOpenPar, MAX_PATH);
                                     sprintf(number, "%d)", ++val);
                                     lstrcpyn(targetName + strlen(targetName), number, (int)(MAX_PATH - strlen(targetName)));
-                                    lstrcpyn(targetName + strlen(targetName), num + 1, (int)(1 + MAX_PATH - strlen(targetName))); // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
-                                    if (strlen(targetName) < MAX_PATH)                                                            // slozeni jmena probehlo o.k., jinak na to kasleme
+                                    lstrcpyn(targetName + strlen(targetName), num + 1, (int)(1 + MAX_PATH - strlen(targetName))); // "1 +" ensures that overly long names result in exactly MAX_PATH
+                                    if (strlen(targetName) < MAX_PATH)                                                            // name assembly succeeded, otherwise we ignore the result
                                     {
                                         if ((isKnown = ContainsString(usedNames, targetName)) != 0 ||
                                             SalGetFileAttributes(targetPath) != 0xFFFFFFFF)
@@ -834,19 +834,19 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
                                     if (ext == NULL)
                                     {
                                         if (num2 == NULL)
-                                            lstrcpyn(targetName + len, number, 1 + MAX_PATH - len); // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
+                                            lstrcpyn(targetName + len, number, 1 + MAX_PATH - len); // "1 +" ensures that overly long names result in exactly MAX_PATH
                                         else
-                                            lstrcpyn(targetName + (num2 - (s + 1)), number, (int)(1 + MAX_PATH - (num2 - (s + 1)))); // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
+                                            lstrcpyn(targetName + (num2 - (s + 1)), number, (int)(1 + MAX_PATH - (num2 - (s + 1)))); // "1 +" ensures that overly long names result in exactly MAX_PATH
                                     }
                                     else
                                     {
                                         if (num2 == NULL)
-                                            lstrcpyn(targetName + (ext - (s + 1)), number, (int)(1 + MAX_PATH - (ext - (s + 1)))); // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
+                                            lstrcpyn(targetName + (ext - (s + 1)), number, (int)(1 + MAX_PATH - (ext - (s + 1)))); // "1 +" ensures that overly long names result in exactly MAX_PATH
                                         else
-                                            lstrcpyn(targetName + (num2 - (s + 1)), number, (int)(1 + MAX_PATH - (num2 - (s + 1)))); // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
-                                        lstrcpyn(targetName + strlen(targetName), ext, 1 + MAX_PATH - (int)strlen(targetName));      // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
+                                            lstrcpyn(targetName + (num2 - (s + 1)), number, (int)(1 + MAX_PATH - (num2 - (s + 1)))); // "1 +" ensures that overly long names result in exactly MAX_PATH
+                                        lstrcpyn(targetName + strlen(targetName), ext, 1 + MAX_PATH - (int)strlen(targetName));      // "1 +" ensures that overly long names result in exactly MAX_PATH
                                     }
-                                    if (strlen(targetName) < MAX_PATH) // slozeni jmena probehlo o.k., jinak na to kasleme
+                                    if (strlen(targetName) < MAX_PATH) // name assembly succeeded, otherwise we ignore the result
                                     {
                                         if ((isKnown = ContainsString(usedNames, targetName)) != 0 ||
                                             SalGetFileAttributes(targetPath) != 0xFFFFFFFF)
@@ -865,7 +865,7 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
                             }
                             else
                             {
-                            _NEXT_3: // typ "copy of *", pak "copy (++val) of *"
+                            _NEXT_3: // pattern "copy of *", then "copy (++val) of *"
 
                                 lstrcpyn(targetName, copyTxt, MAX_PATH);
                                 lstrcpyn(targetName + strlen(targetName), " ", MAX_PATH - (int)strlen(targetName));
@@ -879,8 +879,8 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
                                     lstrcpyn(targetName + strlen(targetName), ofTxt, MAX_PATH - (int)strlen(targetName));
                                     lstrcpyn(targetName + strlen(targetName), " ", MAX_PATH - (int)strlen(targetName));
                                 }
-                                lstrcpyn(targetName + strlen(targetName), s + 1, 1 + MAX_PATH - (int)strlen(targetName)); // "1 +" aby pri prilis dlouhem jmene byl vysledek == MAX_PATH
-                                if (strlen(targetName) < MAX_PATH)                                                        // slozeni jmena probehlo o.k., jinak na to kasleme
+                                lstrcpyn(targetName + strlen(targetName), s + 1, 1 + MAX_PATH - (int)strlen(targetName)); // "1 +" ensures that overly long names result in exactly MAX_PATH
+                                if (strlen(targetName) < MAX_PATH)                                                        // name assembly succeeded, otherwise we ignore the result
                                 {
                                     if ((isKnown = ContainsString(usedNames, targetName)) != 0 ||
                                         SalGetFileAttributes(targetPath) != 0xFFFFFFFF)
@@ -898,9 +898,9 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
                             }
                         }
                     }
-                    *targetName = 0; // rekonstrukce targetPath
+                    *targetName = 0; // restore targetPath
 
-                    // ulozime si vsechna jmena nove vytvorenych souboru
+                    // store all names of newly created files
                     if (usedNames != NULL)
                     {
                         AddStringToNames(usedNames, mapName == NULL ? s + 1 : mapName);
@@ -948,7 +948,7 @@ BOOL CFilesWindow::BuildScriptMain2(COperations* script, BOOL copy, char* target
                         else
                         {
                             if (err == NO_ERROR)
-                                err = ERROR_ACCESS_DENIED; // nejakou chybu ohlasit musime
+                                err = ERROR_ACCESS_DENIED; // we must report some error
                         }
                     }
                     else
@@ -1005,8 +1005,8 @@ void CFilesWindow::DropCopyMove(BOOL copy, char* targetPath, CCopyMoveData* data
     if (!FilesActionInProgress)
     {
         FilesActionInProgress = TRUE;
-        SetForegroundWindow(MainWindow->HWindow); // musi se aktivovat ihned po dropu
-        BeginStopRefresh();                       // jinak prijde WM_ACTIVATEAPP, ktery ale neaktivuje...
+        SetForegroundWindow(MainWindow->HWindow); // must activate immediately after the drop
+        BeginStopRefresh();                       // otherwise WM_ACTIVATEAPP arrives but won't activate...
         COperations* script = new COperations(100, 50, NULL, NULL, NULL);
         if (script == NULL)
             TRACE_E(LOW_MEMORY);
@@ -1026,7 +1026,7 @@ void CFilesWindow::DropCopyMove(BOOL copy, char* targetPath, CCopyMoveData* data
             script->IsCopyOperation = copy;
             script->IsCopyOrMoveOperation = TRUE;
 
-            char caption[50]; // jinak dochazi k prepisu LoadStr bufferu jeste pred nakopirovanim do lokalniho bufferu dialogu
+            char caption[50]; // otherwise the LoadStr buffer gets overwritten before being copied to the dialog's local buffer
             if (copy)
                 lstrcpyn(caption, LoadStr(IDS_COPY), 50);
             else
@@ -1040,13 +1040,13 @@ void CFilesWindow::DropCopyMove(BOOL copy, char* targetPath, CCopyMoveData* data
 
             BOOL res = BuildScriptMain2(script, copy, targetPath, data);
 
-            // prohozeno kvuli umozneni aktivace hlavniho okna (nesmi byt disable), jinak prepina do jine app
+            // swapped so the main window can be activated (must not be disabled), otherwise it switches to another app
             EnableWindow(MainWindow->HWindow, TRUE);
             DestroySafeWaitWindow();
 
-            // pokud je aktivni Salamander, zavolame SetFocus na zapamatovane okno (SetFocus nefunguje
-            // pokud je hl. okno disablovane - po deaktivaci/aktivaci disablovaneho hl. okna aktivni panel
-            // nema fokus)
+            // if Salamander is active, call SetFocus on the remembered window (SetFocus doesn't work
+            // when the main window is disabled - after reactivation/activation of the disabled main window
+            // the active panel lacks focus)
             HWND hwnd = GetForegroundWindow();
             while (hwnd != NULL && hwnd != MainWindow->HWindow)
                 hwnd = GetParent(hwnd);
@@ -1059,11 +1059,11 @@ void CFilesWindow::DropCopyMove(BOOL copy, char* targetPath, CCopyMoveData* data
             if (res)
             {
                 BOOL occupiedSpTooBig = script->OccupiedSpace != CQuadWord(0, 0) &&
-                                        script->BytesPerCluster != 0 && // mame informace o disku
+                                        script->BytesPerCluster != 0 && // we have disk information
                                         script->OccupiedSpace > script->FreeSpace &&
-                                        !IsSambaDrivePath(targetPath); // Samba vraci nesmyslny cluster-size, takze muzeme pocitat jedine s TotalFileSize
+                                        !IsSambaDrivePath(targetPath); // Samba returns a bogus cluster size, so we can rely only on TotalFileSize
                 if (occupiedSpTooBig ||
-                    script->BytesPerCluster != 0 && // mame informace o disku
+                    script->BytesPerCluster != 0 && // we have disk information
                         script->TotalFileSize > script->FreeSpace)
                 {
                     char buf1[50];
@@ -1077,10 +1077,10 @@ void CFilesWindow::DropCopyMove(BOOL copy, char* targetPath, CCopyMoveData* data
                 }
             }
 
-            // pripravime refresh neautomaticky refreshovanych adresaru
-            // zmena v cilovem adresari a v jeho podadresarich
+            // prepare a refresh for non-auto-refreshed directories
+            // change in the target directory and its subdirectories
             script->SetWorkPath1(targetPath, TRUE);
-            if (!copy) // move operace meni i zdroj operace
+            if (!copy) // a move operation modifies the source as well
             {
                 if (data->Count > 0)
                 {
@@ -1089,9 +1089,9 @@ void CFilesWindow::DropCopyMove(BOOL copy, char* targetPath, CCopyMoveData* data
                     {
                         char path[MAX_PATH];
                         lstrcpyn(path, name, MAX_PATH);
-                        if (CutDirectory(path)) // predpokladame jeden zdrojovy adresar (jen operace z panelu, ne Findu)
+                        if (CutDirectory(path)) // assume a single source directory (panel operations only, not Find)
                         {
-                            // zmena ve zdrojovem adresari a v podadresarich
+                            // change in the source directory and its subdirectories
                             script->SetWorkPath2(path, TRUE);
                         }
                     }
@@ -1110,7 +1110,7 @@ void CFilesWindow::DropCopyMove(BOOL copy, char* targetPath, CCopyMoveData* data
                 UpdateWindow(MainWindow->HWindow);
             }
         }
-        //---  pokud se aktivovalo nejaky okno salamandra, konci suspend mode
+        //---  if any Salamander window activated, end suspend mode
         EndStopRefresh();
         FilesActionInProgress = FALSE;
     }
@@ -1124,8 +1124,8 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
 {
     CALL_STACK_MESSAGE5("CFilesWindow::BuildScriptMain(, %d, %s, %s, %d, , , , , ,)",
                         type, targetPath, mask, selCount);
-    // count == 0, selection == NULL => oneFile ukazuje na aktualni soubor
-    // jinak selection obsahuje indexy oznacenych count polozek ve fileboxu
+    // count == 0, selection == NULL => oneFile points to the current file
+    // otherwise selection contains indices of selected items in the filebox
     if (!script->IsGood())
         return FALSE;
     script->TotalSize = CQuadWord(0, 0);
@@ -1151,16 +1151,16 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
     char root[MAX_PATH];
     char fsName[MAX_PATH];
 
-    //---  inicializace testu na preruseni buildu
+    //---  initialize the build interruption test
     LastTickCount = GetTickCount();
 
-    //---  pokud kopirujem/presouvame z CD, budem cistit read-only attribut
-    //     zaroven nastavime CurrentDirectory na pomalejsi medium
+    //---  when copying/moving from CD, clear the read-only attribute
+    //     and set CurrentDirectory to the slower medium
     BOOL fastDirectoryMove = TRUE; // Configuration.FastDirectoryMove;
     if (type == atCopy || type == atMove)
     {
         UINT sourceType = DRIVE_REMOTE;
-        if (GetPath()[0] != '\\') // neni UNC cesta (ta je vzdy "remote")
+        if (GetPath()[0] != '\\') // not a UNC path (those are always "remote")
         {
             sourceType = MyGetDriveType(GetPath());
         }
@@ -1175,10 +1175,10 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
         if (sourceType == DRIVE_REMOVABLE)
             script->RemovableSrcDisk = TRUE;
 
-        if (fastDirectoryMove &&                            // fast-dir-move neni globalne vypnute
-            sourceType == DRIVE_REMOTE && type == atMove && // sitovy disk + move operace
-            HasTheSameRootPath(GetPath(), targetPath))      // + v ramci jednoho drivu
-        {                                                   // provedeme detekci NOVELLskych disku - nefunguje na nich fast-directory-move
+        if (fastDirectoryMove &&                            // fast-dir-move isn't globally disabled
+            sourceType == DRIVE_REMOTE && type == atMove && // network disk + move operation
+            HasTheSameRootPath(GetPath(), targetPath))      // + within the same drive
+        {                                                   // detect Novell disks - fast-directory-move doesn't work on them
             if (IsNOVELLDrive(GetPath()))
                 fastDirectoryMove = Configuration.NetwareFastDirMove;
         }
@@ -1204,7 +1204,7 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
             }
         }
 
-        // zjistime jestli je cilem vymenne medium (floppy, ZIP) -> pro urychleni se pouziva vetsi buffer
+        // check if the target is removable media (floppy, ZIP); a larger buffer is used for speed
         if (LowerCase[*targetPath] >= 'a' && LowerCase[*targetPath] <= 'z' &&
             *(targetPath + 1) == ':')
         {
@@ -1219,29 +1219,29 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
     else
         script->ClearReadonlyMask = 0xFFFFFFFF;
 
-    // maska se nesmi upravovat pres PrepareMask !!! viz MaskName()
-    char nameMask[2 * MAX_PATH]; // + MAX_PATH je rezerva (Windows delaji cesty delsi nez MAX_PATH)
+    // the mask must not be modified via PrepareMask!!! see MaskName()
+    char nameMask[2 * MAX_PATH]; // + MAX_PATH reserve (Windows create paths longer than MAX_PATH)
     if (mask != NULL)
     {
         lstrcpyn(nameMask, mask, 2 * MAX_PATH);
         mask = nameMask;
     }
 
-    // pristup k souborum je mnohem rychlejsi na aktualnim adresari/disku
+    // file access is much faster in the current directory/disk
     if (type != atMove && type != atCopy)
         SetCurrentDirectory(GetPath());
 
-    GetAsyncKeyState(VK_ESCAPE); // init GetAsyncKeyState - viz help
+    GetAsyncKeyState(VK_ESCAPE); // initialize GetAsyncKeyState - see help
 
-    char sourcePath[2 * MAX_PATH + 10]; // +rezerva pro masku ("\\*"), + MAX_PATH je rezerva (Windows delaji cesty delsi nez MAX_PATH)
+    char sourcePath[2 * MAX_PATH + 10]; // +extra space for mask ("\\*"), + MAX_PATH reserve (Windows create paths longer than MAX_PATH)
     strcpy(sourcePath, GetPath());
 
     BOOL sourceSupADS = FALSE;
     BOOL targetSupADS = FALSE;
     BOOL targetIsFAT32 = FALSE;
     CTargetPathState targetPathState = tpsUnknown;
-    DWORD srcAndTgtPathsFlags = 0;        // flagy jen pro Copy a Move
-    if (type == atMove || type == atCopy) // mimo Copy a Move to nema smysl zjistovat
+    DWORD srcAndTgtPathsFlags = 0;        // flags only for Copy and Move
+    if (type == atMove || type == atCopy) // outside Copy and Move it makes no sense to check
     {
         sourceSupADS = (filterCriteria == NULL || !filterCriteria->IgnoreADS) &&
                        IsPathOnVolumeSupADS(sourcePath, NULL);
@@ -1268,11 +1268,11 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
                 char dummy2[MAX_PATH];
                 if (MyGetVolumeInformation(targetPath, NULL, NULL, NULL, NULL, 0, NULL, &dummy1, &flags, dummy2, MAX_PATH) &&
                     (flags & FS_PERSISTENT_ACLS) == 0)
-                { // prava by kopirovat chtel, ale na cilove ceste nejsou podporovana, takze dame vedet, ze ma smulu (API funkce pro set-security zadne chyby nehlasi, proste idioti)
+                { // wants to copy permissions, but the target path doesn't support them, so let the user know (SetSecurity APIs report no errors)
                     int res = SalMessageBox(HWindow, LoadStr(IDS_ACLNOTSUPPORTEDONTGTPATH), LoadStr(IDS_QUESTION),
                                             MB_YESNO | MB_ICONQUESTION | MSGBOXEX_ESCAPEENABLED);
                     UpdateWindow(MainWindow->HWindow);
-                    if (res == IDNO || res == IDCANCEL) // pokud dal CANCEL nebo NO, koncime
+                    if (res == IDNO || res == IDCANCEL) // user chose CANCEL or NO -> abort
                         return FALSE;
                 }
             }
@@ -1292,8 +1292,8 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
         if (s > sourcePath && *(s - 1) != '\\')
             *s++ = '\\';
         strcpy(s, oneFile->Name);
-        // zkusime jestli je jmeno souboru platne, pripadne zkusime jeste jeho DOS-jmeno
-        // (resi soubory dosazitelne jen pres Unicode nebo DOS-jmena)
+        // try whether the file name is valid; if not, try its DOS name
+        // (handles files accessible only via Unicode or DOS names)
         if (SalGetFileAttributes(sourcePath) == 0xffffffff)
         {
             DWORD err = GetLastError();
@@ -1307,18 +1307,18 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
                 }
             }
         }
-        *end = 0; // rekonstrukce sourcePath
+        *end = 0; // restore sourcePath
     }
 
     if (selCount > 0 || oneFile != NULL)
     {
-        if (type == atMove || type == atCopy) // mimo Copy a Move to nema smysl zjistovat
+        if (type == atMove || type == atCopy) // outside Copy and Move it makes no sense to check
         {
             DWORD d1, d2, d3, d4;
             if (MyGetDiskFreeSpace(targetPath, &d1, &d2, &d3, &d4))
             {
                 script->BytesPerCluster = d1 * d2;
-                // W2K a novejsi: nasobek d1 * d2 * d3 nefungoval na DFS stromech, reportil Ludek.Vydra@k2atmitec.cz
+                // W2K and later: the product d1 * d2 * d3 did not work on DFS trees, reported by Ludek.Vydra@k2atmitec.cz
                 script->FreeSpace = MyGetDiskFreeSpace(targetPath);
             }
         }
@@ -1333,7 +1333,7 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
                 useDOSName = oneFile->DosName;
             }
             i++;
-            // oneFile ukazuje na oznacenou nebo caret polozku ve fileboxu
+            // oneFile points to the selected or caret item in the filebox
             if (oneFile->Attr & FILE_ATTRIBUTE_DIRECTORY) // jde o ptDisk
             {
                 if (subDirectories)
@@ -1358,12 +1358,12 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
                         oneFile->Size = script->TotalSize - oldTotalSize;
                     }
                 }
-                else // change-case: oznacene adresare bez recurse-sub-dirs
-                {    // convert: nerekurzivni + tyka se jen souboru -> s adresari neni co delat
+                else // change-case: selected directories without recurse-sub-dirs
+                {    // convert: non-recursive + affects only files -> nothing to do with directories
                     if (type == atChangeCase)
                     {
                         COperation op;
-                        op.OpFlags = 0; // zmena case = prejmenovani = invalidni jmena budeme hlasit (nejde jen o toleranci existujiciho)
+                        op.OpFlags = 0; // case change = rename = report invalid names (not just tolerance of existing ones)
                         op.Opcode = ocMoveDir;
                         op.Size = MOVE_DIR_SIZE;
                         op.Attr = oneFile->Attr;
@@ -1379,7 +1379,7 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
                         }
                         else
                         {
-                            if ((op.TargetName = BuildName(sourcePath, oneFile->Name)) == NULL) // problem prilis dlouheho jmena resi uz predchozi podminka
+                            if ((op.TargetName = BuildName(sourcePath, oneFile->Name)) == NULL) // too long name handled by previous condition
                             {
                                 free(op.SourceName);
                                 SetCurrentDirectoryToSystem();
@@ -1431,7 +1431,7 @@ BOOL CFilesWindow::BuildScriptMain(COperations* script, CActionType type,
     return TRUE;
 }
 
-char ADSStreamsGlobalBuf[5000]; // do tohoto bufferu se vlozi jmena ADS (oddelene carkou), globalni je aby pri rekurzi nedosel stack
+char ADSStreamsGlobalBuf[5000]; // ADS names separated by commas are stored here; global so recursion does not exhaust the stack
 
 void GetADSStreamsNames(char* listBuf, int bufSize, char* fileName, BOOL isDir)
 {
@@ -1491,8 +1491,8 @@ void GetADSStreamsNames(char* listBuf, int bufSize, char* fileName, BOOL isDir)
         free(streamNames);
     }
 
-    if (bufSize > 0 && (StrICmp(listBuf, "Zone.Identifier") == 0 || // tento stream vytvari XP od s.p. 2 automaticky a je predurcen k ignorovani, tak jim nebudeme zatezovat usera
-                        StrICmp(listBuf, "encryptable") == 0))      // tento stream se vyskytuje asi jen na thumbs.db, nikdo nevi co je zac, ale vytvareji ho okna, takze ho tez ignorujeme
+    if (bufSize > 0 && (StrICmp(listBuf, "Zone.Identifier") == 0 || // this stream is automatically created by XP SP2 and should be ignored, so we won't bother the user with it
+                        StrICmp(listBuf, "encryptable") == 0))      // this stream appears mostly on thumbs.db, nobody knows what it is, but Windows create it, so we ignore it too
     {
         listBuf[0] = 0;
     }
@@ -1514,12 +1514,12 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
                               mask, dirName, mapName, sourceDirAttr, firstLevelDir, onlySize,
                               fastDirectoryMove, srcAndTgtPathsFlags);
     char text[2 * MAX_PATH + 100];
-    char finalName[2 * MAX_PATH + 200];                                      // + 200 je rezerva (Windows delaji cesty delsi nez MAX_PATH)
-    BOOL sourcePathIsNet = (srcAndTgtPathsFlags & OPFL_SRCPATH_IS_NET) != 0; // platny jen pro atCopy a atMove
+    char finalName[2 * MAX_PATH + 200];                                      // +200 reserve (Windows create paths longer than MAX_PATH)
+    BOOL sourcePathIsNet = (srcAndTgtPathsFlags & OPFL_SRCPATH_IS_NET) != 0; // valid only for atCopy and atMove
 
     script->DirsCount++;
     COperation op;
-    //---  je-li potreba vytvorit adresar targetPath + dirName (Copy a Move)
+    //---  if needed create the directory targetPath + dirName (Copy or Move)
     char* sourceEnd = sourcePath + strlen(sourcePath);
     char *st, *s = dirName;
     if (*(sourceEnd - 1) != '\\')
@@ -1529,9 +1529,9 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
     }
     else
         st = sourceEnd;
-    if (st - sourcePath + strlen(dirName) >= MAX_PATH - 2) // -2 zjisteno experimentalne (delsi cesta nejde listovat)
-    {                                                      // data jsou na disku, coz neznamena, ze nemuzou byt delsi nez MAX_PATH
-        *sourceEnd = 0;                                    // zrestaurovani sourcePath
+    if (st - sourcePath + strlen(dirName) >= MAX_PATH - 2) // -2 determined experimentally (longer paths cannot be listed)
+    {                                                      // data are on disk, which doesn't mean they can't exceed MAX_PATH
+        *sourceEnd = 0;                                    // restoring sourcePath
         _snprintf_s(text, _TRUNCATE, LoadStr(IDS_NAMEISTOOLONG), dirName, sourcePath);
         BOOL skip = TRUE;
         if (!ErrTooLongSrcDirNameSkipAll)
@@ -1543,8 +1543,8 @@ BOOL CFilesWindow::BuildScriptDir(COperations* script, CActionType type, char* s
             params.Caption = LoadStr(IDS_ERRORBUILDINGSCRIPT);
             params.Text = text;
             char aliasBtnNames[200];
-            /* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-  nechame pro tlacitka msgboxu resit kolize hotkeys tim, ze simulujeme, ze jde o menu
+            /* used by export_mnu.py script that generates salmenu.mnu for the Translator
+               we let the msgbox buttons resolve hotkey collisions by simulating a menu
 MENU_TEMPLATE_ITEM MsgBoxButtons[] = 
 {
 {MNTT_PB, 0
@@ -1572,7 +1572,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
     while (*s != 0)
         *st++ = *s++;
     *st = 0;
-    //---  konstrukce cesty k targetDirName
+    //---  build the path to targetDirName
     char* targetEnd = NULL;
     BOOL checkNewDirName = FALSE;
     if (targetPath != NULL)
@@ -1587,9 +1587,9 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
         char* s2;
         if (mapName == NULL)
         {
-            // Petr: trochu prasarna: maska *.* neprodukuje kopii zdrojoveho jmena, coz je problem pri kopirovani
-            // adresaru s invalidnim jmenem, napr. "c   ..." + "*.*" = "c   ", takze si trochu pomuzeme a nechame
-            // masku zmenit na NULL = primitivni textova kopie jmena
+            // Petr: a bit of a hack: the *.* mask doesn't produce a copy of the source name, which is a problem when copying
+            // directories with invalid names, e.g. "c   ..." + "*.*" = "c   ", so we'll help ourselves a bit and
+            // change the mask to NULL = a simple textual copy of the name
             char* opMask = mask != NULL && strcmp(mask, "*.*") == 0 ? NULL : mask;
             s2 = MaskName(finalName, 2 * MAX_PATH + 200, dirName, opMask);
             if (opMask != NULL)
@@ -1599,8 +1599,8 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
             s2 = mapName;
         if (strlen(s2) + targetLen >= PATH_MAX_PATH)
         {
-            *sourceEnd = 0; // zrestaurovani sourcePath
-            *targetEnd = 0; // zrestaurovani targetPath
+            *sourceEnd = 0; // restoring sourcePath
+            *targetEnd = 0; // restoring targetPath
             _snprintf_s(text, _TRUNCATE, LoadStr(IDS_TOOLONGNAME2), targetPath, s2);
             BOOL skip = TRUE;
             if (!ErrTooLongTgtDirNameSkipAll)
@@ -1612,8 +1612,8 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                 params.Caption = LoadStr(IDS_ERRORBUILDINGSCRIPT);
                 params.Text = text;
                 char aliasBtnNames[200];
-                /* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-   nechame pro tlacitka msgboxu resit kolize hotkeys tim, ze simulujeme, ze jde o menu
+                /* used by export_mnu.py script that generates salmenu.mnu for the Translator
+                   we let the msgbox buttons resolve hotkey collisions by simulating a menu
 MENU_TEMPLATE_ITEM MsgBoxButtons[] = 
 {
   {MNTT_PB, 0
@@ -1643,18 +1643,18 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
     }
     //---
     if (type == atDelete && (sourceDirAttr & FILE_ATTRIBUTE_REPARSE_POINT))
-    { // mazani linku (volume-mount-pointy + junction-pointy + symlinky)
+    { // deleting links (volume mount points + junction points + symlinks)
         op.Opcode = ocDeleteDirLink;
         op.OpFlags = 0;
         op.Size = DELETE_DIRLINK_SIZE;
         op.Attr = sourceDirAttr;
         if ((op.SourceName = BuildName(sourcePath, NULL)) == NULL)
         {
-            *sourceEnd = 0; // zrestaurovani sourcePath
+            *sourceEnd = 0; // restoring sourcePath
             return FALSE;
         }
         op.TargetName = NULL;
-        *sourceEnd = 0; // zrestaurovani sourcePath
+        *sourceEnd = 0; // restoring sourcePath
         script->Add(op);
         if (!script->IsGood())
         {
@@ -1673,21 +1673,21 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
         int res = SalMessageBox(MainWindow->HWindow, text, LoadStr(IDS_QUESTION),
                                 MB_YESNOCANCEL | MB_ICONQUESTION);
         UpdateWindow(MainWindow->HWindow);
-        if (res == IDNO || res == IDCANCEL) // pokud dal CANCEL nebo NO, koncime nebo preskocime adresar
+        if (res == IDNO || res == IDCANCEL) // if CANCEL or NO was chosen, we end or skip the directory
         {
-            *sourceEnd = 0; // zrestaurovani sourcePath
+            *sourceEnd = 0; // restoring sourcePath
             if (targetEnd != NULL)
-                *targetEnd = 0; // zrestaurovani targetPath
+                *targetEnd = 0; // restoring targetPath
             return res == IDNO;
         }
     }
     //---
     if (type == atMove)
     {
-        if (strcmp(sourcePath, targetPath) == 0) // neni co delat, zarveme
+        if (strcmp(sourcePath, targetPath) == 0) // nothing to do, show a message
         {
-            *sourceEnd = 0; // zrestaurovani sourcePath
-            *targetEnd = 0; // zrestaurovani targetPath
+            *sourceEnd = 0; // restoring sourcePath
+            *targetEnd = 0; // restoring targetPath
             SalMessageBox(MainWindow->HWindow, LoadStr(IDS_CANNOTMOVEDIRTOITSELF),
                           LoadStr(IDS_ERRORTITLE), MB_OK | MB_ICONEXCLAMATION);
             return FALSE;
@@ -1695,22 +1695,22 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
         BOOL sameDisk;
         sameDisk = FALSE;
         if (fastDirectoryMove &&
-            !script->CopySecurity && // pokud se maji kopirovat prava, neni mozne presunout kompletni adresar (na kazdem souboru je potreba nechat system refreshnout "inherited" prava)
-            (script->CopyAttrs ||    // pokud kopirujeme atributy, jde heuristika o nastavovani Encrypted atributu stranou
+            !script->CopySecurity && // if permissions are to be copied, the entire directory cannot be moved (each file must let the system refresh its inherited permissions)
+            (script->CopyAttrs ||    // when copying attributes, the heuristic for setting the Encrypted attribute is skipped
              targetPathState != tpsEncryptedExisting &&
-                 targetPathState != tpsEncryptedNotExisting) && // pokud se maji nastavovat Encrypted atributy, neni mozne presunout kompletni adresar (je treba zkontrolovat obsah adresare)
+                 targetPathState != tpsEncryptedNotExisting) && // if Encrypted attributes must be set, the entire directory cannot be moved (its contents must be checked)
             (filterCriteria == NULL || !filterCriteria->UseMasks &&
-                                           !filterCriteria->UseAdvanced && !filterCriteria->SkipEmptyDirs)) // pokud se maji filtrovat soubory nebo adresare, neni mozne presunout kompletni adresar
+                                           !filterCriteria->UseAdvanced && !filterCriteria->SkipEmptyDirs)) // if files or directories are filtered, the entire directory cannot be moved
         {
             sameDisk = !script->SameRootButDiffVolume &&
-                       HasTheSameRootPath(sourcePath, targetPath); // stejny disk (UNC i normal)
+                       HasTheSameRootPath(sourcePath, targetPath); // same disk (UNC and standard)
         }
         else
             sameDisk = (StrICmp(sourcePath, targetPath) == 0); // jen rename
         if (sameDisk)
         {
             if (StrICmp(sourcePath, targetPath) == 0 ||
-                targetPathState == tpsEncryptedNotExisting || targetPathState == tpsNotEncryptedNotExisting) // cilovy adresar neexistuje
+                targetPathState == tpsEncryptedNotExisting || targetPathState == tpsNotEncryptedNotExisting) // target directory doesn't exist
             {
                 if (!script->FastMoveUsed)
                     script->FastMoveUsed = TRUE;
@@ -1722,8 +1722,8 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                 {
                 _ERROR:
 
-                    *sourceEnd = 0; // zrestaurovani sourcePath
-                    *targetEnd = 0; // zrestaurovani targetPath
+                    *sourceEnd = 0; // restoring sourcePath
+                    *targetEnd = 0; // restoring targetPath
                     return FALSE;
                 }
                 if ((op.TargetName = BuildName(targetPath, NULL)) == NULL)
@@ -1731,8 +1731,8 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                     free(op.SourceName);
                     goto _ERROR;
                 }
-                *sourceEnd = 0; // zrestaurovani sourcePath
-                *targetEnd = 0; // zrestaurovani targetPath
+                *sourceEnd = 0; // restoring sourcePath
+                *targetEnd = 0; // restoring targetPath
                 script->Add(op);
                 if (!script->IsGood())
                 {
@@ -1749,11 +1749,11 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
 
     int createDirIndex = -1;
     CQuadWord dirStartTotalFileSize = script->TotalFileSize;
-    if (type == atCopy || type == atMove) // vytvoreni ciloveho adresare
+    if (type == atCopy || type == atMove) // create the target directory
     {
         srcAndTgtPathsFlags &= ~(OPFL_SRCPATH_IS_NET | OPFL_SRCPATH_IS_FAST);
         srcAndTgtPathsFlags |= GetPathFlagsForCopyOp(sourcePath, OPFL_SRCPATH_IS_NET, OPFL_SRCPATH_IS_FAST);
-        if (targetPathState == tpsEncryptedExisting || targetPathState == tpsNotEncryptedExisting) // cilovy adresar existuje, zjistime jeho flagy (jinak si nechame flagy z nadrazeneho ciloveho adresare)
+        if (targetPathState == tpsEncryptedExisting || targetPathState == tpsNotEncryptedExisting) // target directory exists, get its flags (otherwise inherit flags from the parent target directory)
         {
             srcAndTgtPathsFlags &= ~(OPFL_TGTPATH_IS_NET | OPFL_TGTPATH_IS_FAST);
             srcAndTgtPathsFlags |= GetPathFlagsForCopyOp(targetPath, OPFL_TGTPATH_IS_NET, OPFL_TGTPATH_IS_FAST);
@@ -1762,8 +1762,8 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
         BOOL dirCreated = FALSE;
         if (sourcePathSupADS)
         {
-            if ((targetPathState == tpsEncryptedNotExisting || targetPathState == tpsNotEncryptedNotExisting) && // cilovy adresar neexistuje
-                (targetPathSupADS || !ConfirmADSLossAll))                                                        // pokud se nemaji ADS ignorovat
+            if ((targetPathState == tpsEncryptedNotExisting || targetPathState == tpsNotEncryptedNotExisting) && // target directory does not exist
+                (targetPathSupADS || !ConfirmADSLossAll))                                                        // if ADS should not be ignored
             {
                 if (script->BytesPerCluster == 0)
                     TRACE_E("How is it possible that script->BytesPerCluster is not yet set???");
@@ -1776,7 +1776,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
 
                 if (CheckFileOrDirADS(sourcePath, TRUE, &adsSize, NULL, NULL, NULL, &adsWinError,
                                       script->BytesPerCluster, &adsOccupiedSpace, NULL))
-                { // zdrojovy adresar ma ADS, musime je okopirovat do ciloveho adresare
+                { // the source directory has ADS, they must be copied to the target directory
                     if (targetPathSupADS)
                     {
                         script->OccupiedSpace += adsOccupiedSpace;
@@ -1784,14 +1784,14 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
 
                         op.Opcode = ocCreateDir;
                         op.OpFlags = OPFL_COPY_ADS | (checkNewDirName ? 0 : OPFL_IGNORE_INVALID_NAME);
-                        if (!script->CopyAttrs && // pokud kopirujeme atributy, jde heuristika o nastavovani Encrypted atributu stranou
+                        if (!script->CopyAttrs && // when copying attributes, the heuristic for setting the Encrypted attribute is skipped
                             ((sourceDirAttr & FILE_ATTRIBUTE_ENCRYPTED) || targetPathState == tpsEncryptedExisting ||
                              targetPathState == tpsEncryptedNotExisting))
                         {
                             op.OpFlags |= OPFL_AS_ENCRYPTED;
                         }
                         if (type == atMove && !script->ShowStatus)
-                            script->ShowStatus = TRUE; // pokud neni mozny move celeho adresare (duvody viz vyse) a je treba kopirovat ADS, je potreba zobrazit status
+                            script->ShowStatus = TRUE; // if moving the whole directory is impossible (reasons above) and ADS must be copied, we need to show the status
                         op.Size = CREATE_DIR_SIZE + adsSize;
                         op.Attr = sourceDirAttr;
                         if ((op.SourceName = BuildName(sourcePath, NULL)) == NULL)
@@ -1811,7 +1811,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                         }
                         dirCreated = TRUE;
                     }
-                    else // kopirovani na jiny FS nez NTFS (dotaz na oriznuti ADS)
+                    else // copying to a non-NTFS filesystem (prompt about discarding ADS)
                     {
                         int res;
                         if (ConfirmADSLossAll)
@@ -1834,39 +1834,38 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                         switch (res)
                         {
                         case IDB_ALL:
-                            ConfirmADSLossAll = TRUE; // tady break; nechybi
+                            ConfirmADSLossAll = TRUE; // intentional fallthrough
                         case IDYES:
-                            break; // budeme ignorovat ADS, cim se nezkopiruji/nepresunou (cimz se zcela ztrati)
+                            break; // we will ignore ADS, so they won't be copied/moved (they will be completely lost)
 
                         case IDB_SKIPALL:
-                            ConfirmADSLossSkipAll = TRUE; // tady break; nechybi
+                            ConfirmADSLossSkipAll = TRUE; // intentional fallthrough
                         case IDB_SKIP:
                         {
-                            *sourceEnd = 0; // zrestaurovani sourcePath
-                            *targetEnd = 0; // zrestaurovani targetPath
+                            *sourceEnd = 0; // restoring sourcePath
+                            *targetEnd = 0; // restoring targetPath
                             return TRUE;
                         }
 
                         case IDCANCEL:
                         {
-                            *sourceEnd = 0; // zrestaurovani sourcePath
-                            *targetEnd = 0; // zrestaurovani targetPath
+                            *sourceEnd = 0; // restoring sourcePath
+                            *targetEnd = 0; // restoring targetPath
                             return FALSE;
                         }
                         }
                     }
                 }
-                else // doslo k chybe nebo zadne ADS
+                else // an error occurred or no ADS
                 {
-                    if (adsWinError != NO_ERROR &&                                                                    // doslo k chybe
-                        (adsWinError != ERROR_INVALID_FUNCTION || StrNICmp(sourcePath, "\\\\tsclient\\", 11) != 0) && // cesty na lokalni disky v Terminal Serveru nepodporuji listovani ADS (jinak ADS podporuji, komedie)
+                    if (adsWinError != NO_ERROR &&                                                                    // an error occurred
+                        (adsWinError != ERROR_INVALID_FUNCTION || StrNICmp(sourcePath, "\\\\tsclient\\", 11) != 0) && // paths to local disks in Terminal Server do not support listing ADS (even though ADS is otherwise supported)
                         (adsWinError != ERROR_INVALID_PARAMETER && adsWinError != ERROR_NO_MORE_ITEMS ||
-                         !sourcePathIsNet)) // namounteny FAT/FAT32 disk nelze poznat na sitovem disku (napr. \\petr\f\drive_c) + NOVELL-NETWAREsky svazek prochazeny pres NDS - myslime si, ze je to NTFS a tudiz zkousime cist ADS, coz ohlasi tuto chybu
+                         !sourcePathIsNet)) // mounted FAT/FAT32 disk cannot be detected on a network drive (e.g. \petr\f\drive_c) plus a Novell NetWare volume browsed via NDS - we think it is NTFS and thus try to read ADS, which reports this error
                     {
-                        if ((sourceDirAttr & FILE_ATTRIBUTE_REPARSE_POINT) == 0) // nejde o link (u toho nemusi dojit ke kopirovani obsahu)
                         {
-                            // nejprve zkusime, jestli dojde k chybe i pri listovani adresare - takovou chybu
-                            // user snaze pochopi, proto ji zobrazime prednostne (pred chybou cteni ADS)
+                            // first we try whether an error occurs even when listing the directory - such an error
+                            // the user understands it more easily, so we show it first (before the ADS read error)
                             lstrcpyn(finalName, sourcePath, 2 * MAX_PATH + 200);
                             if (SalPathAppend(finalName, "*", 2 * MAX_PATH + 200))
                             {
@@ -1888,8 +1887,8 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                                             params.Caption = LoadStr(IDS_ERRORTITLE);
                                             params.Text = text;
                                             char aliasBtnNames[200];
-                                            /* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-   nechame pro tlacitka msgboxu resit kolize hotkeys tim, ze simulujeme, ze jde o menu
+                                            /* used by export_mnu.py script that generates salmenu.mnu for the Translator
+                                               we let the msgbox buttons resolve hotkey collisions by simulating a menu
 MENU_TEMPLATE_ITEM MsgBoxButtons[] = 
 {
   {MNTT_PB, 0
@@ -1908,8 +1907,8 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                                             if (msgRes == DIALOG_NO /* Skip All */)
                                                 ErrListDirSkipAll = TRUE;
                                         }
-                                        *sourceEnd = 0; // zrestaurovani sourcePath
-                                        *targetEnd = 0; // zrestaurovani targetPath
+                                        *sourceEnd = 0; // restoring sourcePath
+                                        *targetEnd = 0; // restoring targetPath
                                         return skip;
                                     }
                                 }
@@ -1918,7 +1917,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                             }
                         }
 
-                        // listovani adresare je bez problemu (nebo nastala neocekavana chyba), ohlasime chybu ADS
+                        // directory listing succeeded (or an unexpected error occurred), report an ADS error
                         int res;
                         if (ErrReadingADSIgnoreAll)
                             res = IDB_IGNORE;
@@ -1932,14 +1931,14 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                             goto READADS_AGAIN;
 
                         case IDB_IGNOREALL:
-                            ErrReadingADSIgnoreAll = TRUE; // tady break; nechybi
+                            ErrReadingADSIgnoreAll = TRUE; // intentional fallthrough
                         case IDB_IGNORE:
                             break;
 
                         case IDCANCEL:
                         {
-                            *sourceEnd = 0; // zrestaurovani sourcePath
-                            *targetEnd = 0; // zrestaurovani targetPath
+                            *sourceEnd = 0; // restoring sourcePath
+                            *targetEnd = 0; // restoring targetPath
                             return FALSE;
                         }
                         }
@@ -1951,7 +1950,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
         {
             op.Opcode = ocCreateDir;
             op.OpFlags = checkNewDirName ? 0 : OPFL_IGNORE_INVALID_NAME;
-            if (!script->CopyAttrs && // pokud kopirujeme atributy, jde heuristika o nastavovani Encrypted atributu stranou
+            if (!script->CopyAttrs && // when copying attributes, the heuristic for setting the Encrypted attribute is skipped
                 ((sourceDirAttr & FILE_ATTRIBUTE_ENCRYPTED) || targetPathState == tpsEncryptedExisting ||
                  targetPathState == tpsEncryptedNotExisting))
             {
@@ -1985,7 +1984,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
         op.Attr = sourceDirAttr;
         if ((op.SourceName = BuildName(sourcePath, NULL)) == NULL)
         {
-            *sourceEnd = 0; // zrestaurovani sourcePath
+            *sourceEnd = 0; // restoring sourcePath
             return FALSE;
         }
         op.TargetName = (char*)(DWORD_PTR)((sourceDirAttr & attrsData->AttrAnd) | attrsData->AttrOr);
@@ -1994,20 +1993,20 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
         {
             script->ResetState();
             free(op.SourceName);
-            *sourceEnd = 0; // zrestaurovani sourcePath
+            *sourceEnd = 0; // restoring sourcePath
             return FALSE;
         }
 
         if (!attrsData->SubDirs)
         {
-            *sourceEnd = 0; // zrestaurovani sourcePath
+            *sourceEnd = 0; // restoring sourcePath
             return TRUE;
         }
     }
 
     BOOL copyMoveDirIsLink = FALSE;
     BOOL copyMoveSkipLinkContent = FALSE;
-    if ((type == atCopy || type == atMove) && // pokud jde o link, zjistime, jestli obsah linku preskocit nebo zkopirovat
+    if ((type == atCopy || type == atMove) && // if it's a link, determine whether to skip or copy its content
         (sourceDirAttr & FILE_ATTRIBUTE_REPARSE_POINT))
     {
         copyMoveDirIsLink = TRUE;
@@ -2047,39 +2046,39 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
         switch (res)
         {
         case IDB_ALL:
-            ConfirmCopyLinkContentAll = TRUE; // tady break; nechybi
+            ConfirmCopyLinkContentAll = TRUE; // fallthrough
         case IDYES:
-            break; // mame zkopirovat obsah linku do cile
+            break; // copy the link content to the target
 
         case IDB_SKIPALL:
-            ConfirmCopyLinkContentSkipAll = TRUE; // tady break; nechybi
+            ConfirmCopyLinkContentSkipAll = TRUE; // fallthrough
         case IDB_SKIP:
             copyMoveSkipLinkContent = TRUE;
-            break; // mame preskocit obsah linku (nekopirujeme ho)
+            break; // skip the link content (do not copy)
 
         case IDCANCEL:
         {
-            *sourceEnd = 0; // zrestaurovani sourcePath
-            *targetEnd = 0; // zrestaurovani targetPath
+            *sourceEnd = 0; // restoring sourcePath
+            *targetEnd = 0; // restoring targetPath
             return FALSE;
         }
         }
     }
-    //---  konstrukce cesty k sourceDirName + zacatek hledani obsazenych souboru
-    BOOL delDirectory = TRUE;       // mazat neprazdny adresar?
-    BOOL delDirectoryReturn = TRUE; // navratova hodnota pri nemazani neprazdneho adresare
-    BOOL canDelDirAfterMove = TRUE; // jen pro Move: FALSE = nepresouva se vsechno (filtr neco skipnul), nelze smazat zdrojovy adresar (nezustane prazdny)
+    //---  build the path to sourceDirName and start searching for contained files
+    BOOL delDirectory = TRUE;       // delete a non-empty directory?
+    BOOL delDirectoryReturn = TRUE; // return value when a non-empty directory isn't removed
+    BOOL canDelDirAfterMove = TRUE; // Move only: FALSE if not everything is moved (filter skipped something), source directory can't be removed (won't be empty)
     if (!copyMoveDirIsLink || !copyMoveSkipLinkContent)
     {
         WIN32_FIND_DATA f;
         strcpy(st, "\\*");
         HANDLE search = HANDLES_Q(FindFirstFile(sourcePath, &f));
-        *st = 0; // odriznuti "\\*"
+        *st = 0; // remove "\\*"
         if (search == INVALID_HANDLE_VALUE)
         {
             DWORD err = GetLastError();
             if (err == ERROR_PATH_NOT_FOUND && type == atCountSize && dirDOSName != NULL && strcmp(dirName, dirDOSName) != 0)
-            { // patch pro vypocet velikosti adresare, ke kteremu se musi pristupovat pres DOS-name, kdyz to neumime pres UNICODE jmeno (multibyte verze jmena po prevodu zpet na UNICODE neodpovida puvodnimu UNICODE jmenu adresare)
+            { // workaround for computing the size of a directory that must be accessed via DOS-name when we can't handle the UNICODE name (the multibyte version converted back to UNICODE doesn't match the original)
                 lstrcpyn(finalName, sourcePath, 2 * MAX_PATH + 200);
                 if (CutDirectory(finalName) &&
                     SalPathAppend(finalName, dirDOSName, 2 * MAX_PATH + 200) &&
@@ -2088,7 +2087,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                     search = HANDLES_Q(FindFirstFile(finalName, &f));
                     if (search != INVALID_HANDLE_VALUE)
                     {
-                        strcpy(*sourceEnd == '\\' ? sourceEnd + 1 : sourceEnd, dirDOSName); // predelame sourcePath (dal se pouziva pro praci s nalezenymi soubory a adresari)
+                        strcpy(*sourceEnd == '\\' ? sourceEnd + 1 : sourceEnd, dirDOSName); // modify sourcePath (it's used further for handling found files and directories)
                         goto BROWSE_DIR;
                     }
                 }
@@ -2096,9 +2095,9 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
             if (err != ERROR_FILE_NOT_FOUND && err != ERROR_NO_MORE_FILES)
             {
                 sprintf(text, LoadStr(IDS_CANNOTREADDIR), sourcePath, GetErrorText(err));
-                *sourceEnd = 0; // zrestaurovani sourcePath
+                *sourceEnd = 0; // restoring sourcePath
                 if (targetEnd != NULL)
-                    *targetEnd = 0; // zrestaurovani targetPath
+                    *targetEnd = 0; // restoring targetPath
                 BOOL skip = TRUE;
                 if (!ErrListDirSkipAll)
                 {
@@ -2109,8 +2108,8 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                     params.Caption = LoadStr(IDS_ERRORTITLE);
                     params.Text = text;
                     char aliasBtnNames[200];
-                    /* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-   nechame pro tlacitka msgboxu resit kolize hotkeys tim, ze simulujeme, ze jde o menu
+                    /* used by export_mnu.py script that generates salmenu.mnu for the Translator
+                       we let the msgbox buttons resolve hotkey collisions by simulating a menu
 MENU_TEMPLATE_ITEM MsgBoxButtons[] = 
 {
   {MNTT_PB, 0
@@ -2135,9 +2134,9 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
             }
             else
             {
-                *sourceEnd = 0; // zrestaurovani sourcePath
+                *sourceEnd = 0; // restoring sourcePath
                 if (targetEnd != NULL)
-                    *targetEnd = 0; // zrestaurovani targetPath
+                    *targetEnd = 0; // restoring targetPath
             }
         }
         else
@@ -2145,7 +2144,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
 
         BROWSE_DIR:
 
-            //---  prohledani adresare
+            //---  browse the directory
             BOOL askDirDelete = (type == atDelete && firstLevelDir && Configuration.CnfrmNEDirDel);
             BOOL testFindNextErr = TRUE;
             do
@@ -2153,7 +2152,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                 if (f.cFileName[0] == '.' &&
                         (f.cFileName[1] == 0 || (f.cFileName[1] == '.' && f.cFileName[2] == 0)) ||
                     f.cFileName[0] == 0)
-                    continue; // "." a ".." + prazdna jmena (vede na nekonecnou rekurzi)
+                    continue; // "." and ".." plus empty names (would lead to infinite recursion)
 
                 if (askDirDelete)
                 {
@@ -2161,7 +2160,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                     int res = SalMessageBox(MainWindow->HWindow, text, LoadStr(IDS_QUESTION),
                                             MB_YESNOCANCEL | MB_ICONQUESTION);
                     UpdateWindow(MainWindow->HWindow);
-                    delDirectoryReturn = (res != IDCANCEL); // pokud nedal CANCEL, pokracujeme
+                    delDirectoryReturn = (res != IDCANCEL); // if CANCEL was not chosen, we continue
                     delDirectory = (res == IDYES);
                     if (!delDirectory)
                     {
@@ -2170,12 +2169,12 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                     }
                     askDirDelete = FALSE;
                 }
-                //---  nechce nekdo build scriptu prerusit ?
+                //---  does anyone want to interrupt script building?
                 if (GetTickCount() - LastTickCount > BS_TIMEOUT)
                 {
                     if (UserWantsToCancelSafeWaitWindow())
                     {
-                        MSG msg; // vyhodime nabufferovany ESC
+                        MSG msg; // discard the buffered ESC
                         while (PeekMessage(&msg, NULL, WM_KEYFIRST, WM_KEYLAST, PM_REMOVE))
                             ;
                         int topIndex = ListBox->GetTopIndex();
@@ -2191,7 +2190,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                     LastTickCount = GetTickCount();
                 }
 
-                //---  build adresare nebo souboru
+                //---  build a directory or file
                 if (f.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
                 {
                     if (!BuildScriptDir(script, copyMoveDirIsLink ? atCopy : type, sourcePath, sourcePathSupADS, targetPath,
@@ -2204,9 +2203,9 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                     {
                     BUILD_ERROR:
                         HANDLES(FindClose(search));
-                        *sourceEnd = 0; // zrestaurovani sourcePath
+                        *sourceEnd = 0; // restoring sourcePath
                         if (targetEnd != NULL)
-                            *targetEnd = 0; // zrestaurovani targetPath
+                            *targetEnd = 0; // restoring targetPath
                         return FALSE;
                     }
                 }
@@ -2224,15 +2223,15 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                             goto BUILD_ERROR;
                     }
                     else
-                        canDelDirAfterMove = FALSE; // nepresouva se vsechno (filtr neco skipnul), nelze smazat zdrojovy adresar (nezustane prazdny)
+                        canDelDirAfterMove = FALSE; // not everything was moved (filter skipped something); the source directory cannot be deleted (it would not be empty)
                 }
             } while (FindNextFile(search, &f));
             DWORD err = GetLastError();
             HANDLES(FindClose(search));
 
-            *sourceEnd = 0; // zrestaurovani sourcePath
+            *sourceEnd = 0; // restoring sourcePath
             if (targetEnd != NULL)
-                *targetEnd = 0; // zrestaurovani targetPath
+                *targetEnd = 0; // restoring targetPath
 
             if (testFindNextErr && err != ERROR_NO_MORE_FILES)
             {
@@ -2247,8 +2246,8 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                     params.Caption = LoadStr(IDS_ERRORTITLE);
                     params.Text = text;
                     char aliasBtnNames[200];
-                    /* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-   nechame pro tlacitka msgboxu resit kolize hotkeys tim, ze simulujeme, ze jde o menu
+                    /* used by export_mnu.py script that generates salmenu.mnu for the Translator
+                       we let the msgbox buttons resolve hotkey collisions by simulating a menu
 MENU_TEMPLATE_ITEM MsgBoxButtons[] = 
 {
   {MNTT_PB, 0
@@ -2275,15 +2274,15 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
     }
     else
     {
-        *sourceEnd = 0; // zrestaurovani sourcePath
+        *sourceEnd = 0; // restoring sourcePath
         if (targetEnd != NULL)
-            *targetEnd = 0; // zrestaurovani targetPath
+            *targetEnd = 0; // restoring targetPath
     }
-    //---  change-case: zmena nazvu az po dokonceni operaci uvnitr
+    //---  change-case: rename only after operations inside are complete
     if (type == atChangeCase)
     {
         op.Opcode = ocMoveDir;
-        op.OpFlags = 0; // zmena case = prejmenovani = invalidni jmena budeme hlasit (nejde jen o toleranci existujiciho)
+        op.OpFlags = 0; // case change = rename; we'll report invalid names (not just tolerate existing ones)
         op.Size = MOVE_DIR_SIZE;
         op.Attr = sourceDirAttr;
         BOOL skip;
@@ -2292,7 +2291,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
         {
             return skip;
         }
-        if ((op.TargetName = BuildName(sourcePath, dirName)) == NULL) // prilis dlouhe jmeno nehrozi, uz by se vyresilo v predchozi podmince
+        if ((op.TargetName = BuildName(sourcePath, dirName)) == NULL) // overly long name not possible, previous condition would handle it
         {
             free(op.SourceName);
             return FALSE;
@@ -2314,13 +2313,13 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
             }
         }
     }
-    // pokud tento adresar obsahuje nejakou skipnutou polozku, nelze smazat ani nadrazeny adresar
-    // pokud jde jen o link na adresar, smazeme ho bez ohledu na to, jestli neco uvnitr zustalo
+    // if this directory contains a skipped item, the parent directory cannot be deleted
+    // if it's just a link to a directory, delete it regardless of remaining content
     if (!copyMoveDirIsLink && canDelUpperDirAfterMove != NULL && !canDelDirAfterMove)
         *canDelUpperDirAfterMove = FALSE;
-    // pokud se nezkopirovalo ani nepresunulo nic uvnitr adresare a mame prenaset jen soubory,
-    // zrusime vytvareni adresare (zbytecny prazdny adresar), pokud slo o link na adresar,
-    // tak toho se tahle vec netyka (je to link a ne adresar)
+    // if nothing inside the directory was copied or moved and we are transferring only files,
+    // cancel creation of the directory (an unnecessary empty directory). If it was a link to a directory,
+    // this rule does not apply (it's a link, not a real directory)
     if (!copyMoveDirIsLink && (type == atCopy || type == atMove) && filterCriteria != NULL &&
         filterCriteria->SkipEmptyDirs && createDirIndex >= 0 &&
         createDirIndex == script->Count - 1)
@@ -2330,14 +2329,14 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
         script->Delete(createDirIndex);
         if (!script->IsGood())
             script->ResetState();
-        // pokud se skipuje tento adresar, nelze smazat ani nadrazeny adresar
+        // if this directory is skipped, the parent directory cannot be deleted
         if (canDelUpperDirAfterMove != NULL)
             *canDelUpperDirAfterMove = FALSE;
     }
     else
     {
-        // mame-li zachovavat cas&datum adresaru, ulozime jeste operaci nastaveni datumu&casu
-        // adresare (lze az po dokonceni zapisu podadresaru a souboru do tohoto adresare)
+        // if directory time&date should be preserved, store an operation to set the directory time&date
+        // (can be done only after writing subdirectories and files into this directory)
         if ((type == atCopy || type == atMove) &&
             filterCriteria != NULL && filterCriteria->PreserveDirTime &&
             createDirIndex >= 0 && createDirIndex < script->Count)
@@ -2359,9 +2358,9 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
             }
         }
 
-        // je-li potreba smazat adresar nebo link na adresar sourcePath + dirName (delete a move)
-        if (copyMoveDirIsLink && type == atMove ||                                          // u linku neni canDelDirAfterMove podstatne (link jde smaznout vzdy)
-            !copyMoveDirIsLink && type == atMove && canDelDirAfterMove || type == atDelete) // smazani zdrojoveho adresare nebo linku na adresar
+        // if we need to delete the directory or a link to it at sourcePath + dirName (delete or move)
+        if (copyMoveDirIsLink && type == atMove ||                                          // for a link canDelDirAfterMove is irrelevant (a link can always be removed)
+            !copyMoveDirIsLink && type == atMove && canDelDirAfterMove || type == atDelete) // delete the source directory or the link to the directory
         {
             if (type == atDelete && !delDirectory)
                 return delDirectoryReturn; // CANCEL / NO
@@ -2376,43 +2375,42 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                                            &ErrTooLongDirNameSkipAll, sourcePath)) == NULL)
             {
                 if (skip)
-                    skipTooLongSrcNameErr = TRUE; // chceme jeste pridat znacku pro skip vytvareni adresare
+                    skipTooLongSrcNameErr = TRUE; // we also want to add a flag to skip directory creation
                 else
                     return FALSE;
             }
             if (!skipTooLongSrcNameErr)
-            {
                 op.TargetName = NULL;
-                script->Add(op);
-                if (!script->IsGood())
-                {
-                    script->ResetState();
-                    free(op.SourceName);
-                    return FALSE;
-                }
-            }
-        }
-
-        // je-li potreba, ulozime jeste znacku pro skip vytvareni adresare
-        if (type == atCopy || type == atMove)
-        {
-            op.Opcode = ocLabelForSkipOfCreateDir;
-            op.OpFlags = 0;
-            op.Size.SetUI64(0);
-            CQuadWord dirSize = script->TotalFileSize - dirStartTotalFileSize;
-            op.SourceName = (char*)(DWORD_PTR)dirSize.LoDWord;
-            op.TargetName = (char*)(DWORD_PTR)dirSize.HiDWord;
-            op.Attr = createDirIndex;
-
             script->Add(op);
             if (!script->IsGood())
             {
                 script->ResetState();
+                free(op.SourceName);
                 return FALSE;
             }
         }
     }
-    return TRUE;
+
+    // if necessary, store a label to skip directory creation
+    if (type == atCopy || type == atMove)
+    {
+        op.Opcode = ocLabelForSkipOfCreateDir;
+        op.OpFlags = 0;
+        op.Size.SetUI64(0);
+        CQuadWord dirSize = script->TotalFileSize - dirStartTotalFileSize;
+        op.SourceName = (char*)(DWORD_PTR)dirSize.LoDWord;
+        op.TargetName = (char*)(DWORD_PTR)dirSize.HiDWord;
+        op.Attr = createDirIndex;
+
+        script->Add(op);
+        if (!script->IsGood())
+        {
+            script->ResetState();
+            return FALSE;
+        }
+    }
+}
+return TRUE;
 }
 
 BOOL GetLinkTgtFileSize(HWND parent, const char* fileName, COperation* op, CQuadWord* size,
@@ -2444,7 +2442,7 @@ READLINKTGTSIZE_AGAIN:
             goto READLINKTGTSIZE_AGAIN;
 
         case IDB_IGNOREALL:
-            *ignoreAll = TRUE; // tady break; nechybi
+            *ignoreAll = TRUE; // intentional fallthrough
         case IDB_IGNORE:
             break;
 
@@ -2489,13 +2487,13 @@ BOOL CFilesWindow::BuildScriptFile(COperations* script, CActionType type, char* 
         op.Opcode = (type == atCopy) ? ocCopyFile : ocMoveFile;
         op.FileSize = fileSizeLoc;
         op.OpFlags = srcAndTgtPathsFlags;
-        if (!script->CopyAttrs && // pokud kopirujeme atributy, jde heuristika o nastavovani Encrypted atributu stranou
+        if (!script->CopyAttrs && // when copying attributes, the heuristic for setting the Encrypted attribute is skipped
             ((sourceFileAttr & FILE_ATTRIBUTE_ENCRYPTED) || targetPathState == tpsEncryptedExisting ||
              targetPathState == tpsEncryptedNotExisting))
         {
-            op.OpFlags |= OPFL_AS_ENCRYPTED; // pokud staci rename (move v ramci jednoho svazku), flag zase sestrelime
+            op.OpFlags |= OPFL_AS_ENCRYPTED; // if a rename within one volume is enough, remove the flag again
             if (type == atMove && !script->ShowStatus)
-                script->ShowStatus = TRUE; // move s nastavenim encrypted atributu se dela pres kopirovani, tedy potrebujeme zobrazeni statusu
+                script->ShowStatus = TRUE; // move with the encrypted attribute set is done via copy, so we need to show status
         }
         op.Attr = sourceFileAttr;
         BOOL skip;
@@ -2505,7 +2503,7 @@ BOOL CFilesWindow::BuildScriptFile(COperations* script, CActionType type, char* 
             return skip;
         }
         if (targetPathIsFAT32 && fileSizeLoc > CQuadWord(0xFFFFFFFF /* 4GB minus 1 Byte */, 0))
-        { // prilis velky soubor pro FAT32 (varujeme usera, ze operace nejspis uspesne nedobehne)
+        { // file too big for FAT32 (warn the user the operation will likely fail)
 
         FAT_TOO_BIG_FILE:
 
@@ -2520,8 +2518,8 @@ BOOL CFilesWindow::BuildScriptFile(COperations* script, CActionType type, char* 
                 params.Caption = LoadStr(IDS_ERRORTITLE);
                 params.Text = message;
                 char aliasBtnNames[200];
-                /* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-   nechame pro tlacitka msgboxu resit kolize hotkeys tim, ze simulujeme, ze jde o menu
+                /* used by export_mnu.py script that generates salmenu.mnu for the Translator
+                   we let the msgbox buttons resolve hotkey collisions by simulating a menu
 MENU_TEMPLATE_ITEM MsgBoxButtons[] = 
 {
   {MNTT_PB, 0
@@ -2541,12 +2539,12 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
             free(op.SourceName);
             return (msgRes == DIALOG_YES /* Skip */ || msgRes == DIALOG_NO /* Skip All */);
         }
-        char finalName[2 * MAX_PATH + 200]; // + 200 je rezerva (Windows delaji cesty delsi nez MAX_PATH)
+        char finalName[2 * MAX_PATH + 200]; // +200 reserve (Windows make paths longer than MAX_PATH)
         if (mapName == NULL)
         {
-            // Petr: trochu prasarna: maska *.* neprodukuje kopii zdrojoveho jmena, coz je problem pri kopirovani
-            // souboru s invalidnim jmenem, napr. "c   ..." + "*.*" = "c   ", takze si trochu pomuzeme a nechame
-            // masku zmenit na NULL = primitivni textova kopie jmena
+            // Petr: a bit of a hack: the *.* mask doesn't create a copy of the source name, which is a problem when copying
+            // files with invalid names, e.g. "c   ..." + "*.*" = "c   ", so we help ourselves
+            // by changing the mask to NULL = a simple textual copy of the name
             char* opMask = mask != NULL && strcmp(mask, "*.*") == 0 ? NULL : mask;
             if ((op.TargetName = BuildName(targetPath,
                                            MaskName(finalName, 2 * MAX_PATH + 200, fileName, opMask),
@@ -2570,7 +2568,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
         {
             free(op.SourceName);
             free(op.TargetName);
-            if (type == atMove) // premisteni tam kde uz je ...
+            if (type == atMove) // moving where it already is ...
             {
                 SalMessageBox(MainWindow->HWindow, LoadStr(IDS_CANNOTMOVEFILETOITSELF),
                               LoadStr(IDS_ERRORTITLE), MB_OK | MB_ICONEXCLAMATION);
@@ -2582,7 +2580,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
             }
             return FALSE;
         }
-        // pokud staci rename (move v ramci jednoho svazku), flag OPFL_AS_ENCRYPTED zase sestrelime
+        // if a rename within one volume is enough, remove the OPFL_AS_ENCRYPTED flag again
         if (op.Opcode == ocMoveFile && (op.OpFlags & OPFL_AS_ENCRYPTED) &&
             (sourceFileAttr & FILE_ATTRIBUTE_ENCRYPTED) &&
             !script->SameRootButDiffVolume && HasTheSameRootPath(sourcePath, targetPath))
@@ -2592,13 +2590,13 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
         if (type == atCopy || op.Opcode == ocMoveFile && (op.OpFlags & OPFL_AS_ENCRYPTED) ||
             script->SameRootButDiffVolume || !HasTheSameRootPath(sourcePath, targetPath))
         {
-            // pokud cesta konci mezerou/teckou, je invalidni a nesmime provest kopii,
-            // CreateFile mezery/tecky orizne a prekopiroval by se tak jiny soubor pripadne do jineho jmena
+            // if the path ends with a space or period, it is invalid and we must not copy,
+            // CreateFile trims spaces/periods and another file could be copied or given a different name
             BOOL invalidSrcName = FileNameIsInvalid(op.SourceName, TRUE);
 
-            // optimalizace "overwrite older" pro kopirovani z pomale site na rychly lokalni disk
-            // (cteni casu souboru na pomale siti je daleko rychlejsi, kdyz se cte souvisle listing
-            // z cesty, nez kdyz se pak dotazujeme jeden soubor po druhem)
+            // optimization "overwrite older" for copying from a slow network to a fast local disk
+            // (reading file times over a slow network is much faster when the directory
+            // listing is read sequentially instead of querying each file individually)
             if (!invalidSrcName && (srcAndTgtPathsFlags & OPFL_TGTPATH_IS_NET) == 0 && script->OverwriteOlder && fileLastWriteTime != NULL)
             {
                 BOOL invalidTgtName = FileNameIsInvalid(op.TargetName, TRUE);
@@ -2612,106 +2610,191 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                         HANDLES(FindClose(find));
 
                         const char* tgtName = SalPathFindFileName(op.TargetName);
-                        if (StrICmp(tgtName, dataOut.cFileName) == 0 &&                 // pokud nejde jen o shodu DOS-name (tam dojde ke zmene DOS-name a ne k prepisu)
-                            (dataOut.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) // pokud nejde o adresar (s tim overwrite-older nic nezmuze)
-                        {
-                            // orizneme casy na sekundy (ruzne FS ukladaji casy s ruznymi prestnostmi, takze dochazelo k "rozdilum" i mezi "shodnymi" casy)
+                        // if it is not just a DOS-name match (that would change the DOS-name instead of overwriting)
+                            (dataOut.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) // if it is not a directory (overwrite older cannot handle directories)
                             FILETIME roundedInTime;
                             *(unsigned __int64*)&roundedInTime = *(unsigned __int64*)fileLastWriteTime - (*(unsigned __int64*)fileLastWriteTime % 10000000);
                             *(unsigned __int64*)&dataOut.ftLastWriteTime = *(unsigned __int64*)&dataOut.ftLastWriteTime - (*(unsigned __int64*)&dataOut.ftLastWriteTime % 10000000);
 
-                            if (CompareFileTime(&roundedInTime, &dataOut.ftLastWriteTime) <= 0) // zdrojovy soubor neni novejsi nez cilovy soubor - skipneme copy operaci
+                            if (CompareFileTime(&roundedInTime, &dataOut.ftLastWriteTime) <= 0) // source file is not newer than the target - skip the copy operation
                             {
                                 free(op.SourceName);
                                 free(op.TargetName);
                                 return TRUE;
                             }
                             op.OpFlags |= OPFL_OVERWROLDERALRTESTED;
-                        }
                     }
                 }
             }
+        }
 
-            // linky: fileSizeLoc == 0, velikost souboru se musi ziskat pres GetLinkTgtFileSize() dodatecne
-            if ((sourceFileAttr & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+        // links: fileSizeLoc == 0, the file size must be obtained later via GetLinkTgtFileSize()
+        if ((sourceFileAttr & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+        {
+            BOOL cancel;
+            CQuadWord size;
+            if (GetLinkTgtFileSize(HWindow, NULL, &op, &size, &cancel, &ErrGetFileSizeOfLnkTgtIgnAll))
             {
-                BOOL cancel;
-                CQuadWord size;
-                if (GetLinkTgtFileSize(HWindow, NULL, &op, &size, &cancel, &ErrGetFileSizeOfLnkTgtIgnAll))
+                fileSizeLoc = size;
+                op.FileSize = fileSizeLoc;
+
+                // we have a new file size, we must address this again:
+                // file too big for FAT32 (warn the user the operation will likely fail)
+                if (targetPathIsFAT32 && fileSizeLoc > CQuadWord(0xFFFFFFFF /* 4GB minus 1 Byte */, 0))
                 {
-                    fileSizeLoc = size;
-                    op.FileSize = fileSizeLoc;
+                    free(op.TargetName);
+                    op.TargetName = NULL;
 
-                    // mame novou velikost souboru, tohle musime poresit znovu:
-                    // prilis velky soubor pro FAT32 (varujeme usera, ze operace nejspis uspesne nedobehne)
-                    if (targetPathIsFAT32 && fileSizeLoc > CQuadWord(0xFFFFFFFF /* 4GB minus 1 Byte */, 0))
-                    {
-                        free(op.TargetName);
-                        op.TargetName = NULL;
-
-                        goto FAT_TOO_BIG_FILE;
-                    }
+                    goto FAT_TOO_BIG_FILE;
                 }
-                if (cancel)
-                    return FALSE;
             }
+            if (cancel)
+                return FALSE;
+        }
 
-            if (fileSizeLoc >= COPY_MIN_FILE_SIZE)
-                op.Size = fileSizeLoc;
-            else
-                op.Size = COPY_MIN_FILE_SIZE; // nulove/male soubory trvaji aspon jako soubory s velikosti COPY_MIN_FILE_SIZE
+        if (fileSizeLoc >= COPY_MIN_FILE_SIZE)
+            op.Size = fileSizeLoc;
+        else
+            op.Size = COPY_MIN_FILE_SIZE; // zero/small files take at least as long as files of size COPY_MIN_FILE_SIZE
 
-            if (sourcePathSupADS &&                       // pokud je sance, ze najdeme ADS a
-                (targetPathSupADS || !ConfirmADSLossAll)) // pokud se nemaji ADS ignorovat
-            {
-                CQuadWord adsSize;
-                CQuadWord adsOccupiedSpace;
-                DWORD adsWinError;
-                BOOL onlyDiscardableStreams;
+        if (sourcePathSupADS &&                       // if we may find ADS and
+            (targetPathSupADS || !ConfirmADSLossAll)) // if ADS should not be ignored
+        {
+            CQuadWord adsSize;
+            CQuadWord adsOccupiedSpace;
+            DWORD adsWinError;
+            BOOL onlyDiscardableStreams;
 
-            READFILEADS_AGAIN:
+        READFILEADS_AGAIN:
 
-                if (!invalidSrcName &&
-                    CheckFileOrDirADS(op.SourceName, FALSE, &adsSize, NULL, NULL, NULL, &adsWinError,
-                                      script->BytesPerCluster, &adsOccupiedSpace,
-                                      &onlyDiscardableStreams))
-                { // zdrojovy soubor ma ADS, musime je okopirovat do ciloveho souboru
-                    if (targetPathSupADS)
+            if (!invalidSrcName &&
+                CheckFileOrDirADS(op.SourceName, FALSE, &adsSize, NULL, NULL, NULL, &adsWinError,
+                                  script->BytesPerCluster, &adsOccupiedSpace,
+                                  &onlyDiscardableStreams))
+            { // the source file has ADS, they must be copied to the target file
+                if (targetPathSupADS)
+                {
+                    op.OpFlags |= OPFL_COPY_ADS;
+                    op.Size += adsSize;
+                    script->OccupiedSpace += adsOccupiedSpace;
+                    script->TotalFileSize += adsSize;
+                }
+                else // copying to a non-NTFS filesystem (prompt about discarding ADS)
+                {
+                    int res;
+                    if (ConfirmADSLossAll || onlyDiscardableStreams)
+                        res = IDYES;
+                    else
                     {
-                        op.OpFlags |= OPFL_COPY_ADS;
-                        op.Size += adsSize;
-                        script->OccupiedSpace += adsOccupiedSpace;
-                        script->TotalFileSize += adsSize;
-                    }
-                    else // kopirovani na jiny FS nez NTFS (dotaz na oriznuti ADS)
-                    {
-                        int res;
-                        if (ConfirmADSLossAll || onlyDiscardableStreams)
-                            res = IDYES;
+                        if (ConfirmADSLossSkipAll)
+                            res = IDB_SKIP;
                         else
                         {
-                            if (ConfirmADSLossSkipAll)
-                                res = IDB_SKIP;
+                            GetADSStreamsNames(ADSStreamsGlobalBuf, 5000, op.SourceName, FALSE);
+                            if (ADSStreamsGlobalBuf[0] == 0)
+                                res = IDYES;
                             else
                             {
-                                GetADSStreamsNames(ADSStreamsGlobalBuf, 5000, op.SourceName, FALSE);
-                                if (ADSStreamsGlobalBuf[0] == 0)
-                                    res = IDYES;
-                                else
-                                {
-                                    res = (int)CConfirmADSLossDlg(HWindow, TRUE, op.SourceName, ADSStreamsGlobalBuf, type == atMove).Execute();
-                                }
+                                res = (int)CConfirmADSLossDlg(HWindow, TRUE, op.SourceName, ADSStreamsGlobalBuf, type == atMove).Execute();
                             }
+                        }
+                    }
+                    switch (res)
+                    {
+                    case IDB_ALL:
+                        ConfirmADSLossAll = TRUE; // intentional fallthrough
+                    case IDYES:
+                        break; // we will ignore ADS, so they won't be copied/moved (they will be completely lost)
+
+                    case IDB_SKIPALL:
+                        ConfirmADSLossSkipAll = TRUE; // intentional fallthrough
+                    case IDB_SKIP:
+                    {
+                        free(op.SourceName);
+                        free(op.TargetName);
+                        return TRUE;
+                    }
+
+                    case IDCANCEL:
+                    {
+                        free(op.SourceName);
+                        free(op.TargetName);
+                        return FALSE;
+                    }
+                    }
+                }
+            }
+            else // an error occurred or no ADS
+            {
+                if (invalidSrcName ||
+                    adsWinError != NO_ERROR &&                                                                           // an error occurred
+                        (adsWinError != ERROR_INVALID_FUNCTION || StrNICmp(op.SourceName, "\\\\tsclient\\", 11) != 0) && // paths to local disks in Terminal Server do not support listing ADS (even though ADS is otherwise supported)
+                        (adsWinError != ERROR_INVALID_PARAMETER && adsWinError != ERROR_NO_MORE_ITEMS ||
+                         (srcAndTgtPathsFlags & OPFL_SRCPATH_IS_NET) == 0)) // mounted FAT/FAT32 disk cannot be detected on a network drive (e.g. \petr\f\drive_c) plus a Novell NetWare volume browsed via NDS - we think it is NTFS and thus try to read ADS, which reports this error
+                {
+                    // first we try whether an error occurs when opening the file - such an error
+                    // the user understands it more easily, so we show it first (before the ADS read error)
+                    HANDLE in;
+                    if (!invalidSrcName)
+                    {
+                        in = HANDLES_Q(CreateFile(op.SourceName, GENERIC_READ,
+                                                  FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                                                  OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL));
+                    }
+                    else
+                    {
+                        in = INVALID_HANDLE_VALUE;
+                    }
+                    if (!invalidSrcName && in != INVALID_HANDLE_VALUE) // opening the file succeeded, report an ADS error
+                    {
+                        HANDLES(CloseHandle(in));
+
+                        int res;
+                        if (ErrReadingADSIgnoreAll)
+                            res = IDB_IGNORE;
+                        else
+                        {
+                            res = (int)CErrorReadingADSDlg(HWindow, op.SourceName, GetErrorText(adsWinError)).Execute();
                         }
                         switch (res)
                         {
-                        case IDB_ALL:
-                            ConfirmADSLossAll = TRUE; // tady break; nechybi
-                        case IDYES:
-                            break; // budeme ignorovat ADS, cimz se nezkopiruji/nepresunou (cimz se zcela ztrati)
+                        case IDRETRY:
+                            goto READFILEADS_AGAIN;
+
+                        case IDB_IGNOREALL:
+                            ErrReadingADSIgnoreAll = TRUE; // intentional fallthrough
+                        case IDB_IGNORE:
+                            break;
+
+                        case IDCANCEL:
+                        {
+                            free(op.SourceName);
+                            free(op.TargetName);
+                            return FALSE;
+                        }
+                        }
+                    }
+                    else // report a file open error
+                    {
+                        DWORD err = GetLastError();
+                        if (invalidSrcName)
+                            err = ERROR_INVALID_NAME;
+                        int res;
+                        if (ErrFileSkipAll)
+                            res = IDB_SKIP;
+                        else
+                        {
+                            res = (int)CFileErrorDlg(HWindow, LoadStr(IDS_ERROROPENINGFILE), op.SourceName,
+                                                     GetErrorText(err))
+                                      .Execute();
+                        }
+                        switch (res)
+                        {
+                        case IDRETRY:
+                            goto READFILEADS_AGAIN;
 
                         case IDB_SKIPALL:
-                            ConfirmADSLossSkipAll = TRUE; // tady break; nechybi
+                            ErrFileSkipAll = TRUE; // intentional fallthrough
                         case IDB_SKIP:
                         {
                             free(op.SourceName);
@@ -2728,105 +2811,18 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                         }
                     }
                 }
-                else // doslo k chybe nebo zadne ADS
-                {
-                    if (invalidSrcName ||
-                        adsWinError != NO_ERROR &&                                                                           // doslo k chybe
-                            (adsWinError != ERROR_INVALID_FUNCTION || StrNICmp(op.SourceName, "\\\\tsclient\\", 11) != 0) && // cesty na lokalni disky v Terminal Serveru nepodporuji listovani ADS (jinak ADS podporuji, komedie)
-                            (adsWinError != ERROR_INVALID_PARAMETER && adsWinError != ERROR_NO_MORE_ITEMS ||
-                             (srcAndTgtPathsFlags & OPFL_SRCPATH_IS_NET) == 0)) // namounteny FAT/FAT32 disk nelze poznat na sitovem disku (napr. \\petr\f\drive_c) + NOVELL-NETWAREsky svazek prochazeny pres NDS - myslime si, ze je to NTFS a tudiz zkousime cist ADS, coz ohlasi tuto chybu
-                    {
-                        // nejprve zkusime, jestli dojde k chybe i pri otevreni souboru - takovou chybu
-                        // user snaze pochopi, proto ji zobrazime prednostne (pred chybou cteni ADS)
-                        HANDLE in;
-                        if (!invalidSrcName)
-                        {
-                            in = HANDLES_Q(CreateFile(op.SourceName, GENERIC_READ,
-                                                      FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
-                                                      OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL));
-                        }
-                        else
-                        {
-                            in = INVALID_HANDLE_VALUE;
-                        }
-                        if (!invalidSrcName && in != INVALID_HANDLE_VALUE) // otevirani souboru je bez problemu, ohlasime chybu ADS
-                        {
-                            HANDLES(CloseHandle(in));
-
-                            int res;
-                            if (ErrReadingADSIgnoreAll)
-                                res = IDB_IGNORE;
-                            else
-                            {
-                                res = (int)CErrorReadingADSDlg(HWindow, op.SourceName, GetErrorText(adsWinError)).Execute();
-                            }
-                            switch (res)
-                            {
-                            case IDRETRY:
-                                goto READFILEADS_AGAIN;
-
-                            case IDB_IGNOREALL:
-                                ErrReadingADSIgnoreAll = TRUE; // tady break; nechybi
-                            case IDB_IGNORE:
-                                break;
-
-                            case IDCANCEL:
-                            {
-                                free(op.SourceName);
-                                free(op.TargetName);
-                                return FALSE;
-                            }
-                            }
-                        }
-                        else // ohlasime chybu otevirani souboru
-                        {
-                            DWORD err = GetLastError();
-                            if (invalidSrcName)
-                                err = ERROR_INVALID_NAME;
-                            int res;
-                            if (ErrFileSkipAll)
-                                res = IDB_SKIP;
-                            else
-                            {
-                                res = (int)CFileErrorDlg(HWindow, LoadStr(IDS_ERROROPENINGFILE), op.SourceName,
-                                                         GetErrorText(err))
-                                          .Execute();
-                            }
-                            switch (res)
-                            {
-                            case IDRETRY:
-                                goto READFILEADS_AGAIN;
-
-                            case IDB_SKIPALL:
-                                ErrFileSkipAll = TRUE; // tady break; nechybi
-                            case IDB_SKIP:
-                            {
-                                free(op.SourceName);
-                                free(op.TargetName);
-                                return TRUE;
-                            }
-
-                            case IDCANCEL:
-                            {
-                                free(op.SourceName);
-                                free(op.TargetName);
-                                return FALSE;
-                            }
-                            }
-                        }
-                    }
-                }
             }
-
-            if (script->BytesPerCluster == 0)
-                TRACE_E("How is it possible that script->BytesPerCluster is not yet set???");
-            else
-            {
-                script->OccupiedSpace += fileSizeLoc - ((fileSizeLoc - CQuadWord(1, 0)) % CQuadWord(script->BytesPerCluster, 0)) +
-                                         CQuadWord(script->BytesPerCluster - 1, 0);
-            }
-            script->TotalFileSize += fileSizeLoc;
         }
+
+        if (script->BytesPerCluster == 0)
+            TRACE_E("How is it possible that script->BytesPerCluster is not yet set???");
+        else
+        {
+            script->OccupiedSpace += fileSizeLoc - ((fileSizeLoc - CQuadWord(1, 0)) % CQuadWord(script->BytesPerCluster, 0)) +
+                                     CQuadWord(script->BytesPerCluster - 1, 0);
+        }
+        script->TotalFileSize += fileSizeLoc;
+    }
         else
         {
             op.Size = MOVE_FILE_SIZE;
@@ -2846,196 +2842,196 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
             return TRUE;
     }
 
-    case atDelete:
+case atDelete:
+{
+    op.Opcode = ocDeleteFile;
+    op.OpFlags = 0;
+    op.Size = DELETE_FILE_SIZE;
+    op.Attr = sourceFileAttr;
+    BOOL skip;
+    if ((op.SourceName = BuildName(sourcePath, fileName, fileDOSName, &skip,
+                                   &ErrTooLongNameSkipAll, sourcePath)) == NULL)
     {
-        op.Opcode = ocDeleteFile;
-        op.OpFlags = 0;
-        op.Size = DELETE_FILE_SIZE;
-        op.Attr = sourceFileAttr;
-        BOOL skip;
-        if ((op.SourceName = BuildName(sourcePath, fileName, fileDOSName, &skip,
-                                       &ErrTooLongNameSkipAll, sourcePath)) == NULL)
-        {
-            return skip;
-        }
-        op.TargetName = NULL;
-        script->Add(op);
-        if (!script->IsGood())
-        {
-            script->ResetState();
-            free(op.SourceName);
-            return FALSE;
-        }
-        else
-            return TRUE;
+        return skip;
+    }
+    op.TargetName = NULL;
+    script->Add(op);
+    if (!script->IsGood())
+    {
+        script->ResetState();
+        free(op.SourceName);
+        return FALSE;
+    }
+    else
+        return TRUE;
+}
+
+case atCountSize:
+{
+    if (script->BytesPerCluster == 0) // no space-estimate risk
+    {
+        DWORD d1, d2, d3, d4;
+        if (MyGetDiskFreeSpace(sourcePath, &d1, &d2, &d3, &d4))
+            script->BytesPerCluster = d1 * d2;
     }
 
-    case atCountSize:
+    char name[2 * MAX_PATH]; // + MAX_PATH reserve (Windows make paths longer than MAX_PATH)
+    int l = (int)strlen(sourcePath);
+    memmove(name, sourcePath, l);
+    if (name[l - 1] != '\\')
+        name[l++] = '\\';
+    memmove(name + l, fileName, 1 + strlen(fileName)); // name is always < MAX_PATH
+    CQuadWord s;
+    DWORD err = NO_ERROR;
+    if (FileBasedCompression && !onlySize &&                                         // if compression is possible at all
+        (sourceFileAttr & (FILE_ATTRIBUTE_COMPRESSED | FILE_ATTRIBUTE_SPARSE_FILE))) // if the file is compressed or sparse (sparse file)
     {
-        if (script->BytesPerCluster == 0) // pri estimate space nehrozi
-        {
-            DWORD d1, d2, d3, d4;
-            if (MyGetDiskFreeSpace(sourcePath, &d1, &d2, &d3, &d4))
-                script->BytesPerCluster = d1 * d2;
-        }
-
-        char name[2 * MAX_PATH]; // + MAX_PATH je rezerva (Windows delaji cesty delsi nez MAX_PATH)
-        int l = (int)strlen(sourcePath);
-        memmove(name, sourcePath, l);
-        if (name[l - 1] != '\\')
-            name[l++] = '\\';
-        memmove(name + l, fileName, 1 + strlen(fileName)); // name je vzdy < MAX_PATH
-        CQuadWord s;
-        DWORD err = NO_ERROR;
-        if (FileBasedCompression && !onlySize &&                                         // pokud je komprimace vubec mozna
-            (sourceFileAttr & (FILE_ATTRIBUTE_COMPRESSED | FILE_ATTRIBUTE_SPARSE_FILE))) // pokud je soubor komprimovany nebo ridky (sparse-file)
-        {
+        s.LoDWord = GetCompressedFileSize(name, &s.HiDWord);
+        err = GetLastError();
+        if (err == ERROR_FILE_NOT_FOUND && fileDOSName != NULL && strcmp(fileName, fileDOSName) != 0)
+        {                                                            // workaround for computing the size of a file that must be accessed via DOS-name when we can't handle the UNICODE name (the multibyte version converted back to UNICODE doesn't match the original file name)
+            memmove(name + l, fileDOSName, 1 + strlen(fileDOSName)); // name is always < MAX_PATH
             s.LoDWord = GetCompressedFileSize(name, &s.HiDWord);
             err = GetLastError();
-            if (err == ERROR_FILE_NOT_FOUND && fileDOSName != NULL && strcmp(fileName, fileDOSName) != 0)
-            {                                                            // patch pro vypocet velikosti souboru, ke kteremu se musi pristupovat pres DOS-name, kdyz to neumime pres UNICODE jmeno (multibyte verze jmena po prevodu zpet na UNICODE neodpovida puvodnimu UNICODE jmenu souboru)
-                memmove(name + l, fileDOSName, 1 + strlen(fileDOSName)); // name je vzdy < MAX_PATH
-                s.LoDWord = GetCompressedFileSize(name, &s.HiDWord);
-                err = GetLastError();
-                if (s.LoDWord == 0xFFFFFFFF && err != NO_ERROR)
-                    memmove(name + l, fileName, 1 + strlen(fileName)); // (name je vzdy < MAX_PATH) - pro pripad chyby, hlaseni bude o plnem jmene a ne o DOS jmene
-            }
+            if (s.LoDWord == 0xFFFFFFFF && err != NO_ERROR)
+                memmove(name + l, fileName, 1 + strlen(fileName)); // (name is always < MAX_PATH - in case of error, the report will use the full name instead of the DOS name
         }
-        else
+    }
+    else
+    {
+        s = fileSizeLoc;
+    }
+    if (s.LoDWord == 0xFFFFFFFF && err != NO_ERROR)
+    {
+        if (!script->SkipAllCountSizeErrors)
         {
-            s = fileSizeLoc;
+            sprintf(message, LoadStr(IDS_GETCOMPRFILESIZEERROR), name, GetErrorText(err));
+            script->SkipAllCountSizeErrors = SalMessageBox(HWindow, message, LoadStr(IDS_ERRORTITLE),
+                                                           MB_YESNO | MB_ICONEXCLAMATION) == IDYES;
+            UpdateWindow(MainWindow->HWindow);
         }
-        if (s.LoDWord == 0xFFFFFFFF && err != NO_ERROR)
-        {
-            if (!script->SkipAllCountSizeErrors)
-            {
-                sprintf(message, LoadStr(IDS_GETCOMPRFILESIZEERROR), name, GetErrorText(err));
-                script->SkipAllCountSizeErrors = SalMessageBox(HWindow, message, LoadStr(IDS_ERRORTITLE),
-                                                               MB_YESNO | MB_ICONEXCLAMATION) == IDYES;
-                UpdateWindow(MainWindow->HWindow);
-            }
-            s = fileSizeLoc; // nelze zjistit compressed-size, spokojime se s normalni velikosti
-        }
+        s = fileSizeLoc; // compressed size unavailable; fall back to the normal size
+    }
 
-        script->Sizes.Add(fileSizeLoc); // vystupni dialog je pripraven na pripad, kdy bude toto pole v chybovem stavu
-        script->TotalSize += fileSizeLoc;
-        if (script->BytesPerCluster != 0)
-        {
-            script->OccupiedSpace += s - ((s - CQuadWord(1, 0)) % CQuadWord(script->BytesPerCluster, 0)) +
-                                     CQuadWord(script->BytesPerCluster - 1, 0);
-        }
-        else
-        {
-            script->OccupiedSpace += s;
-        }
-        script->TotalFileSize += s;
-        script->CompressedSize += s;
+    script->Sizes.Add(fileSizeLoc); // the output dialog is prepared for the case when this array is in an error state
+    script->TotalSize += fileSizeLoc;
+    if (script->BytesPerCluster != 0)
+    {
+        script->OccupiedSpace += s - ((s - CQuadWord(1, 0)) % CQuadWord(script->BytesPerCluster, 0)) +
+                                 CQuadWord(script->BytesPerCluster - 1, 0);
+    }
+    else
+    {
+        script->OccupiedSpace += s;
+    }
+    script->TotalFileSize += s;
+    script->CompressedSize += s;
 
+    return TRUE;
+}
+
+case atRecursiveConvert:
+case atConvert:
+{
+    op.Opcode = ocConvert;
+    op.OpFlags = 0;
+    op.Attr = sourceFileAttr;
+    BOOL skip;
+    if ((op.SourceName = BuildName(sourcePath, fileName, NULL, &skip,
+                                   &ErrTooLongNameSkipAll, sourcePath)) == NULL)
+    {
+        return skip;
+    }
+    op.TargetName = NULL;
+
+    // links: fileSizeLoc == 0, the file size must be obtained later via GetLinkTgtFileSize()
+    if ((sourceFileAttr & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+    {
+        BOOL cancel;
+        CQuadWord size;
+        if (GetLinkTgtFileSize(HWindow, NULL, &op, &size, &cancel, &ErrGetFileSizeOfLnkTgtIgnAll))
+            fileSizeLoc = size;
+        if (cancel)
+            return FALSE;
+    }
+
+    if (fileSizeLoc >= CONVERT_MIN_FILE_SIZE)
+        op.Size = fileSizeLoc;
+    else
+        op.Size = CONVERT_MIN_FILE_SIZE; // zero/small files take at least as long as files of size CONVERT_MIN_FILE_SIZE
+    script->Add(op);
+    if (!script->IsGood())
+    {
+        script->ResetState();
+        free(op.SourceName);
+        return FALSE;
+    }
+    else
         return TRUE;
-    }
+}
 
-    case atRecursiveConvert:
-    case atConvert:
+case atChangeAttrs:
+{
+    op.Opcode = ocChangeAttrs;
+    op.OpFlags = 0;
+    op.Attr = sourceFileAttr;
+    // compression: zero/small files take at least as long as files of size COMPRESS_ENCRYPT_MIN_FILE_SIZE
+    op.Size = (attrsData->ChangeCompression || attrsData->ChangeEncryption) ? max(fileSizeLoc, COMPRESS_ENCRYPT_MIN_FILE_SIZE) : CHATTRS_FILE_SIZE;
+    BOOL skip;
+    if ((op.SourceName = BuildName(sourcePath, fileName, NULL, &skip,
+                                   &ErrTooLongNameSkipAll, sourcePath)) == NULL)
     {
-        op.Opcode = ocConvert;
-        op.OpFlags = 0;
-        op.Attr = sourceFileAttr;
-        BOOL skip;
-        if ((op.SourceName = BuildName(sourcePath, fileName, NULL, &skip,
-                                       &ErrTooLongNameSkipAll, sourcePath)) == NULL)
-        {
-            return skip;
-        }
-        op.TargetName = NULL;
+        return skip;
+    }
+    op.TargetName = (char*)(DWORD_PTR)((SalGetFileAttributes(op.SourceName) & attrsData->AttrAnd) | attrsData->AttrOr);
+    script->Add(op);
+    if (!script->IsGood())
+    {
+        script->ResetState();
+        free(op.SourceName);
+        return FALSE;
+    }
+    else
+        return TRUE;
+}
 
-        // linky: fileSizeLoc == 0, velikost souboru se musi ziskat pres GetLinkTgtFileSize() dodatecne
-        if ((sourceFileAttr & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
-        {
-            BOOL cancel;
-            CQuadWord size;
-            if (GetLinkTgtFileSize(HWindow, NULL, &op, &size, &cancel, &ErrGetFileSizeOfLnkTgtIgnAll))
-                fileSizeLoc = size;
-            if (cancel)
-                return FALSE;
-        }
-
-        if (fileSizeLoc >= CONVERT_MIN_FILE_SIZE)
-            op.Size = fileSizeLoc;
-        else
-            op.Size = CONVERT_MIN_FILE_SIZE; // nulove/male soubory trvaji aspon jako soubory s velikosti CONVERT_MIN_FILE_SIZE
+case atChangeCase:
+{
+    op.Opcode = ocMoveFile;
+    op.FileSize = fileSizeLoc;
+    op.OpFlags = 0;
+    op.Size = MOVE_FILE_SIZE;
+    op.Attr = sourceFileAttr;
+    BOOL skip;
+    if ((op.SourceName = BuildName(sourcePath, fileName, NULL, &skip,
+                                   &ErrTooLongNameSkipAll, sourcePath)) == NULL)
+    {
+        return skip;
+    }
+    if ((op.TargetName = BuildName(sourcePath, fileName)) == NULL) // if the name is too long, it already failed one check earlier
+    {
+        free(op.SourceName);
+        return FALSE;
+    }
+    int offset = (int)strlen(op.SourceName) - (int)strlen(fileName);
+    AlterFileName(op.TargetName + offset, op.SourceName + offset, -1,
+                  chCaseData->FileNameFormat, chCaseData->Change, FALSE);
+    BOOL sameName = strcmp(op.SourceName + offset, op.TargetName + offset) == 0;
+    if (!sameName)
         script->Add(op);
-        if (!script->IsGood())
-        {
-            script->ResetState();
-            free(op.SourceName);
-            return FALSE;
-        }
-        else
-            return TRUE;
-    }
-
-    case atChangeAttrs:
+    if (sameName || !script->IsGood())
     {
-        op.Opcode = ocChangeAttrs;
-        op.OpFlags = 0;
-        op.Attr = sourceFileAttr;
-        // komprese: nulove/male soubory trvaji aspon jako soubory s velikosti COMPRESS_ENCRYPT_MIN_FILE_SIZE
-        op.Size = (attrsData->ChangeCompression || attrsData->ChangeEncryption) ? max(fileSizeLoc, COMPRESS_ENCRYPT_MIN_FILE_SIZE) : CHATTRS_FILE_SIZE;
-        BOOL skip;
-        if ((op.SourceName = BuildName(sourcePath, fileName, NULL, &skip,
-                                       &ErrTooLongNameSkipAll, sourcePath)) == NULL)
-        {
-            return skip;
-        }
-        op.TargetName = (char*)(DWORD_PTR)((SalGetFileAttributes(op.SourceName) & attrsData->AttrAnd) | attrsData->AttrOr);
-        script->Add(op);
+        free(op.SourceName);
+        free(op.TargetName);
         if (!script->IsGood())
-        {
             script->ResetState();
-            free(op.SourceName);
-            return FALSE;
-        }
-        else
-            return TRUE;
+        return sameName;
     }
-
-    case atChangeCase:
-    {
-        op.Opcode = ocMoveFile;
-        op.FileSize = fileSizeLoc;
-        op.OpFlags = 0;
-        op.Size = MOVE_FILE_SIZE;
-        op.Attr = sourceFileAttr;
-        BOOL skip;
-        if ((op.SourceName = BuildName(sourcePath, fileName, NULL, &skip,
-                                       &ErrTooLongNameSkipAll, sourcePath)) == NULL)
-        {
-            return skip;
-        }
-        if ((op.TargetName = BuildName(sourcePath, fileName)) == NULL) // pokud je prilis dlouhe jmeno, projevi se to uz o podminku drive
-        {
-            free(op.SourceName);
-            return FALSE;
-        }
-        int offset = (int)strlen(op.SourceName) - (int)strlen(fileName);
-        AlterFileName(op.TargetName + offset, op.SourceName + offset, -1,
-                      chCaseData->FileNameFormat, chCaseData->Change, FALSE);
-        BOOL sameName = strcmp(op.SourceName + offset, op.TargetName + offset) == 0;
-        if (!sameName)
-            script->Add(op);
-        if (sameName || !script->IsGood())
-        {
-            free(op.SourceName);
-            free(op.TargetName);
-            if (!script->IsGood())
-                script->ResetState();
-            return sameName;
-        }
-        else
-            return TRUE;
-    }
-    }
-    return FALSE; // nic jineho neumi
+    else
+        return TRUE;
+}
+}
+return FALSE; // doesn't do anything else
 }
 
 void CFilesWindow::CalculateDirSizes()
@@ -3061,25 +3057,25 @@ void CFilesWindow::ExecuteFromArchive(int index, BOOL edit, HWND editWithMenuPar
     if (CheckPath(TRUE) != ERROR_SUCCESS)
         return;
 
-    // zjistime jestli umime do archivu zabalovat (je mozna editace souboru z archivu, jinak varujeme)
+    // check if we can pack into the archive (editing files from the archive is possible, otherwise warn)
     if (edit)
     {
         int format = PackerFormatConfig.PackIsArchive(GetZIPArchive());
-        if (format != 0) // "always-true" - nasli jsme podporovany archiv
+        if (format != 0) // "always-true" - we found a supported archive
         {
-            if (!PackerFormatConfig.GetUsePacker(format - 1)) // nema edit?
+            if (!PackerFormatConfig.GetUsePacker(format - 1)) // no Edit?
             {
                 if (SalMessageBox(HWindow, LoadStr(IDS_EDITPACKNOTSUPPORTED),
                                   LoadStr(IDS_QUESTION), MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION) != IDYES)
                 {
-                    return; // akce se rusi (user nechce editovat, kdyz nejde updatnout archiv)
+                    return; // action aborted (user does not want to edit if the archive cannot be updated)
                 }
             }
         }
     }
 
-    //---  ziskame plne dlouhe jmeno
-    char dcFileName[2 * MAX_PATH]; // ZIP: jmeno pro disk-cache
+    //---  get the full long name
+    char dcFileName[2 * MAX_PATH]; // ZIP: name for disk cache
     CFileData* f = &Files->At(index - Dirs->Count);
 
     if (!SalIsValidFileNameComponent(f->Name))
@@ -3093,7 +3089,7 @@ void CFilesWindow::ExecuteFromArchive(int index, BOOL edit, HWND editWithMenuPar
     int j;
     for (j = 0; j < count; j++)
     {
-        if (index != j) // neporovnavat dva stejne
+        if (index != j) // do not compare the same item
         {
             CFileData* f2 = j < Dirs->Count ? &Dirs->At(j) : &Files->At(j - Dirs->Count);
             if (f2->NameLen == f->NameLen &&
@@ -3106,22 +3102,22 @@ void CFilesWindow::ExecuteFromArchive(int index, BOOL edit, HWND editWithMenuPar
         }
     }
 
-    StrICpy(dcFileName, GetZIPArchive()); // jmeno souboru archivu se ma porovnavat "case-insensitive" (Windows file system), prevedeme ho proto vzdy na mala pismenka
+    StrICpy(dcFileName, GetZIPArchive()); // the archive file name should be compared case-insensitively (Windows file system), so we always convert it to lowercase
     SalPathAppend(dcFileName, GetZIPPath(), 2 * MAX_PATH);
     SalPathAppend(dcFileName, f->Name, 2 * MAX_PATH);
 
-    // nastaveni disk-cache pro plugin (std. hodnoty se zmeni jen u pluginu)
+    // disk-cache settings for the plugin (default values change only for plugins)
     char arcCacheTmpPath[MAX_PATH];
     arcCacheTmpPath[0] = 0;
     BOOL arcCacheOwnDelete = FALSE;
     BOOL arcCacheCacheCopies = TRUE;
-    CPluginInterfaceAbstract* plugin = NULL; // != NULL pokud ma plugin sve vlastni mazani
+    CPluginInterfaceAbstract* plugin = NULL; // != NULL if the plugin deletes files on its own
     int format = PackerFormatConfig.PackIsArchive(GetZIPArchive());
-    if (format != 0) // nasli jsme podporovany archiv
+    if (format != 0) // found a supported archive
     {
         format--;
         int index2 = PackerFormatConfig.GetUnpackerIndex(format);
-        if (index2 < 0) // view: jde o interni zpracovani (plug-in)?
+        if (index2 < 0) // view: is this internal handling (plug-in)?
         {
             CPluginData* data = Plugins.Get(-index2 - 1);
             if (data != NULL)
@@ -3154,13 +3150,13 @@ void CFilesWindow::ExecuteFromArchive(int index, BOOL edit, HWND editWithMenuPar
     char dosName[14];
     dosName[0] = 0;
     WIN32_FIND_DATA data;
-    if (!exists) // musime ho vypakovat
+    if (!exists) // we must unpack it
     {
         char* backSlash = strrchr(name, '\\');
         char tmpPath[MAX_PATH];
         memcpy(tmpPath, name, backSlash - name);
         tmpPath[backSlash - name] = 0;
-        BeginStopRefresh(); // cmuchal si da pohov
+        BeginStopRefresh(); // the sniffing thread can take a break
         SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
         HCURSOR oldCur = SetCursor(LoadCursor(NULL, IDC_WAIT));
         if (PackUnpackOneFile(this, GetZIPArchive(), PluginData.GetInterface(),
@@ -3182,19 +3178,19 @@ void CFilesWindow::ExecuteFromArchive(int index, BOOL edit, HWND editWithMenuPar
             }
 
             DiskCache.NamePrepared(dcFileName, fileSize);
-            EndStopRefresh(); // ted uz zase cmuchal nastartuje
+            EndStopRefresh(); // the sniffing thread resumes now
         }
         else
         {
             SetCursor(oldCur);
             SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
-            DiskCache.ReleaseName(dcFileName, FALSE); // nevypakovano, neni co cachovat
-            EndStopRefresh();                         // ted uz zase cmuchal nastartuje
+            DiskCache.ReleaseName(dcFileName, FALSE); // not unpacked, nothing to cache
+            EndStopRefresh();                         // the sniffing thread resumes now
             return;
         }
     }
 
-    // rozdeleni plneho jmena k souboru na cestu (buf) a jmeno (s)
+    // split the full file name into path (buf) and name (s)
     char buf[MAX_PATH];
     char* s = strrchr(name, '\\');
     if (s != NULL)
@@ -3204,7 +3200,7 @@ void CFilesWindow::ExecuteFromArchive(int index, BOOL edit, HWND editWithMenuPar
         s++;
     }
 
-    // spusteni default polozky z kontextoveho menu (asociace)
+    // run the default context menu item (association)
     if (edit)
     {
         if (editWithMenuParent != NULL && editWithMenuPoint != NULL)
@@ -3240,11 +3236,11 @@ void CFilesWindow::ExecuteFromArchive(int index, BOOL edit, HWND editWithMenuPar
     }
 
     if (UnpackedAssocFiles.AddFile(GetZIPArchive(), GetZIPPath(), buf, s, dosName, lastWrite, fileSize, attr))
-    {                                                                         // tento soubor jeste nema v disk-cache 'lock' objekt ExecuteAssocEvent
-        DiskCache.AssignName(dcFileName, ExecuteAssocEvent, FALSE, crtCache); // arcCacheCacheCopies nema vliv - cachuje se az do zavreni archivu, drive zapakovavat nebudeme
+    {                                                                         // this file doesn't yet have the disk-cache 'lock' object ExecuteAssocEvent
+        DiskCache.AssignName(dcFileName, ExecuteAssocEvent, FALSE, crtCache); // arcCacheCacheCopies has no effect - caching lasts until the archive closes; we will not repack earlier
     }
     else
-    { // je zbytecne pridavat tmp-souboru ten samy 'lock' objekt
+    { // it's pointless to add the same 'lock' object to the temp file
         DiskCache.ReleaseName(dcFileName, FALSE);
     }
     AssocUsed = TRUE;

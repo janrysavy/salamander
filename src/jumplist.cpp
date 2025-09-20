@@ -20,7 +20,8 @@ http://msdn.microsoft.com/en-us/library/dd378460%28v=VS.85%29.aspx#custom_jump_l
 DEFINE_PROPERTYKEY(PKEY_Title, 0xF29F85E0, 0x4FF9, 0x1068, 0xAB, 0x91, 0x08, 0x00, 0x2B, 0x27, 0xB3, 0xD9, 2);
 DEFINE_PROPERTYKEY(PKEY_AppUserModel_IsDestListSeparator, 0x9F4C2855, 0x9F79, 0x4B39, 0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3, 6);
 
-// unikatni ID procesu chceme svazat s konfiguraci (dve ruzne verze Salamandera mohou mit napriklad ruzne hot paths)
+// We want to link the unique process ID with the configuration
+// (two Salamander versions might have different hot paths, for example)
 //const char *SALAMANDER_APP_ID = "OPENSAL.OpenSalamanderAppID." VERSINFO_xstr(VERSINFO_BUILDNUMBER);
 
 //typedef WINSHELLAPI HRESULT (WINAPI *FT_SetCurrentProcessExplicitAppUserModelID)(PCWSTR appID);
@@ -53,7 +54,7 @@ DEFINE_PROPERTYKEY(PKEY_AppUserModel_IsDestListSeparator, 0x9F4C2855, 0x9F79, 0x
 //          TRACE_E("SetCurrentProcessExplicitAppUserModelID() failed! hres="<<hres);
 //        }
 //      }
-//      //FreeLibrary(hShell32); // FIXME - vyresit nejak cisteji
+//      //FreeLibrary(hShell32); // FIXME - find a cleaner solution
 //    }
 //  }
 //  return ret;
@@ -149,7 +150,7 @@ HRESULT CreateShellLink(const char* path, const char* name, IShellLink** psl)
 {
     char params[HOTPATHITEM_MAXPATH + 100];
     sprintf(params, "-AJ \"%s\"", path);
-    if (strlen(params) < INFOTIPSIZE) // omezeni delky W2K+ pro SetArguments
+    if (strlen(params) < INFOTIPSIZE) // length limit for W2K+ when using SetArguments
     {
         HRESULT hres;
         IShellLink* ret;
@@ -167,9 +168,9 @@ HRESULT CreateShellLink(const char* path, const char* name, IShellLink** psl)
             char desc[MAX_PATH];
             lstrcpyn(desc, path, _countof(desc));
             if (strlen(path) >= _countof(desc))
-                strcpy(desc + _countof(desc) - 4, "..."); // jako ze je to orizly
-            ret->SetDescription(desc);                    // limit je MAX_PATH+1 (aspon na Windows 7, kde to ted testuju), delsi = jump list se vubec neukaze
-            ret->SetIconLocation("shell32.dll", -319);    // tato ikona existuje od XP dal
+                strcpy(desc + _countof(desc) - 4, "..."); // indicate the path was truncated
+            ret->SetDescription(desc);                    // MAX_PATH+1 is the limit (tested on Windows 7); longer text hides the Jump List entirely
+            ret->SetIconLocation("shell32.dll", -319);    // this icon exists since Windows XP
 
             // To set the link title, we require the property store of the link.
             IPropertyStore* pPS;

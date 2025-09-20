@@ -20,7 +20,7 @@
 //
 /*
 CCfgPageShellExt::CCfgPageShellExt()
-  : CCommonPropSheetPage(NULL, HLanguage, IDD_CFGPAGE_SHELLEXT /* jestli casem ozivime, pridat help: , IDD_CFGPAGE_SHELLEXT*/
+  : CCommonPropSheetPage(NULL, HLanguage, IDD_CFGPAGE_SHELLEXT /* if we bring this back later, add help: IDD_CFGPAGE_SHELLEXT*/
 /*, PSP_USETITLE, NULL)
 {
   EditLB = NULL;
@@ -61,7 +61,7 @@ CCfgPageShellExt::Validate(CTransferInfo &ti)
 {
   CALL_STACK_MESSAGE1("CCfgPageShellExt::Validate()");
 
-  // chteji-li mit itemy v submenu, musi byt submenu neprazdny retezec
+  // if they want items in a submenu, the submenu name must not be empty
   BOOL submenu;
   ti.CheckBox(IDC_SE_SUBMENU, submenu);
   if (submenu)
@@ -77,8 +77,8 @@ CCfgPageShellExt::Validate(CTransferInfo &ti)
     }
   }
 
-  // zkontroluju vsechny itemy
-  // kazda musi mit vybran alespon jeden z OF, MF, OD, MD
+  // check all items
+  // each must have at least one of OF, MF, OD, MD selected
 
   CShellExtConfigItem *item = NULL;
   int count = SECGetCount();
@@ -214,9 +214,9 @@ CCfgPageShellExt::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_DESTROY:
     {
-      // provedu uklidove prace
+      // perform cleanup tasks
       SECDeleteAllItems();
-      ShellExtConfigVersion = 0; // priste znovu nahrajeme obsah z registry
+      ShellExtConfigVersion = 0; // next time we will reload the contents from the registry
       break;
     }
 
@@ -288,7 +288,7 @@ CCfgPageShellExt::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
               int index;
               EditLB->GetCurSel(index);
               SECSwapItems(index, index + (dispInfo->Up ? -1 : 1));
-              SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE);  // povolim prohozeni
+              SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE);  // allow moving
               return TRUE;
             }
 
@@ -297,7 +297,7 @@ CCfgPageShellExt::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
               int index;
               EditLB->GetCurSel(index);
               SECDeleteItem(index);
-              SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE);  // povolim smazani
+              SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE);  // allow deletion
               return TRUE;
             }
 

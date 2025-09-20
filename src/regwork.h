@@ -3,7 +3,7 @@
 
 #pragma once
 
-// funkce pro pohodlnou praci s Registry + zadne hlasky o LOAD a SAVE konfigurace pri chybach
+// helper functions for registry access that don't display LOAD or SAVE warnings on errors
 BOOL OpenKeyAux(HWND parent, HKEY hKey, const char* name, HKEY& openedKey, BOOL quiet = TRUE);
 BOOL CreateKeyAux(HWND parent, HKEY hKey, const char* name, HKEY& createdKey, BOOL quiet = TRUE);
 BOOL GetValueAux(HWND parent, HKEY hKey, const char* name, DWORD type, void* buffer,
@@ -14,13 +14,13 @@ BOOL DeleteValueAux(HKEY hKey, const char* name);
 BOOL ClearKeyAux(HKEY key);
 void CloseKeyAux(HKEY hKey);
 BOOL DeleteKeyAux(HKEY hKey, const char* name);
-// neprovede kontrolu typu, takze nacte REG_DWORD stejne jako 4-byte REG_BINARY
+// does not check the type, so REG_DWORD will be loaded the same as 4-byte REG_BINARY
 BOOL GetValueDontCheckTypeAux(HKEY hKey, const char* name, void* buffer, DWORD bufferSize);
 
 enum CRegistryWorkType
 {
     rwtNone,
-    rwtStopWorker, // servisni prace: ukonceni threadu
+    rwtStopWorker, // maintenance task: terminate the thread
     rwtClearKey,
     rwtCreateKey,
     rwtOpenKey,
@@ -48,13 +48,13 @@ protected:
         void ResetT() { T = NULL; }
     };
 
-    HANDLE Thread;           // thread registry-workera
-    DWORD OwnerTID;          // TID threadu, ktery spustil worker thread (nikdo jiny ho nemuze ukoncit)
-    BOOL InUse;              // TRUE = jiz nejakou praci provadi, dalsi prace se spusti bez threadu (resi rekurzi, pouziti z vice threadu se odmita, viz OwnerTID)
-    int StopWorkerSkipCount; // kolik volani StopThread() v threadu OwnerTID ignorovat (pocet rekurzivnich volani StartThread())
+    HANDLE Thread;           // registry worker thread handle
+    DWORD OwnerTID;          // TID of the thread that started the worker thread (no one else may terminate it)
+    BOOL InUse;              // TRUE = already performing some work, further work runs without the thread (handles recursion; usage from other threads is refused, see OwnerTID)
+    int StopWorkerSkipCount; // how many StopThread() calls in OwnerTID thread to ignore (number of recursive StartThread() calls)
 
-    HANDLE WorkReady; // signaled: thread ma pripravena data ke zpracovani (hlavni thread ceka na dokonceni + provadi message-loopu)
-    HANDLE WorkDone;  // signaled: thread dokoncil praci (hlavni thread muze pokracovat)
+    HANDLE WorkReady; // signaled: the thread has data ready to process (main thread waits for completion and runs the message loop)
+    HANDLE WorkDone;  // signaled: the thread finished the work (main thread may continue)
 
     CRegistryWorkType WorkType;
     BOOL LastWorkSuccess;
@@ -73,55 +73,55 @@ public:
     CRegistryWorkerThread();
     ~CRegistryWorkerThread();
 
-    // start threadu registry-workera, vraci uspech
+    // starts the registry worker thread; returns success
     BOOL StartThread();
 
-    // ukonceni threadu registry-workera
+    // terminates the registry worker thread
     void StopThread();
 
-    // vycisti klic 'key' od vsech podklicu a hodnot, vraci uspech
+    // clears key 'key' of all subkeys and values; returns success
     BOOL ClearKey(HKEY key);
 
-    // vytvori nebo otevre existujici podklic 'name' klice 'key', vraci 'createdKey' a uspech;
-    // ziskany klic ('createdKey') je nutne zavrit volanim CloseKey
+    // creates or opens existing subkey 'name' of 'key', returns 'createdKey' and success;
+    // the returned key ('createdKey') must be closed using CloseKey
     BOOL CreateKey(HKEY key, const char* name, HKEY& createdKey);
 
-    // otevre existujici podklic 'name' klice 'key', vraci 'openedKey' a uspech
-    // ziskany klic ('openedKey') je nutne zavrit volanim CloseKey
+    // opens an existing subkey 'name' of 'key', returns 'openedKey' and success
+    // the returned key ('openedKey') must be closed with CloseKey
     BOOL OpenKey(HKEY key, const char* name, HKEY& openedKey);
 
-    // zavre klic otevreny pres OpenKey nebo CreateKey
+    // closes a key opened via OpenKey or CreateKey
     void CloseKey(HKEY key);
 
-    // smaze podklic 'name' klice 'key', vraci uspech
+    // deletes subkey 'name' of 'key'; returns success
     BOOL DeleteKey(HKEY key, const char* name);
 
-    // nacte hodnotu 'name'+'type'+'buffer'+'bufferSize' z klice 'key', vraci uspech
+    // loads value 'name' of type 'type' into 'buffer' of size 'bufferSize' from key 'key'; returns success
     BOOL GetValue(HKEY key, const char* name, DWORD type, void* buffer, DWORD bufferSize);
 
-    // nacte hodnotu 'name'+'type1 || type2' do 'returnedType'+'buffer'+'bufferSize' z klice 'key', vraci uspech
+    // loads value 'name' with 'type1 || type2' into 'returnedType' and 'buffer' of size 'bufferSize' from key 'key'; returns success
     BOOL GetValue2(HKEY hKey, const char* name, DWORD type1, DWORD type2, DWORD* returnedType, void* buffer, DWORD bufferSize);
 
-    // ulozi hodnotu 'name'+'type'+'data'+'dataSize' do klice 'key', pro retezce je mozne
-    // zadat 'dataSize' == -1 -> vypocet delky retezce pomoci funkce strlen,
-    // vraci uspech
+    // stores value 'name' of type 'type' and data 'data' (size 'dataSize') into key 'key';
+    // for strings you can pass 'dataSize' == -1 to compute the length using strlen,
+    // returns success
     BOOL SetValue(HKEY key, const char* name, DWORD type, const void* data, DWORD dataSize);
 
-    // smaze hodnotu 'name' klice 'key', vraci uspech
+    // deletes the value 'name' from key 'key'; returns success
     BOOL DeleteValue(HKEY key, const char* name);
 
-    // vytahne do 'bufferSize' protrebnou velikost pro hodnotu 'name'+'type' z klice 'key', vraci uspech
+    // retrieves into 'bufferSize' the required size for value 'name' of type 'type' in key 'key'; returns success
     BOOL GetSize(HKEY key, const char* name, DWORD type, DWORD& bufferSize);
 
 protected:
-    // ceka na dokonceni prace + provadi message-loopu
+    // waits for the work to finish while pumping the message loop
     void WaitForWorkDoneWithMessageLoop();
 
-    // telo threadu - zde se odehrava vsechna prace
+    // thread body where all work is performed
     unsigned Body();
 
-    static DWORD WINAPI ThreadBody(void* param); // pomocna funkce pro telo threadu
-    static unsigned ThreadBodyFEH(void* param);  // pomocna funkce pro telo threadu
+    static DWORD WINAPI ThreadBody(void* param); // helper for thread body
+    static unsigned ThreadBodyFEH(void* param);  // helper for thread body (FEH variant)
 };
 
 extern CRegistryWorkerThread RegistryWorkerThread;
