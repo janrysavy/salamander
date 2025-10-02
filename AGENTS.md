@@ -11,3 +11,6 @@ This repository includes guidelines for translating code comments. These rules s
 - Preserve paths containing slashes or backslashes exactly as they appear.
 - Maintain consistency of translated terms throughout the repository.
 - Use the adjacent code for context to produce accurate translations.
+- If the volume of comments is too big, just translate what you can.
+- Preserve all quotation marks or apostrophes used to denote parts of strings.
+- Keep dashes and other similar formating characters.
