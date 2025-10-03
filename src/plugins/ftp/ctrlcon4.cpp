@@ -39,27 +39,27 @@ BOOL CControlConnectionSocket::SetCurrentTransferMode(HWND parent, BOOL asciiMod
         HANDLES(LeaveCriticalSection(&SocketCritSect));
         leaveSect = FALSE;
 
-        // zmenime prenosovy rezim na serveru
-        PrepareFTPCommand(cmdBuf, 50, logBuf, 50, ftpcmdSetTransferMode, NULL, asciiMode); // nemuze selhat
+        // change the transfer mode on the server
+        PrepareFTPCommand(cmdBuf, 50, logBuf, 50, ftpcmdSetTransferMode, NULL, asciiMode); // cannot fail
         int ftpReplyCode;
         if (SendFTPCommand(parent, cmdBuf, logBuf, NULL, GetWaitTime(WAITWND_COMOPER), NULL,
                            &ftpReplyCode, ftpReplyBuf, ftpReplyBufSize, FALSE, FALSE, TRUE,
                            canRetry, retryMsg, retryMsgBufSize, NULL))
         {
-            if (FTP_DIGIT_1(ftpReplyCode) == FTP_D1_SUCCESS) // vraci se uspech (melo by byt 200)
+            if (FTP_DIGIT_1(ftpReplyCode) == FTP_D1_SUCCESS) // success returned (should be 200)
             {
                 HANDLES(EnterCriticalSection(&SocketCritSect));
                 leaveSect = TRUE;
-                CurrentTransferMode = (asciiMode ? ctrmASCII : ctrmBinary); // prenosovy rezim byl zmenen
+                CurrentTransferMode = (asciiMode ? ctrmASCII : ctrmBinary); // transfer mode changed
             }
             else
-                CurrentTransferMode = ctrmUnknown; // neznama chyba, nemusi vubec vadit, ale vratime chybu, at to posoudi volajici
+                CurrentTransferMode = ctrmUnknown; // unknown error; may not matter, but return failure so the caller can decide
         }
         else
-            ret = FALSE; // chyba -> zavrena connectiona
+            ret = FALSE; // error -> connection closed
     }
 
-    if (leaveSect) // zaroven uz je uspesne nastaveny pozadovany prenosovy rezim
+    if (leaveSect) // the requested transfer mode has already been set successfully
     {
         if (success != NULL)
             *success = TRUE;
@@ -119,8 +119,8 @@ void CSendCmdUserIfaceForListAndDownload::AfterWrite(BOOL aborting, DWORD showTi
 
 BOOL CSendCmdUserIfaceForListAndDownload::HandleESC(HWND parent, BOOL isSend, BOOL allowCmdAbort)
 {
-    BOOL offerAbort = isSend && allowCmdAbort ||           // pokud je abort mozny a jeste jsme ho neprovedli
-                      DataConnection->IsTransfering(NULL); // pokud neprobiha prenos dat, neumime abort (jen terminate "control connection")
+    BOOL offerAbort = isSend && allowCmdAbort ||           // abort is still available and we have not used it yet
+                      DataConnection->IsTransfering(NULL); // without an active data transfer we cannot abort (only terminate the "control connection")
 
     WaitWnd.Show(FALSE);
     BOOL esc = SalamanderGeneral->SalMessageBox(parent,
@@ -134,21 +134,21 @@ BOOL CSendCmdUserIfaceForListAndDownload::HandleESC(HWND parent, BOOL isSend, BO
             AlreadyAborted = TRUE;
         if (!AlreadyAborted)
         {
-            if (DataConnection->IsTransfering(NULL) ||  // jen tak pro formu, treba uz je zavrena connectiona a zaroven
-                DataConnection->IsFlushingDataToDisk()) // uz neni co flushnout, at nepiseme do logu bludy moc casto (stejne muze nastat, kaslem na to)
+            if (DataConnection->IsTransfering(NULL) ||  // handle a connection that already closed while
+                DataConnection->IsFlushingDataToDisk()) // nothing remains to flush; avoid spamming misleading log entries (still possible, that's OK)
             {
-                DataConnection->CancelConnectionAndFlushing(); // zavreme "data connection", system se pokusi o "graceful" shutdown (nedozvime se o vysledku)
+                DataConnection->CancelConnectionAndFlushing(); // close the "data connection"; the system attempts a graceful shutdown (outcome unknown)
                 Logs.LogMessage(LogUID, LoadStr(IDS_LOGMSGDATACONTERMINATED), -1, TRUE);
             }
             AlreadyAborted = TRUE;
             if (!allowCmdAbort)
-                esc = FALSE; // to jeste neni ESC pro listovani
+                esc = FALSE; // not yet ESC for listing
         }
     }
     else
-        SalamanderGeneral->WaitForESCRelease(); // opatreni, aby se neprerusovala dalsi akce po kazdem ESC v predeslem messageboxu
+        SalamanderGeneral->WaitForESCRelease(); // ensure the next action is not interrupted by the previous ESC press
     if (!esc)
-        WaitWnd.Show(TRUE); // nic se nestalo, pokracujeme v zobrazeni wait-okenka (behem abortu se zobrazi jiny text v okenku)
+        WaitWnd.Show(TRUE); // nothing happened; continue showing the wait window (it displays different text during abort)
     return esc;
 }
 
@@ -163,16 +163,16 @@ BOOL CSendCmdUserIfaceForListAndDownload::IsTimeout(DWORD* start, DWORD serverTi
     BOOL trFinished;
     BOOL ret = FALSE;
     if (DataConnection->IsTransfering(&trFinished))
-        *start = GetTickCount(); // cekame na data, takze to neni timeout
+        *start = GetTickCount(); // waiting for data, so this is not a timeout
     else
     {
         if (trFinished)
         {
             *start = DataConnection->GetSocketCloseTime();
-            ret = (GetTickCount() - *start) >= serverTimeout; // timeout se meri od zavreni connectiony (okamzik odkdy muze server reagovat - take se dozvi o zavreni connectiony)
+            ret = (GetTickCount() - *start) >= serverTimeout; // measure timeout from connection close (moment when the server can react; it also learns about the close)
         }
         else
-            ret = TRUE; // spojeni se jeste neotevrelo -> timeoutneme
+            ret = TRUE; // the connection has not opened yet -> treat as timeout
     }
     if (ret)
     {
@@ -181,7 +181,7 @@ BOOL CSendCmdUserIfaceForListAndDownload::IsTimeout(DWORD* start, DWORD serverTi
         {
             if (errBufSize > 0)
                 _snprintf_s(errBuf, errBufSize, _TRUNCATE, LoadStr(IDS_LOGMSGDATCONERROR), errText);
-            *errorTextID = -1; // popis je primo v 'errBuf'
+            *errorTextID = -1; // description stored directly in 'errBuf'
         }
         else
             *errorTextID = ForDownload ? IDS_LISTWNDDOWNLFILETIMEOUT : IDS_LISTCMDTIMEOUT;
@@ -201,7 +201,7 @@ void CSendCmdUserIfaceForListAndDownload::MaybeSuccessReplyReceived(const char* 
     CQuadWord size;
     if (FTPGetDataSizeInfoFromSrvReply(size, reply, replySize))
     {
-        // mame celkovou velikost listingu - 'size'
+        // we have the total listing size - 'size'
         DataConnection->SetDataTotalSize(size);
     }
 }
@@ -210,15 +210,15 @@ BOOL CSendCmdUserIfaceForListAndDownload::CanFinishSending(int replyCode, BOOL* 
 {
     BOOL trFinished;
     BOOL ret = DataConnection->IsTransfering(&trFinished);
-    if (!ret && !trFinished && DataConnection->IsConnected()) // zatim nebylo navazane spojeni a socket je otevreny
+    if (!ret && !trFinished && DataConnection->IsConnected()) // no connection established yet and the socket is open
     {
         if (FTP_DIGIT_1(replyCode) == FTP_D1_SUCCESS)
         {
-            *useTimeout = TRUE; // nebudeme zavirat socket, bypass bugy warftpd: umi vratit "success" jeste pred acceptnutim socketu data-connectiony (pred zahajenim data-transferu) - vypis chyby v pripade, ze v teto situaci dojde k timeoutu (warftpd neprovede data-transfer) neresime, list&view nejsou az tak dulezite a je mala sance, ze k tomu kdy dojde
-            ret = TRUE;         // simulujeme, ze se zrovna prenasi data
+            *useTimeout = TRUE; // keep the socket open; bypass WarFTPD bug returning "success" before accepting the data connection (before data transfer starts) - ignore timeout error in this scenario (WarFTPD never transfers data); list & view are less critical and this situation is unlikely
+            ret = TRUE;         // simulate active data transfer
         }
         else
-            DataConnection->CloseSocketEx(NULL); // zavru socket (jen se ceka na spojeni), server zrejme hlasi chybu prikazu (listovani)
+            DataConnection->CloseSocketEx(NULL); // close socket (waiting for connection only); server likely reported a command error (listing)
     }
     if (!ret && ForDownload)
     {
@@ -226,17 +226,17 @@ BOOL CSendCmdUserIfaceForListAndDownload::CanFinishSending(int replyCode, BOOL* 
         ret = !DataConnection->AreAllDataFlushed(FALSE);
         SocketsThread->UnlockSocketsThread();
         if (!ret)
-            DataConnection->CloseTgtFile(); // uspesne zavreni souboru po dokonceni flushe dat
+            DataConnection->CloseTgtFile(); // close file successfully after flushing data
     }
-    return !ret; // bud nedoslo ke spojeni nebo uz je zavrene
+    return !ret; // either no connection happened or it is already closed
 }
 
 void CSendCmdUserIfaceForListAndDownload::BeforeWaitingForFinish(int replyCode, BOOL* useTimeout)
 {
-    if (FTP_DIGIT_1(replyCode) != FTP_D1_SUCCESS) // LIST nevraci uspech - nemusi vubec zavrit
-    {                                             // data connection (napr. WarFTPD) - pockame na zbyla data, ovsem radsi s timeoutem
+    if (FTP_DIGIT_1(replyCode) != FTP_D1_SUCCESS) // LIST did not return success - it might not close
+    {                                             // the data connection at all (e.g. WarFTPD) - wait for remaining data, but use a timeout
         *useTimeout = TRUE;
-        //    DataConnection->CloseSocketEx(NULL);   // aby bylo co ukazat v panelu na prikaz Show Raw Listing, musime dotahnout zbyla data
+        //    DataConnection->CloseSocketEx(NULL);   // to show something in the panel for Show Raw Listing, we must retrieve the remaining data
     }
 }
 
@@ -249,12 +249,12 @@ void CSendCmdUserIfaceForListAndDownload::HandleDataConTimeout(DWORD* start)
     {
         BOOL trFinished;
         if (!DataConnection->IsTransfering(&trFinished) && !trFinished &&
-            DataConnection->IsConnected()) // zatim nebylo navazane spojeni a socket je otevreny
+            DataConnection->IsConnected()) // no connection established yet and the socket is open
         {
             Logs.LogMessage(LogUID, LoadStr(IDS_LOGMSGDATACONNOTOPENED), -1, TRUE);
         }
         DatConCancelled = TRUE;
-        DataConnection->CancelConnectionAndFlushing(); // ukoncime cekani na data, uz cekame prilis dlouho (nastal timeout)
+        DataConnection->CancelConnectionAndFlushing(); // stop waiting for data; timeout elapsed
     }
 }
 
@@ -267,18 +267,18 @@ void CSendCmdUserIfaceForListAndDownload::HandleESCWhenWaitingForFinish(HWND par
                                                 MB_YESNO | MSGBOXEX_ESCAPEENABLED | MB_ICONQUESTION) == IDYES;
     if (esc)
     {
-        // WaitWnd.SetText(LoadStr(IDS_LISTWNDABORTINGCOMMAND)); // zbytecne, okno se uz neukaze
-        // user vymysli odpoved na abort a behem te doby muze data connection skoncit (proto je
-        // v hlasce "listing muze byt nekompletni") - potom ma smysl abort ignorovat
+        // WaitWnd.SetText(LoadStr(IDS_LISTWNDABORTINGCOMMAND)); // unnecessary; the window will not be shown again
+        // while the user decides how to respond to the abort prompt, the data connection may finish (hence
+        // the "listing may be incomplete" warning); in that case ignoring the abort makes sense
         if (DataConnection->IsTransfering(NULL) || DataConnection->IsFlushingDataToDisk())
         {
-            DataConnection->CancelConnectionAndFlushing(); // zavreme "data connection", system se pokusi o "graceful" shutdown (nedozvime se o vysledku)
+            DataConnection->CancelConnectionAndFlushing(); // close the "data connection"; the system attempts a graceful shutdown (outcome unknown)
             Logs.LogMessage(LogUID, LoadStr(IDS_LOGMSGDATACONTERMINATED), -1, TRUE);
             AlreadyAborted = TRUE;
         }
     }
     else
-        SalamanderGeneral->WaitForESCRelease(); // opatreni, aby se neprerusovala dalsi akce po kazdem ESC v predeslem messageboxu
+        SalamanderGeneral->WaitForESCRelease(); // ensure the next action is not interrupted by the previous ESC press
     if (!esc)
         WaitWnd.Show(TRUE);
 }
@@ -339,7 +339,7 @@ BOOL CControlConnectionSocket::ListWorkingPath(HWND parent, const char* path, ch
     lstrcpyn(listCmd, UseLIST_aCommand ? LIST_a_CMD_TEXT : (ListCommand != NULL && *ListCommand != 0 ? ListCommand : LIST_CMD_TEXT),
              FTPCOMMAND_MAX_SIZE);
     BOOL usePassiveModeAux = UsePassiveMode;
-    int logUID = LogUID; // UID logu teto connectiony
+    int logUID = LogUID; // log UID of this connection
     int useListingsCacheAux = UseListingsCache;
     CFTPProxyForDataCon* dataConProxyServer = ProxyServer == NULL ? NULL : ProxyServer->AllocProxyForDataCon(ServerIP, Host, HostIP, Port);
     BOOL dataConProxyServerOK = ProxyServer == NULL || dataConProxyServer != NULL;
@@ -354,17 +354,17 @@ BOOL CControlConnectionSocket::ListWorkingPath(HWND parent, const char* path, ch
     char retryMsgBuf[300];
     char hostTmp[HOST_MAX_SIZE];
 
-    // ziskame datum, kdy byl listing vytvoren (predpokladame, ze jej server nejdrive vytvori, pak az posle)
+    // obtain the date when the listing was created (assume the server generates it before sending)
     SYSTEMTIME st;
     GetLocalTime(&st);
     DWORD lstStTime = 0;
 
-    // alokujeme objekt pro "data connection"
+    // allocate an object for the "data connection"
     CDataConnectionSocket* dataConnection = dataConProxyServerOK ? new CDataConnectionSocket(FALSE, dataConProxyServer, EncryptDataConnection, pCertificate, CompressData, this) : NULL;
     if (dataConnection == NULL || !dataConnection->IsGood())
     {
         if (dataConnection != NULL)
-            DeleteSocket(dataConnection); // bude se jen dealokovat
+            DeleteSocket(dataConnection); // only deallocate it
         else
         {
             if (dataConProxyServer != NULL)
@@ -372,17 +372,17 @@ BOOL CControlConnectionSocket::ListWorkingPath(HWND parent, const char* path, ch
         }
         dataConnection = NULL;
         TRACE_E(LOW_MEMORY);
-        *fatalError = TRUE; // fatalni chyba
+        *fatalError = TRUE; // fatal error
     }
     else
     {
         while (1)
         {
             ReuseSSLSessionFailed = FALSE;
-            if (ok && usePassiveModeAux) // pasivni rezim (PASV)
+            if (ok && usePassiveModeAux) // passive mode (PASV)
             {
                 PrepareFTPCommand(cmdBuf, 50 + FTP_MAX_PATH, logBuf, 50 + FTP_MAX_PATH,
-                                  ftpcmdPassive, NULL); // nemuze selhat
+                                  ftpcmdPassive, NULL); // cannot fail
                 int ftpReplyCode;
                 if (SendFTPCommand(parent, cmdBuf, logBuf, NULL, GetWaitTime(WAITWND_COMOPER), NULL,
                                    &ftpReplyCode, replyBuf, 700, FALSE, FALSE, FALSE, &canRetry,
@@ -390,38 +390,38 @@ BOOL CControlConnectionSocket::ListWorkingPath(HWND parent, const char* path, ch
                 {
                     DWORD ip;
                     unsigned short port;
-                    if (FTP_DIGIT_1(ftpReplyCode) == FTP_D1_SUCCESS &&      // uspech (melo by byt 227)
-                        FTPGetIPAndPortFromReply(replyBuf, -1, &ip, &port)) // podarilo se ziskat IP+port
+                    if (FTP_DIGIT_1(ftpReplyCode) == FTP_D1_SUCCESS &&      // success (should be 227)
+                        FTPGetIPAndPortFromReply(replyBuf, -1, &ip, &port)) // managed to obtain IP+port
                     {
                         dataConnection->SetPassive(ip, port, logUID);
-                        dataConnection->PassiveConnect(NULL); // prvni pokus, vysledek nas nezajima (testuje se pozdeji)
+                        dataConnection->PassiveConnect(NULL); // first attempt; result does not matter (checked later)
                     }
-                    else // pasivni rezim neni podporovan
+                    else // passive mode not supported
                     {
                         HANDLES(EnterCriticalSection(&SocketCritSect));
-                        UsePassiveMode = usePassiveModeAux = FALSE; // zkusime to jeste v normalnim rezimu (PORT)
+                        UsePassiveMode = usePassiveModeAux = FALSE; // fall back to active mode (PORT)
                         HANDLES(LeaveCriticalSection(&SocketCritSect));
 
                         Logs.LogMessage(logUID, LoadStr(IDS_LOGMSGPASVNOTSUPPORTED), -1);
                     }
                 }
-                else // chyba -> zavrena connectiona
+                else // error -> connection closed
                 {
                     ok = FALSE;
                     if (canRetry)
-                        retryMsgAux = retryMsgBuf; // "retry" je povolen, jdeme na dalsi reconnect
+                        retryMsgAux = retryMsgBuf; // "retry" allowed; go for another reconnect
                     else
                     {
-                        *fatalError = TRUE; // fatalni chyba
+                        *fatalError = TRUE; // fatal error
                         break;
                     }
                 }
             }
 
-            if (ok && !usePassiveModeAux) // normalni rezim (PORT)
+            if (ok && !usePassiveModeAux) // active mode (PORT)
             {
                 DWORD localIP;
-                GetLocalIP(&localIP, NULL);   // snad ani nemuze vratit chybu
+                GetLocalIP(&localIP, NULL);   // should not fail
                 unsigned short localPort = 0; // listen on any port
                 dataConnection->SetActive(logUID);
                 if (OpenForListeningAndWaitForRes(parent, dataConnection, &localIP, &localPort, &canRetry,
@@ -429,53 +429,53 @@ BOOL CControlConnectionSocket::ListWorkingPath(HWND parent, const char* path, ch
                                                   errBuf, 900 + FTP_MAX_PATH))
                 {
                     PrepareFTPCommand(cmdBuf, 50 + FTP_MAX_PATH, logBuf, 50 + FTP_MAX_PATH,
-                                      ftpcmdSetPort, NULL, localIP, localPort); // nemuze selhat
+                                      ftpcmdSetPort, NULL, localIP, localPort); // cannot fail
                     int ftpReplyCode;
                     if (!SendFTPCommand(parent, cmdBuf, logBuf, NULL, GetWaitTime(WAITWND_COMOPER), NULL,
                                         &ftpReplyCode, replyBuf, 700, FALSE, FALSE, FALSE, &canRetry,
-                                        retryMsgBuf, 300, NULL)) // odpoved serveru ignorujeme, chyba se objevi dale (timeout pri listovani)
-                    {                                            // chyba -> zavrena connectiona
+                                        retryMsgBuf, 300, NULL)) // ignore server reply; error appears later (timeout during listing)
+                    {                                            // error -> connection closed
                         ok = FALSE;
                         if (canRetry)
-                            retryMsgAux = retryMsgBuf; // "retry" je povolen, jdeme na dalsi reconnect
+                            retryMsgAux = retryMsgBuf; // "retry" allowed; go for another reconnect
                         else
                         {
-                            *fatalError = TRUE; // fatalni chyba
+                            *fatalError = TRUE; // fatal error
                             break;
                         }
                     }
                 }
-                else // nepodarilo se otevrit "listen" socket pro prijem datoveho spojeni ze serveru ->
-                {    // zavrena connectiona (aby se dalo pouzit standardni Retry)
+                else // failed to open the listening socket for the incoming data connection ->
+                {    // close the control connection (to enable standard Retry)
                     ok = FALSE;
                     if (canRetry)
-                        retryMsgAux = retryMsgBuf; // "retry" je povolen, jdeme na dalsi reconnect
+                        retryMsgAux = retryMsgBuf; // "retry" allowed; go for another reconnect
                     else
                     {
-                        *fatalError = TRUE; // fatalni chyba
+                        *fatalError = TRUE; // fatal error
                         break;
                     }
                 }
             }
 
-            if (ok) // jsme-li jeste pripojeni, zmenime rezim prenosu na ASCII (uspesnost ignorujeme)
+            if (ok) // still connected: switch transfer mode to ASCII (ignore success)
             {
                 ok = SetCurrentTransferMode(parent, TRUE, NULL, NULL, 0, forceRefresh, &canRetry,
                                             retryMsgBuf, 300);
-                if (!ok) // chyba -> zavrena connectiona
+                if (!ok) // error -> connection closed
                 {
                     if (canRetry)
-                        retryMsgAux = retryMsgBuf; // "retry" je povolen, jdeme na dalsi reconnect
+                        retryMsgAux = retryMsgBuf; // "retry" allowed; go for another reconnect
                     else
                     {
-                        *fatalError = TRUE; // fatalni chyba
+                        *fatalError = TRUE; // fatal error
                         break;
                     }
                 }
             }
 
-            BOOL sslErrReconnect = FALSE;     // TRUE = reconnect kvuli chybam SSL
-            BOOL fastSSLErrReconnect = FALSE; // TRUE = jde o zmenu certifikatu serveru, zadouci je okamzity reconnect (bez 20 vterin cekani)
+            BOOL sslErrReconnect = FALSE;     // TRUE = reconnect due to SSL errors
+            BOOL fastSSLErrReconnect = FALSE; // TRUE = server certificate changed; prefer immediate reconnect (no 20-second wait)
             if (ok)
             {
                 int ftpReplyCode;
@@ -497,40 +497,39 @@ BOOL CControlConnectionSocket::ListWorkingPath(HWND parent, const char* path, ch
                 {
                     if (!userIface.GetDatConCancelled() && !userIface.WasAborted() && !userIface.HadError() &&
                         FTP_DIGIT_1(ftpReplyCode) != FTP_D1_SUCCESS &&
-                        FTP_DIGIT_2(ftpReplyCode) != FTP_D2_CONNECTION) // neni to jen chyba spojeni (sitova)
-                    {                                                   // server odmita listovat
+                        FTP_DIGIT_2(ftpReplyCode) != FTP_D2_CONNECTION) // not just a connection (network) error
+                    {                                                   // server refuses to list
                         BOOL skipMessage = FTPIsEmptyDirListErrReply(replyBuf);
                         if (!skipMessage)
                         {
                             _snprintf_s(errBuf, _TRUNCATE, LoadStr(IDS_LISTPATHERROR), path, replyBuf);
-                            // pokud da uzivatel IDNO, koncime - cestu nelze listovat -> nutna zmena cesty
+                            // if the user chooses IDNO we stop - the path cannot be listed -> requires path change
                             ret = SalamanderGeneral->SalMessageBox(parent, errBuf, LoadStr(IDS_FTPERRORTITLE),
                                                                    MB_YESNO | MSGBOXEX_ESCAPEENABLED |
                                                                        MB_ICONQUESTION | MB_DEFBUTTON2) == IDYES;
                             if (!ret)
-                                SalamanderGeneral->WaitForESCRelease(); // opatreni, aby se neprerusovala dalsi akce po kazdem ESC v predeslem messageboxu
+                                SalamanderGeneral->WaitForESCRelease(); // ensure the next action is not interrupted by the previous ESC press
 
-                            *pathListingIsBroken = TRUE; // aby se vedelo, ze vraceny listing neni OK (VxWorks: behem listovani umi vratit chybu "error reading entry: 16" + vratit "550 no files found or ...")
+                            *pathListingIsBroken = TRUE; // mark returned listing as invalid (VxWorks: during listing it can report "error reading entry: 16" plus "550 no files found or ...")
                         }
-                        // VMS vraci 550 u prazdneho adresare: nemuzeme cestu opustit + listing klidne
-                        // muzeme povazovat za OK (lze i cachovat - nebyl preruseny + server jiny listing
-                        // nejspis jen tak nevrati)
-                        // ret = FALSE;   // koncime - cestu nelze listovat -> nutna zmena cesty
+                        // VMS returns 550 for an empty directory: we cannot leave the path and can still
+                        // treat the listing as OK (can be cached - no interruption and the server likely will not return a different listing)
+                        // ret = FALSE;   // stop - the path cannot be listed -> requires path change
 
-                        break; // hlasime "uspesny listing" (umozni pracovat v prazdnem/nelistovatelnem adresari)
+                        break; // report "successful listing" (allows working in an empty/non-listable directory)
                     }
                     else
                     {
-                        if (userIface.WasAborted()) // uzivatel listing abortoval - koncime s chybou (nekompletnim listingem)
-                            ok = FALSE;             // hlasku "list can be incomplete" vypisovat nebudeme, user byl varovan pri abortu
-                        else
+                    if (userIface.WasAborted()) // user aborted the listing - finish with error (incomplete listing)
+                        ok = FALSE;             // no need to show "list can be incomplete"; user was warned during abort
+                    else
+                    {
+                        if (FTP_DIGIT_1(ftpReplyCode) != FTP_D1_SUCCESS &&
+                                FTP_DIGIT_2(ftpReplyCode) == FTP_D2_CONNECTION || // network error only
+                            userIface.HadError() ||                               // data connection reported a system error
+                            userIface.GetDatConCancelled())                       // data connection cancelled (never opened or closed after server error in LIST reply)
                         {
-                            if (FTP_DIGIT_1(ftpReplyCode) != FTP_D1_SUCCESS &&
-                                    FTP_DIGIT_2(ftpReplyCode) == FTP_D2_CONNECTION || // jde jen o sitovou chybu
-                                userIface.HadError() ||                               // datova connectiona zaznamenala chybu hlasenou systemem
-                                userIface.GetDatConCancelled())                       // datova connectiona byla prerusena (bud nedoslo k otevreni nebo zavreni po chybe hlasene serverem v odpovedi na LIST)
-                            {
-                                ok = FALSE;
+                            ok = FALSE;
 
                                 DWORD err;
                                 BOOL lowMem, noDataTrTimeout;
@@ -542,16 +541,16 @@ BOOL CControlConnectionSocket::ListWorkingPath(HWND parent, const char* path, ch
                                                     FTP_DIGIT_1(ftpReplyCode) == FTP_D1_ERROR);
                                 if (sslErrorOccured == SSLCONERR_UNVERIFIEDCERT || sslErrorOccured == SSLCONERR_CANRETRY ||
                                     sslReuseErr)
-                                {                                                                       // potrebujeme provest reconnect
-                                    CloseControlConnection(parent);                                     // zavreme soucasnou control connectionu
-                                    lstrcpyn(retryMsgBuf, LoadStr(IDS_ERRDATACONSSLCONNECTERROR), 300); // nastavime text chyby pro reconnect wait okenko
+                                {                                                                       // need to reconnect
+                                    CloseControlConnection(parent);                                     // close current control connection
+                                    lstrcpyn(retryMsgBuf, LoadStr(IDS_ERRDATACONSSLCONNECTERROR), 300); // set error text for reconnect wait window
                                     retryMsgAux = retryMsgBuf;
                                     sslErrReconnect = TRUE;
                                     fastSSLErrReconnect = sslErrorOccured == SSLCONERR_UNVERIFIEDCERT || sslReuseErr;
                                 }
                                 else
                                 {
-                                    // vypiseme hlasku "list can be incomplete", user jeste nebyl varovan
+                                    // show "list can be incomplete" message; user has not been warned yet
                                     lstrcpyn(errBuf, LoadStr(IDS_UNABLETOREADLIST), 900 + FTP_MAX_PATH);
                                     int len = (int)strlen(errBuf);
                                     BOOL systErr = FALSE;
@@ -561,7 +560,7 @@ BOOL CControlConnectionSocket::ListWorkingPath(HWND parent, const char* path, ch
                                     if (FTP_DIGIT_1(ftpReplyCode) == FTP_D1_SUCCESS ||
                                         FTP_DIGIT_2(ftpReplyCode) != FTP_D2_CONNECTION ||
                                         noDataTrTimeout || sslErrorOccured != SSLCONERR_NOERROR)
-                                    { // pokud nemame popis sitove chyby ze serveru, spokojime se se systemovym popisem
+                                    { // if the server lacks a network error description, rely on system description
                                         systErr = TRUE;
                                         if (!trModeHint)
                                             trModeHint = err == WSAETIMEDOUT || sslErrorOccured != SSLCONERR_NOERROR;
@@ -601,15 +600,15 @@ BOOL CControlConnectionSocket::ListWorkingPath(HWND parent, const char* path, ch
                             }
                         }
                         if (!sslErrReconnect)
-                            break; // abortovano nebo totalni uspech (vylistovano vse - 'ok'==TRUE)
+                            break; // aborted or total success (everything listed - 'ok'==TRUE)
                     }
                 }
-                else // zavrena connectiona
+                else // connection closed
                 {
-                    if (userIface.WasAborted()) // uzivatel listing abortoval - cimz se terminovala connectiona (dela napr. sunsolve.sun.com (Sun Unix) nebo ftp.chg.ru) - koncime s chybou (nekompletnim listingem)
+                    if (userIface.WasAborted()) // user aborted listing, terminating the connection (e.g. sunsolve.sun.com or ftp.chg.ru) - finish with error (incomplete listing)
                     {
-                        ok = FALSE;   // hlasku "list can be incomplete" vypisovat nebudeme, user byl varovan pri abortu
-                        if (canRetry) // prevezmeme hlaseni do messageboxu, ktery oznami preruseni spojeni
+                        ok = FALSE;   // no need to show "list can be incomplete"; user was warned during abort
+                        if (canRetry) // reuse the message in the dialog that announces the disconnected link
                         {
                             HANDLES(EnterCriticalSection(&SocketCritSect));
                             if (ConnectionLostMsg != NULL)
@@ -617,25 +616,25 @@ BOOL CControlConnectionSocket::ListWorkingPath(HWND parent, const char* path, ch
                             ConnectionLostMsg = SalamanderGeneral->DupStr(retryMsgBuf);
                             HANDLES(LeaveCriticalSection(&SocketCritSect));
                         }
-                        break; // abortovano
+                        break; // aborted
                     }
 
-                    // chyba -> 'ok' zustava FALSE, jdeme na dalsi reconnect
+                    // error -> 'ok' stays FALSE; attempt another reconnect
                     ok = FALSE;
                     if (canRetry)
-                        retryMsgAux = retryMsgBuf; // "retry" je povolen
+                        retryMsgAux = retryMsgBuf; // "retry" allowed
                     else
                     {
-                        *fatalError = TRUE; // fatalni chyba
+                        *fatalError = TRUE; // fatal error
                         break;
                     }
                 }
             }
 
-            if (!ok) // spojeni bylo preruseno, optame se na reconnect
+            if (!ok) // connection interrupted; ask about reconnect
             {
-                if (dataConnection->IsConnected())       // zavreme starou "data connection" (pro pripad, ze nedosel FD_CONNECT)
-                    dataConnection->CloseSocketEx(NULL); // shutdown (nedozvime se o vysledku)
+                if (dataConnection->IsConnected())       // close old "data connection" (if FD_CONNECT never arrived)
+                    dataConnection->CloseSocketEx(NULL); // shutdown (result unknown)
 
                 SetStartTime();
                 BOOL startRet = StartControlConnection(parent, userBuf, userBufSize, TRUE, NULL, 0,
@@ -644,12 +643,12 @@ BOOL CControlConnectionSocket::ListWorkingPath(HWND parent, const char* path, ch
                 retryMsgAux = NULL;
                 if (totalAttemptNum != NULL)
                     *totalAttemptNum = attemptNum;
-                if (startRet) // spojeni obnoveno
+                if (startRet) // connection restored
                 {
-                    if (pCertificate) // certifikat control-connectiony se mohl zmenit, predame pripadny novy do data-connectiony
+                    if (pCertificate) // control-connection certificate might have changed; pass new one to data connection
                         dataConnection->SetCertificate(pCertificate);
 
-                    // zmenime cestu na 'path' (cesta, kterou listujeme)
+                    // change path to 'path' (the path we are listing)
                     PrepareFTPCommand(cmdBuf, 50 + FTP_MAX_PATH, logBuf, 50 + FTP_MAX_PATH,
                                       ftpcmdChangeWorkingPath, NULL, path);
                     int ftpReplyCode;
@@ -658,57 +657,57 @@ BOOL CControlConnectionSocket::ListWorkingPath(HWND parent, const char* path, ch
                                        retryMsgBuf, 300, NULL))
                     {
                         BOOL pathError = TRUE;
-                        if (FTP_DIGIT_1(ftpReplyCode) == FTP_D1_SUCCESS) // je nadeje na uspech, jeste radsi cestu zkontrolujeme
+                        if (FTP_DIGIT_1(ftpReplyCode) == FTP_D1_SUCCESS) // success likely; double-check the path
                         {
                             if (GetCurrentWorkingPath(parent, cmdBuf, FTP_MAX_PATH, TRUE, &canRetry,
                                                       retryMsgBuf, 300))
                             {
-                                if (strcmp(cmdBuf, path) == 0) // mame pozadovany pracovni adresar na serveru
-                                                               // (predpoklad: server vraci stale stejny retezec pracovni cesty)
+                                if (strcmp(cmdBuf, path) == 0) // desired working directory on server confirmed
+                                                               // (assumption: server always returns the same working path string)
                                 {
                                     pathError = FALSE;
-                                    ok = TRUE; // uspesny reconnect, jdeme znovu listovat
+                                    ok = TRUE; // reconnect successful; list again
                                 }
                             }
                             else
                             {
-                                pathError = FALSE; // chyba -> zavrena connectiona - 'ok' zustava FALSE, jdeme na dalsi reconnect
+                                pathError = FALSE; // error -> connection closed; 'ok' stays FALSE, go for another reconnect
                                 if (canRetry)
-                                    retryMsgAux = retryMsgBuf; // "retry" je povolen
+                                    retryMsgAux = retryMsgBuf; // "retry" allowed
                                 else
                                 {
-                                    *fatalError = TRUE; // fatalni chyba
+                                    *fatalError = TRUE; // fatal error
                                     break;
                                 }
                             }
                         }
 
-                        if (pathError) // vypiseme chybu cesty a koncime
+                        if (pathError) // display path error and stop
                         {
                             _snprintf_s(errBuf, _TRUNCATE, LoadStr(IDS_CHANGEWORKPATHERROR), path, replyBuf);
                             SalamanderGeneral->SalMessageBox(parent, errBuf, LoadStr(IDS_FTPERRORTITLE),
                                                              MB_OK | MB_ICONEXCLAMATION);
-                            ret = FALSE; // koncime - cestu nelze listovat -> nutna zmena cesty
+                            ret = FALSE; // stop - path cannot be listed -> requires path change
 
-                            // pokud jsme nenasli zadnou pristupnou cestu, na tomto miste provedeme disconnect,
-                            // pri connectu je problem osetreny (v CControlConnectionSocket::ChangeWorkingPath()),
-                            // zde uz to neni na me nervy ;-)
+                            // if no accessible path was found, disconnect here;
+                            // the connect sequence handles the issue (see CControlConnectionSocket::ChangeWorkingPath());
+                            // duplicating that logic here is unnecessary
 
                             break;
                         }
                     }
-                    else // chyba -> zavrena connectiona - 'ok' zustava FALSE, jdeme na dalsi reconnect
+                    else // error -> connection closed; 'ok' stays FALSE, try another reconnect
                     {
                         if (canRetry)
-                            retryMsgAux = retryMsgBuf; // "retry" je povolen
+                            retryMsgAux = retryMsgBuf; // "retry" allowed
                         else
                         {
-                            *fatalError = TRUE; // fatalni chyba
+                            *fatalError = TRUE; // fatal error
                             break;
                         }
                     }
                 }
-                else // reconnect se nepodaril - koncime s chybou (nekompletnim listingem)
+                else // reconnect failed - finish with error (incomplete listing)
                 {
                     SalamanderGeneral->SalMessageBox(parent, LoadStr(IDS_UNABLETOREADLIST),
                                                      LoadStr(IDS_FTPERRORTITLE),
@@ -719,15 +718,15 @@ BOOL CControlConnectionSocket::ListWorkingPath(HWND parent, const char* path, ch
         }
     }
 
-    if (ret && !*fatalError) // neni chyba cesty ani fatalni chyba
+    if (ret && !*fatalError) // no path error or fatal error
     {
-        if (dataConnection->IsConnected()) // chyba: "data connection" uz ma byt davno zavrena
+        if (dataConnection->IsConnected()) // error: "data connection" should already be closed
         {
             TRACE_E("Unexpected situation in CControlConnectionSocket::ListWorkingPath(): data connection has left opened!");
-            dataConnection->CloseSocketEx(NULL); // shutdown (nedozvime se o vysledku)
+            dataConnection->CloseSocketEx(NULL); // shutdown (result unknown)
         }
 
-        // prevezmeme data z "data connection"
+        // take data from the "data connection"
         BOOL decomprErr;
         *allocatedListing = dataConnection->GiveData(allocatedListingLen, &decomprErr);
 
@@ -735,7 +734,7 @@ BOOL CControlConnectionSocket::ListWorkingPath(HWND parent, const char* path, ch
         {
             ok = FALSE;
 
-            // vypiseme hlasku "list can be incomplete", user jeste nebyl varovan
+            // show "list can be incomplete" message; user has not been warned yet
             lstrcpyn(errBuf, LoadStr(IDS_UNABLETOREADLIST), 900 + FTP_MAX_PATH);
             int len = (int)strlen(errBuf);
             _snprintf_s(errBuf + len, 900 + FTP_MAX_PATH - len, _TRUNCATE, LoadStr(IDS_UNABLETOREADLISTSUFFIX),
@@ -744,20 +743,20 @@ BOOL CControlConnectionSocket::ListWorkingPath(HWND parent, const char* path, ch
                                              MB_OK | MB_ICONEXCLAMATION);
         }
 
-        *pathListingIsIncomplete = !ok; // TRUE pri vypadku/preruseni/chybe spojeni
+        *pathListingIsIncomplete = !ok; // TRUE when the connection failed/interrupted/errored
         *pathListingMayBeOutdated = FALSE;
 
-        // ulozime datum, kdy byl listing vytvoren
+        // store the date the listing was created
         listingDate->Year = st.wYear;
         listingDate->Month = (BYTE)st.wMonth;
         listingDate->Day = (BYTE)st.wDay;
         *pathListingStartTime = lstStTime;
 
         char userTmp[USER_MAX_SIZE];
-        if (forceRefresh &&  // tvrdy refresh bereme jako projev neduvery k ceste, zahodime ji z cache vcetne
-            !dontClearCache) // vsech podcest (useListingsCacheAux ignorujeme, to na neduveru nema vliv)
-        {                    // vola se az kdyz mame nahradni listing (do te doby bude user jiste radsi
-                             // na neaktualnim listingu nez na zadnem)
+        if (forceRefresh &&  // hard refresh indicates distrust of the path; drop it from cache including
+            !dontClearCache) // all subpaths (ignore useListingsCacheAux; it does not affect the distrust)
+        {                    // called only when a replacement listing is available (until then the user prefers
+                             // an outdated listing over none)
             HANDLES(EnterCriticalSection(&SocketCritSect));
             lstrcpyn(hostTmp, Host, HOST_MAX_SIZE);
             unsigned short portTmp = Port;
@@ -768,10 +767,10 @@ BOOL CControlConnectionSocket::ListWorkingPath(HWND parent, const char* path, ch
             ListingCache.RefreshOnPath(hostTmp, portTmp, userTmp, pathType, path);
         }
 
-        if (ok) // mame kompletni listing
+        if (ok) // we have a complete listing
         {
             if (!*pathListingIsBroken && useListingsCacheAux && *allocatedListing != NULL)
-            { // user chce cache pouzivat -> pridame nove nacteny listing do cache
+            { // user wants to use cache -> add the newly loaded listing to cache
                 HANDLES(EnterCriticalSection(&SocketCritSect));
                 lstrcpyn(hostTmp, Host, HOST_MAX_SIZE);
                 unsigned short portTmp = Port;
@@ -786,28 +785,28 @@ BOOL CControlConnectionSocket::ListWorkingPath(HWND parent, const char* path, ch
                                                     *pathListingStartTime);
             }
         }
-        else // vypadek/preruseni/chyba spojeni = vratime aspon co mame (user uz vi, ze "list can be incomplete")
+        else // failure/interruption/connection error = return whatever we have (user already knows "list can be incomplete")
         {
             if (*allocatedListing != NULL)
-            { // v bufferu neni kompletni listing -> zarizneme ho na poslednim konci radku (CRLF nebo LF), at se s nim lepe pracuje
+            { // buffer lacks a complete listing -> trim at last line ending (CRLF or LF) to make it easier to work with
                 char* start = *allocatedListing;
                 char* s = start + *allocatedListingLen;
                 while (s > start && *(s - 1) != '\n')
                     s--;
-                if (s < start + *allocatedListingLen) // je kam zapsat nulu terminujici retezec (jen pro snazsi debugging)
-                    *s = 0;                           // bud je to na zacatku bufferu nebo za poslednim LF
+                if (s < start + *allocatedListingLen) // there is room to write the terminating zero (for easier debugging)
+                    *s = 0;                           // either at buffer start or right after the last LF
                 *allocatedListingLen = (int)(s - start);
             }
         }
     }
-    if (dataConnection != NULL) // uvolnime a prip. i zavreme "data connection"
+    if (dataConnection != NULL) // release and possibly close the "data connection"
     {
-        if (dataConnection->IsConnected())       // zavreme "data connection", system se pokusi o "graceful"
-            dataConnection->CloseSocketEx(NULL); // shutdown (nedozvime se o vysledku)
+        if (dataConnection->IsConnected())       // close the "data connection"; the system attempts a graceful shutdown
+            dataConnection->CloseSocketEx(NULL); // (result unknown)
         DeleteSocket(dataConnection);
     }
     if (*fatalError)
-        ret = FALSE; // u fatalni chyby uspech vracet jiste nebudeme
+        ret = FALSE; // never return success when a fatal error occurred
     return ret;
 }
 
@@ -827,7 +826,7 @@ public:
     virtual BOOL GetWindowClosePressed() { return WaitWnd->GetWindowClosePressed(); }
     virtual HANDLE GetFinishedEvent() { return FinishedEvent; }
 
-    // ostatni metody se nevyuzivaji
+    // other methods are not used
     virtual void Init(HWND parent, const char* logCmd, const char* waitWndText) {}
     virtual void BeforeAborting() {}
     virtual void AfterWrite(BOOL aborting, DWORD showTime) {}
@@ -846,7 +845,7 @@ void CControlConnectionSocket::WaitForEndOfKeepAlive(HWND parent, int waitWndTim
 {
     CALL_STACK_MESSAGE2("CControlConnectionSocket::WaitForEndOfKeepAlive(, %d)", waitWndTime);
 
-    DWORD startTime = GetTickCount(); // cas zacatku operace
+    DWORD startTime = GetTickCount(); // operation start time
 
     HANDLES(EnterCriticalSection(&SocketCritSect));
 
@@ -859,25 +858,25 @@ void CControlConnectionSocket::WaitForEndOfKeepAlive(HWND parent, int waitWndTim
         TRACE_E("CControlConnectionSocket::WaitForEndOfKeepAlive(): Keep-Alive is disabled, but Mode == " << (int)KeepAliveMode);
 
     if (KeepAliveEnabled &&
-        (KeepAliveMode == kamProcessing ||               // provadi se keep-alive prikaz, musime cekat na dokonceni
-         KeepAliveMode == kamWaitingForEndOfProcessing)) // uz cekame na dokonceni (nemelo by nastat)
+        (KeepAliveMode == kamProcessing ||               // keep-alive command in progress; must wait for completion
+         KeepAliveMode == kamWaitingForEndOfProcessing)) // already waiting for completion (should not happen)
     {
         KeepAliveMode = kamWaitingForEndOfProcessing;
         HANDLE finishedEvent = KeepAliveFinishedEvent;
         int logUID = LogUID;
         HANDLES(LeaveCriticalSection(&SocketCritSect));
 
-        // ukazeme wait-okenko, ze cekame na konec keep-alive prikazu
+        // show wait window that we are waiting for keep-alive command completion
         CWaitWindow waitWnd(parent, TRUE);
         waitWnd.SetText(LoadStr(IDS_FINISHINGKEEPALIVECMD));
         DWORD start = GetTickCount();
         DWORD waitTime = start - startTime;
         waitWnd.Create(waitTime < (DWORD)waitWndTime ? waitWndTime - waitTime : 0);
 
-        // pockame na dokonceni nebo preruseni (ESC/timeout) keep-alive prikazu
+        // wait for completion or interruption (ESC/timeout) of the keep-alive command
         int serverTimeout = Config.GetServerRepliesTimeout() * 1000;
         if (serverTimeout < 1000)
-            serverTimeout = 1000; // aspon sekundu
+            serverTimeout = 1000; // at least one second
         CFinishingKeepAliveUserIface userIface(&waitWnd, finishedEvent);
         BOOL wait = TRUE;
         while (wait)
@@ -900,15 +899,15 @@ void CControlConnectionSocket::WaitForEndOfKeepAlive(HWND parent, int waitWndTim
                                                          MB_ICONQUESTION) == IDYES)
                 { // cancel
                     Logs.LogMessage(logUID, LoadStr(IDS_LOGMSGACTIONCANCELED), -1, TRUE);
-                    ReleaseKeepAlive(); // uvolnime keep-alive
-                    CloseSocket(NULL);  // zavreme spojeni
+                    ReleaseKeepAlive(); // release keep-alive
+                    CloseSocket(NULL);  // close connection
                     Logs.SetIsConnected(logUID, IsConnected());
-                    Logs.RefreshListOfLogsInLogsDlg(); // hlaseni "connection inactive"
+                    Logs.RefreshListOfLogsInLogsDlg(); // report "connection inactive"
                     wait = FALSE;
                 }
                 else
                 {
-                    SalamanderGeneral->WaitForESCRelease(); // opatreni, aby se neprerusovala dalsi akce po kazdem ESC v predeslem messageboxu
+                    SalamanderGeneral->WaitForESCRelease(); // ensure the next action is not interrupted by the previous ESC press
                     waitWnd.Show(TRUE);
                 }
                 break;
@@ -923,7 +922,7 @@ void CControlConnectionSocket::WaitForEndOfKeepAlive(HWND parent, int waitWndTim
                 {
                     BOOL trFinished;
                     if (KeepAliveDataCon->IsTransfering(&trFinished))
-                    { // cekame na data, takze to neni timeout
+                    { // waiting for data, so this is not a timeout
                         start = GetTickCount();
                         isTimeout = FALSE;
                     }
@@ -932,9 +931,9 @@ void CControlConnectionSocket::WaitForEndOfKeepAlive(HWND parent, int waitWndTim
                         if (trFinished)
                         {
                             start = KeepAliveDataCon->GetSocketCloseTime();
-                            isTimeout = (GetTickCount() - start) >= (DWORD)serverTimeout; // timeout se meri od zavreni connectiony (okamzik odkdy muze server reagovat - take se dozvi o zavreni connectiony)
+                            isTimeout = (GetTickCount() - start) >= (DWORD)serverTimeout; // measure timeout from connection close (moment when the server can react; it also learns about the close)
                         }
-                        // else isTimeout = TRUE;  // spojeni se jeste neotevrelo -> timeoutneme
+                        // else isTimeout = TRUE;  // connection has not opened yet -> treat as timeout
                     }
                 }
                 HANDLES(LeaveCriticalSection(&SocketCritSect));
@@ -942,19 +941,19 @@ void CControlConnectionSocket::WaitForEndOfKeepAlive(HWND parent, int waitWndTim
                 if (isTimeout)
                 {
                     Logs.LogMessage(logUID, LoadStr(IDS_LOGMSGKEEPALIVECMDTIMEOUT), -1, TRUE);
-                    ReleaseKeepAlive(); // uvolnime keep-alive
-                    CloseSocket(NULL);  // zavreme spojeni
+                    ReleaseKeepAlive(); // release keep-alive
+                    CloseSocket(NULL);  // close connection
                     Logs.SetIsConnected(logUID, IsConnected());
-                    Logs.RefreshListOfLogsInLogsDlg(); // hlaseni "connection inactive"
+                    Logs.RefreshListOfLogsInLogsDlg(); // report "connection inactive"
                     wait = FALSE;
                 }
                 break;
             }
 
             case ccsevNewBytesRead:
-                break; // ignorujeme (hrozi max. nejaky stary event + po teto metode nasleduje stejne zapis prikazu, pak teprve server odpovi)
+                break; // ignore (at worst an old event; after this method, the command will be written and the server replies)
 
-            case ccsevClosed: // zavreni spojeni, jen zabalime keep-alive a nechame to vyresit nekoho jineho
+            case ccsevClosed: // connection closed; wrap up keep-alive and let someone else handle it
             {
                 ReleaseKeepAlive();
                 AddEvent(ccsevClosed, data1, data2);
@@ -964,7 +963,7 @@ void CControlConnectionSocket::WaitForEndOfKeepAlive(HWND parent, int waitWndTim
 
             case ccsevUserIfaceFinished:
                 wait = FALSE;
-                break; // keep-alive prikaz se dokoncil
+                break; // keep-alive command finished
 
             default:
             {
@@ -975,7 +974,7 @@ void CControlConnectionSocket::WaitForEndOfKeepAlive(HWND parent, int waitWndTim
         }
         waitWnd.Destroy();
 
-        // keep-alive prikaz uz se dokoncil nebo byl prerusen (ESC/timeout)
+        // keep-alive command already completed or was interrupted (ESC/timeout)
         HANDLES(EnterCriticalSection(&SocketCritSect));
         KeepAliveMode = kamForbidden;
         HANDLES(LeaveCriticalSection(&SocketCritSect));
@@ -996,8 +995,7 @@ void CControlConnectionSocket::WaitForEndOfKeepAlive(HWND parent, int waitWndTim
 
             if (deleteTimer)
             {
-                // v modu 'kamForbidden' nema keep-alive timer smysl (pokud dojde k jeho timeoutu,
-                // jen se vyignoruje), vymazeme ho
+                // in 'kamForbidden' mode the keep-alive timer makes no sense (its timeout would be ignored), remove it
                 SocketsThread->DeleteTimer(uid, CTRLCON_KEEPALIVE_TIMERID);
             }
         }
@@ -1023,14 +1021,14 @@ void CControlConnectionSocket::SetupKeepAliveTimer(BOOL immediate)
     int msg;
     int uid;
     DWORD ti;
-    if (KeepAliveEnabled && KeepAliveMode == kamForbidden) // volano po dokonceni normalniho prikazu
+    if (KeepAliveEnabled && KeepAliveMode == kamForbidden) // called after completing a regular command
     {
         KeepAliveMode = kamWaiting;
         timer = TRUE;
         msg = Msg;
         uid = UID;
-        KeepAliveStart = GetTickCount();                                   // cas posledniho provedeneho normalniho prikazu v "control connection"
-        ti = KeepAliveStart + (immediate ? 0 : KeepAliveSendEvery * 1000); // cas, kdy by se mel poslat prvni keep-alive prikaz
+        KeepAliveStart = GetTickCount();                                   // time of the last regular command in the control connection
+        ti = KeepAliveStart + (immediate ? 0 : KeepAliveSendEvery * 1000); // when the first keep-alive command should be sent
     }
     else
     {
@@ -1039,7 +1037,7 @@ void CControlConnectionSocket::SetupKeepAliveTimer(BOOL immediate)
     }
     HANDLES(LeaveCriticalSection(&SocketCritSect));
 
-    if (timer) // mame nahodit keep-alive timer
+    if (timer) // need to set up keep-alive timer
         SocketsThread->AddTimer(msg, uid, ti, CTRLCON_KEEPALIVE_TIMERID, NULL);
 }
 
@@ -1055,8 +1053,8 @@ void CControlConnectionSocket::SetupNextKeepAliveTimer()
 #endif
 
     if (!KeepAliveCmdAllBytesWritten)
-    { // nemelo by nikdy nastat, protoze odpoved ze serveru prijde az po zapsani kompletniho
-        // prikazu (navic prikaz se vzdy zapise najednou, je to par bytu)
+    { // should never happen because the server replies only after the complete
+        // command is written (and it is sent in one chunk; just a few bytes)
         TRACE_E("Unexpected situation in CControlConnectionSocket::SetupNextKeepAliveTimer(): KeepAliveCmdAllBytesWritten==FALSE!");
         KeepAliveCmdAllBytesWritten = TRUE;
     }
@@ -1068,9 +1066,9 @@ void CControlConnectionSocket::SetupNextKeepAliveTimer()
     int msg;
     int uid;
     DWORD ti;
-    if (KeepAliveMode == kamProcessing) // keep-alive normalne dobehl, vyhodnotime jestli znovu nastavime keep-alive timer
+    if (KeepAliveMode == kamProcessing) // keep-alive finished normally; decide whether to schedule it again
     {
-        ti = GetTickCount() + KeepAliveSendEvery * 1000; // cas, kdy by se mel poslat dalsi keep-alive prikaz
+        ti = GetTickCount() + KeepAliveSendEvery * 1000; // when the next keep-alive command should be sent
         if ((int)((ti - KeepAliveStart) / 60000) < KeepAliveStopAfter)
         {
             KeepAliveMode = kamWaiting;
@@ -1080,25 +1078,25 @@ void CControlConnectionSocket::SetupNextKeepAliveTimer()
         }
         else
         {
-            KeepAliveMode = kamNone;                                         // dale uz keep-alive nemame provadet (uz nema cenu hajit connectionu)
-            Logs.LogMessage(LogUID, LoadStr(IDS_LOGMSGKASTOPPED), -1, TRUE); // upozornime usera na zastaveni keep-alive rezimu
+            KeepAliveMode = kamNone;                                         // no more keep-alive (connection not worth defending)
+            Logs.LogMessage(LogUID, LoadStr(IDS_LOGMSGKASTOPPED), -1, TRUE); // inform user that keep-alive mode stopped
         }
     }
     else
     {
-        if (KeepAliveMode == kamWaitingForEndOfProcessing) // hl. thread ceka na dokonceni keep-alive prikazu
+        if (KeepAliveMode == kamWaitingForEndOfProcessing) // main thread waits for keep-alive command to finish
         {
             SetEvent(KeepAliveFinishedEvent);
         }
         else
         {
-            if (KeepAliveMode != kamNone) // kamNone = doslo k volani ReleaseKeepAlive()
+            if (KeepAliveMode != kamNone) // kamNone = ReleaseKeepAlive() was called
                 TRACE_E("CControlConnectionSocket::SetupNextKeepAliveTimer(): unexpected Mode == " << (int)KeepAliveMode);
         }
     }
     HANDLES(LeaveCriticalSection(&SocketCritSect));
 
-    if (timer) // mame nahodit keep-alive timer
+    if (timer) // need to set up keep-alive timer
         SocketsThread->AddTimer(msg, uid, ti, CTRLCON_KEEPALIVE_TIMERID, NULL);
 }
 
@@ -1114,7 +1112,7 @@ void CControlConnectionSocket::ReleaseKeepAlive()
 #endif
 
     if (KeepAliveMode == kamProcessing || KeepAliveMode == kamWaitingForEndOfProcessing)
-        SetEvent(KeepAliveFinishedEvent); // pustime dal hl. thread
+        SetEvent(KeepAliveFinishedEvent); // allow main thread to continue
     BOOL deleteTimer = FALSE;
     int uid;
     if (KeepAliveMode == kamWaiting)
@@ -1122,25 +1120,24 @@ void CControlConnectionSocket::ReleaseKeepAlive()
         deleteTimer = TRUE;
         uid = UID;
     }
-    KeepAliveMode = kamNone; // reinicializace keep-alive
+    KeepAliveMode = kamNone; // reinitialize keep-alive
     KeepAliveCmdAllBytesWritten = TRUE;
     CKeepAliveDataConSocket* closeDataCon = KeepAliveDataCon;
     KeepAliveDataCon = NULL;
     KeepAliveDataConState = kadcsNone;
     HANDLES(LeaveCriticalSection(&SocketCritSect));
 
-    // je-li otevrena "data connection", zavreme ji, ted uz jiste nebude potreba
+    // if a "data connection" is open, close it; it is no longer needed
     if (closeDataCon != NULL)
     {
-        if (closeDataCon->IsConnected())       // zavreme "data connection", system se pokusi o "graceful"
-            closeDataCon->CloseSocketEx(NULL); // shutdown (nedozvime se o vysledku)
-        DeleteSocket(closeDataCon);            // uvonime "data connection" pres volani metody SocketsThread
+        if (closeDataCon->IsConnected())       // close the "data connection"; the system attempts a graceful shutdown
+            closeDataCon->CloseSocketEx(NULL); // (result unknown)
+        DeleteSocket(closeDataCon);            // release the "data connection" via SocketsThread
     }
 
     if (deleteTimer)
     {
-        // v modu 'kamNone' nema keep-alive timer smysl (pokud dojde k jeho timeoutu,
-        // jen se vyignoruje), vymazeme ho
+        // in 'kamNone' mode the keep-alive timer is meaningless (its timeout would be ignored), remove it
         SocketsThread->DeleteTimer(uid, CTRLCON_KEEPALIVE_TIMERID);
     }
 }
@@ -1167,16 +1164,16 @@ void CControlConnectionSocket::ReceiveTimer(DWORD id, void* param)
         HANDLES(EnterCriticalSection(&SocketCritSect));
         int logUID = LogUID;
         BOOL usePassiveModeAux;
-        if (KeepAliveEnabled && KeepAliveMode == kamWaiting) // nic nebrani v poslani keep-alive prikazu
+        if (KeepAliveEnabled && KeepAliveMode == kamWaiting) // nothing prevents sending a keep-alive command
         {
             KeepAliveMode = kamProcessing;
-            ResetEvent(KeepAliveFinishedEvent); // priprava pro pouziti eventu pro blokovani hl.threadu az do dokonceni keep-alive prikazu
+            ResetEvent(KeepAliveFinishedEvent); // prepare the event to block the main thread until the keep-alive command finishes
             sendKACmd = TRUE;
             usePassiveModeAux = UsePassiveMode;
 
             if (KeepAliveCommand == 2 /* NLST */ || KeepAliveCommand == 3 /* LIST */)
             {
-                // alokujeme objekt pro "data connection"
+                // allocate an object for the "data connection"
                 if (KeepAliveDataCon != NULL)
                     TRACE_E("Unexpected situation in CControlConnectionSocket::ReceiveTimer(): KeepAliveDataCon is not NULL!");
                 CFTPProxyForDataCon* dataConProxyServer = ProxyServer == NULL ? NULL : ProxyServer->AllocProxyForDataCon(ServerIP, Host, HostIP, Port);
@@ -1188,7 +1185,7 @@ void CControlConnectionSocket::ReceiveTimer(DWORD id, void* param)
                         delete dataConProxyServer;
                     if (dataConProxyServerOK)
                         TRACE_E(LOW_MEMORY);
-                    KeepAliveCommand = 0; // posleme misto toho "NOOP"
+                    KeepAliveCommand = 0; // send "NOOP" instead
                 }
                 else
                     KeepAliveDataConState = usePassiveModeAux ? kadcsWaitForPassiveReply : kadcsWaitForListen;
@@ -1200,7 +1197,7 @@ void CControlConnectionSocket::ReceiveTimer(DWORD id, void* param)
 
         if (sendKACmd)
         {
-            // poslani keep-alive prikazu (zadne casove prodlevy, nesmime na nic cekat)
+            // send the keep-alive command (no waiting, no delays allowed)
             char ftpCmd[200];
             ftpCmd[0] = 0;
             BOOL waitForListen = FALSE;
@@ -1221,22 +1218,22 @@ void CControlConnectionSocket::ReceiveTimer(DWORD id, void* param)
             case 2: // NLST
             case 3: // LIST
             {
-                if (usePassiveModeAux) // pasivni mod "data connection"
+                if (usePassiveModeAux) // passive "data connection" mode
                 {
                     PrepareFTPCommand(ftpCmd, 200, NULL, 0, ftpcmdPassive, NULL);
                 }
-                else // aktivni mod "data connection"
+                else // active "data connection" mode
                 {
                     DWORD localIP;
-                    GetLocalIP(&localIP, NULL);   // snad ani nemuze vratit chybu
+                    GetLocalIP(&localIP, NULL);   // should not fail
                     unsigned short localPort = 0; // listen on any port
                     DWORD error;
                     keepAliveDataConAux->SetActive(logUID);
                     BOOL listenError;
                     if (!keepAliveDataConAux->OpenForListeningWithProxy(localIP, localPort, &listenError, &error))
-                    { // nepodarilo se otevrit "listen" socket pro prijem datoveho spojeni ze
-                        // serveru (lokalni operace, nejspis nikdy nenastane) + muze byt
-                        // i chyba pri connectu na proxy server
+                    { // failed to open listening socket for incoming data connection from the
+                        // server (local operation; unlikely) and there may also be
+                        // an error when connecting to the proxy server
                         Logs.LogMessage(logUID, LoadStr(listenError ? IDS_LOGMSGOPENACTDATACONERROR : IDS_LOGMSGOPENACTDATACONERROR2), -1, TRUE);
                     }
                     else
@@ -1256,11 +1253,11 @@ void CControlConnectionSocket::ReceiveTimer(DWORD id, void* param)
             if (ftpCmd[0] != 0 || waitForListen)
                 Logs.LogMessage(logUID, LoadStr(IDS_LOGMSGKEEPALIVE), -1, TRUE);
             if (ftpCmd[0] != 0)
-                SendKeepAliveCmd(logUID, ftpCmd); // posleme keep-alive prikaz
+                SendKeepAliveCmd(logUID, ftpCmd); // send keep-alive command
             else
             {
                 if (!waitForListen)
-                    ReleaseKeepAlive(); // nic jsme neposlali (nema smysl pokracovat v keep-alive), zrusime keep-alive
+                    ReleaseKeepAlive(); // nothing was sent (no reason to continue with keep-alive); cancel it
             }
         }
     }
@@ -1271,10 +1268,10 @@ void CControlConnectionSocket::ReceivePostMessage(DWORD id, void* param)
     CALL_STACK_MESSAGE2("CControlConnectionSocket::ReceivePostMessage(%u,)", id);
     switch (id)
     {
-    case CTRLCON_KAPOSTSETUPNEXT: // prave byla ukoncena "data connection" keep-alive prikazu, odpoved o ukonceni listingu od serveru uz prisla, zavolame SetupNextKeepAliveTimer()
+    case CTRLCON_KAPOSTSETUPNEXT: // keep-alive data connection just finished; listing completion reply already arrived -> call SetupNextKeepAliveTimer()
     {
         HANDLES(EnterCriticalSection(&SocketCritSect));
-        BOOL call = (KeepAliveMode == kamProcessing || KeepAliveMode == kamWaitingForEndOfProcessing); // nestihlo se stat nic neocekavaneho?
+        BOOL call = (KeepAliveMode == kamProcessing || KeepAliveMode == kamWaitingForEndOfProcessing); // nothing unexpected happened?
         CKeepAliveDataConSocket* closeDataCon = KeepAliveDataCon;
         if (call)
         {
@@ -1292,38 +1289,38 @@ void CControlConnectionSocket::ReceivePostMessage(DWORD id, void* param)
         break;
     }
 
-    case CTRLCON_LISTENFORCON: // zprava o otevreni portu pro "listen" (na proxy serveru)
+    case CTRLCON_LISTENFORCON: // message about opening a listening port (on proxy server)
     {
         AddEvent(ccsevListenForCon, (DWORD)(DWORD_PTR)param, 0);
         break;
     }
 
-    case CTRLCON_KALISTENFORCON: // keep-alive: zprava o otevreni portu pro "listen" (na proxy serveru)
+    case CTRLCON_KALISTENFORCON: // keep-alive: message about opening a listening port (on proxy server)
     {
         HANDLES(EnterCriticalSection(&SocketCritSect));
         if ((KeepAliveMode == kamProcessing || KeepAliveMode == kamWaitingForEndOfProcessing) &&
             KeepAliveDataConState == kadcsWaitForListen)
         {
             CKeepAliveDataConSocket* kaDataConnection = KeepAliveDataCon;
-            int logUID = LogUID; // UID logu teto connectiony
+            int logUID = LogUID; // log UID of this connection
             HANDLES(LeaveCriticalSection(&SocketCritSect));
 
-            if ((int)(INT_PTR)param == kaDataConnection->GetUID()) // zpravu zpracujeme jen pokud je pro nasi data-connectionu
+            if ((int)(INT_PTR)param == kaDataConnection->GetUID()) // process message only if it matches our data connection
             {
                 DWORD listenOnIP;
                 unsigned short listenOnPort;
                 char buf[300];
                 char errBuf[500];
-                if (!kaDataConnection->GetListenIPAndPort(&listenOnIP, &listenOnPort)) // chyba "listen"
+                if (!kaDataConnection->GetListenIPAndPort(&listenOnIP, &listenOnPort)) // listen failure
                 {
                     if (kaDataConnection->GetProxyError(buf, 300, NULL, 0, TRUE))
-                    { // vypiseme chybu do logu
+                    { // log the error
                         _snprintf_s(errBuf, _TRUNCATE, LoadStr(IDS_LOGMSGDATCONERROR), buf);
                         Logs.LogMessage(logUID, errBuf, -1, TRUE);
                     }
-                    ReleaseKeepAlive(); // koncime...
+                    ReleaseKeepAlive(); // abort keep-alive
                 }
-                else // uspech, posleme prikaz "PORT"
+                else // success; send "PORT" command
                 {
                     HANDLES(EnterCriticalSection(&SocketCritSect));
                     KeepAliveDataConState = kadcsWaitForSetPortReply;
@@ -1365,21 +1362,21 @@ CListingCacheItem::CListingCacheItem(const char* host, unsigned short port, cons
                                      const CFTPDate& cachedListingDate,
                                      DWORD cachedListingStartTime, CFTPServerPathType pathType)
 {
-    // zkopirujeme data
+    // copy the data
     BOOL err = (host == NULL || path == NULL || listCmd == NULL);
     Host = SalamanderGeneral->DupStr(host);
     Port = port;
     if (user != NULL && strcmp(user, FTP_ANONYMOUS) == 0)
         user = NULL;
-    User = SalamanderGeneral->DupStr(user); // je-li NULL, zustane NULL, ale 'err' se nezmeni
+    User = SalamanderGeneral->DupStr(user); // remains NULL if input was NULL; 'err' stays unchanged
     Path = SalamanderGeneral->DupStr(path);
     ListCmd = SalamanderGeneral->DupStr(listCmd);
     IsFTPS = isFTPS;
-    CachedListing = (char*)malloc(cachedListingLen + 1); // +1 jako reseni listingu s nulovou delkou
+    CachedListing = (char*)malloc(cachedListingLen + 1); // +1 to support zero-length listings
     if (CachedListing != NULL && cachedListing != NULL)
     {
         memcpy(CachedListing, cachedListing, cachedListingLen);
-        CachedListing[cachedListingLen] = 0; // kdyz uz tam je naalokovano, tak pro debugovaci ucely to udelame null-terminated
+        CachedListing[cachedListingLen] = 0; // with memory allocated, null-terminate for debugging purposes
     }
     else
         err = TRUE;
@@ -1388,7 +1385,7 @@ CListingCacheItem::CListingCacheItem(const char* host, unsigned short port, cons
     CachedListingStartTime = cachedListingStartTime;
     PathType = pathType;
 
-    // pri chybe uvolnime a nulujeme data
+    // on error, release and zero the data
     if (err)
     {
         if (User != NULL)
@@ -1401,7 +1398,7 @@ CListingCacheItem::CListingCacheItem(const char* host, unsigned short port, cons
             SalamanderGeneral->Free(ListCmd);
         if (CachedListing != NULL)
         {
-            memset(CachedListing, 0, CachedListingLen); // muze jit o tajna data, pro jistotu vynulujeme
+            memset(CachedListing, 0, CachedListingLen); // might hold sensitive data; wipe it just in case
             free(CachedListing);
         }
         User = NULL;
@@ -1425,7 +1422,7 @@ CListingCacheItem::~CListingCacheItem()
         SalamanderGeneral->Free(ListCmd);
     if (CachedListing != NULL)
     {
-        memset(CachedListing, 0, CachedListingLen); // muze jit o tajna data, pro jistotu vynulujeme
+        memset(CachedListing, 0, CachedListingLen); // might hold sensitive data; wipe it just in case
         free(CachedListing);
     }
 }
@@ -1487,19 +1484,19 @@ BOOL CListingCache::GetPathListing(const char* host, unsigned short port, const 
 
     BOOL found = FALSE;
     int index;
-    if (Find(host, port, user, pathType, path, listCmd, isFTPS, &index)) // updatneme polozku cache
+    if (Find(host, port, user, pathType, path, listCmd, isFTPS, &index)) // update cache entry
     {
         found = TRUE;
         CListingCacheItem* item = Cache[index];
-        *cachedListing = (char*)malloc(item->CachedListingLen + 1); // +1 jako reseni listingu s nulovou delkou
+        *cachedListing = (char*)malloc(item->CachedListingLen + 1); // +1 to support zero-length listings
         if (*cachedListing != NULL)
         {
             memcpy(*cachedListing, item->CachedListing, item->CachedListingLen);
-            (*cachedListing)[item->CachedListingLen] = 0; // kdyz uz tam je naalokovano, tak pro debugovaci ucely to udelame null-terminated
+            (*cachedListing)[item->CachedListingLen] = 0; // with memory allocated, null-terminate for debugging purposes
             *cachedListingLen = item->CachedListingLen;
         }
         else
-            TRACE_E(LOW_MEMORY); // *cachedListingLen zustava 0 + chybu pameti zpracuje volajici
+            TRACE_E(LOW_MEMORY); // *cachedListingLen stays 0; caller handles the memory error
         *cachedListingDate = item->CachedListingDate;
         *cachedListingStartTime = item->CachedListingStartTime;
         lstrcpyn(path, item->Path, pathBufSize);
@@ -1518,7 +1515,7 @@ void CListingCache::AddOrUpdatePathListing(const char* host, unsigned short port
 {
     HANDLES(EnterCriticalSection(&CacheCritSect));
 
-    // je-li uz polozka v cache, smazeme ji (nema cenu se patlat s updatovanim jejich dat)
+    // if the item already exists, delete it (updating in place is not worth the trouble)
     int index;
     if (Find(host, port, user, pathType, path, listCmd, isFTPS, &index))
     {
@@ -1528,7 +1525,7 @@ void CListingCache::AddOrUpdatePathListing(const char* host, unsigned short port
             Cache.ResetState();
     }
 
-    // vlozime novou polozku do cache
+    // insert a new item into the cache
     CListingCacheItem* item = new CListingCacheItem(host, port, user, path, listCmd, isFTPS,
                                                     cachedListing, cachedListingLen,
                                                     *cachedListingDate,
@@ -1539,11 +1536,10 @@ void CListingCache::AddOrUpdatePathListing(const char* host, unsigned short port
         if (Cache.IsGood())
         {
             TotalCacheSize += CQuadWord(item->CachedListingLen, 0);
-            item = NULL; // je uspesne vlozena, nema se uvolnit pozdeji v teto metode
+            item = NULL; // successfully inserted; do not free it later in this method
 
-            // pokud uz je v cache moc polozek, uvolnime je od nejstarsi, alespon posledne
-            // pridanou polozku v cache nechame
-            int count = 0; // kolik polozek je potreba smazat (mazeme najednou, jinak slozitost O(N*N))
+            // if the cache holds too many items, remove the oldest ones; keep the most recently added
+            int count = 0; // number of items to delete (remove them in bulk to avoid O(N^2) shifts)
             while (Cache.Count > count + 1 && TotalCacheSize > Config.CacheMaxSize)
                 TotalCacheSize -= CQuadWord(Cache[count++]->CachedListingLen, 0);
             if (count > 0)
@@ -1569,7 +1565,7 @@ void CListingCache::RefreshOnPath(const char* host, unsigned short port, const c
 
     if (user != NULL && strcmp(user, FTP_ANONYMOUS) == 0)
         user = NULL;
-    int delIndex = 0; // promenne pro mazani po blocich (sesuv pole ma slozitost O(N*N), optimalizujeme)
+    int delIndex = 0; // variables for block deletions (shifting array is O(N^2); optimize it)
     int delCount = 0;
     int i;
     for (i = 0; i < Cache.Count; i++)
@@ -1579,20 +1575,20 @@ void CListingCache::RefreshOnPath(const char* host, unsigned short port, const c
             (user == NULL && item->User == NULL ||
              item->User != NULL && user != NULL && strcmp(user, item->User) == 0) &&
             port == item->Port &&
-            (ignorePath || FTPIsPrefixOfServerPath(pathType, path, item->Path, FALSE))) // bereme cestu vcetne jejich podcest
+            (ignorePath || FTPIsPrefixOfServerPath(pathType, path, item->Path, FALSE))) // include the path and its subpaths
         {
-            // smazneme polozku z cache
+            // delete the item from cache
             TotalCacheSize -= CQuadWord(item->CachedListingLen, 0);
             if (delIndex + delCount == i)
-                delCount++; // navazuje na mazany blok, jen ho rozsirime
-            else            // musime vytvorit novy blok a stary smazat
+                delCount++; // extend the current deletion block
+            else            // need to create a new block and delete the previous one
             {
                 if (delCount > 0)
                 {
                     Cache.Delete(delIndex, delCount);
                     if (!Cache.IsGood())
                         Cache.ResetState();
-                    i -= delCount; // uprava indexu na zaklade vymazu stareho bloku (musi lezet cely pred 'i')
+                    i -= delCount; // adjust index after removing the previous block (must be entirely before 'i')
                 }
                 delIndex = i;
                 delCount = 1;
@@ -1619,7 +1615,7 @@ void CListingCache::AcceptChangeOnPathNotification(const char* userPart, BOOL in
 
     HANDLES(EnterCriticalSection(&CacheCritSect));
 
-    int delIndex = 0; // promenne pro mazani po blocich (sesuv pole ma slozitost O(N*N), optimalizujeme)
+    int delIndex = 0; // variables for block deletions (shifting array is O(N^2); optimize it)
     int delCount = 0;
     int i;
     for (i = 0; i < Cache.Count; i++)
@@ -1636,7 +1632,7 @@ void CListingCache::AcceptChangeOnPathNotification(const char* userPart, BOOL in
             if (user != NULL && strcmp(user, FTP_ANONYMOUS) == 0)
                 user = NULL;
             if (host == NULL || pathPart == NULL)
-            { // tohle jeste muze byt jen shoda nahod, musime to zkusit pro neznamou delku username
+            { // may still be a coincidence; try again with unknown username length
                 lstrcpyn(buf, userPart, FTP_USERPART_SIZE);
                 FTPSplitPath(buf, &user, NULL, &host, &portStr, &pathStr, NULL, 0);
                 if (pathStr != NULL && pathStr > buf)
@@ -1648,7 +1644,7 @@ void CListingCache::AcceptChangeOnPathNotification(const char* userPart, BOOL in
                 {
                     TRACE_E("CListingCache::AcceptChangeOnPathNotification(): invalid (or relative) path received: " << userPart);
                     HANDLES(LeaveCriticalSection(&CacheCritSect));
-                    return; // takove polozky v cache nejsou, neni co delat
+                    return; // such items do not exist in the cache; nothing to do
                 }
             }
         }
@@ -1658,18 +1654,18 @@ void CListingCache::AcceptChangeOnPathNotification(const char* userPart, BOOL in
             port == item->Port &&
             FTPIsPrefixOfServerPath(item->PathType, FTPGetLocalPath(pathPart, item->PathType),
                                     item->Path, !includingSubdirs))
-        { // polozka odpovida zmenene ceste nebo jejimu podadresari, smazneme ji z cache
+        { // item matches the changed path or its subdirectory; delete it from cache
             TotalCacheSize -= CQuadWord(item->CachedListingLen, 0);
             if (delIndex + delCount == i)
-                delCount++; // navazuje na mazany blok, jen ho rozsirime
-            else            // musime vytvorit novy blok a stary smazat
+                delCount++; // extend the current deletion block
+            else            // need to create a new block and delete the previous one
             {
                 if (delCount > 0)
                 {
                     Cache.Delete(delIndex, delCount);
                     if (!Cache.IsGood())
                         Cache.ResetState();
-                    i -= delCount; // uprava indexu na zaklade vymazu stareho bloku (musi lezet cely pred 'i')
+                    i -= delCount; // adjust index after removing the previous block (must be entirely before 'i')
                 }
                 delIndex = i;
                 delCount = 1;
