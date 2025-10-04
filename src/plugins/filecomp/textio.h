@@ -19,7 +19,7 @@ public:
         ftText
     };
     // text encoding
-    // TODO pridat ruzne verze unicode formatu
+    // TODO add other Unicode format variants
     enum eEncoding
     {
         encUnknown,
@@ -46,7 +46,7 @@ public:
     CTextFileReader();
     ~CTextFileReader();
 
-    // 'size' nesmi byt vetsi nez numeric_limits<size_t>::max - 1
+    // 'size' must not be greater than numeric_limits<size_t>::max - 1
     void Set(const char* name, HANDLE file, size_t size, int eolConversions,
              eEncoding encoding, eEndian endians, int performASCII8InputEnc,
              const char* parASCII8InputEncTableName, BOOL normalizationForm, bool needMD5);
@@ -64,7 +64,7 @@ public:
     void ForceEncoding(eEncoding encoding, eEndian endian) { Encoding = encoding; }
     bool HasSurrogates()
     {
-        // TODO nekdy to treba budem podporovat, zatim umime jen BMP
+        // TODO maybe support this someday; for now we handle only BMP
         return false;
     }
 
