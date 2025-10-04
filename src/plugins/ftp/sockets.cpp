@@ -1,5 +1,6 @@
 ﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
+// CommentsTranslationProject: TRANSLATED
 
 #include "precomp.h"
 
@@ -2844,7 +2845,7 @@ BOOL CSocketsThread::AddTimer(int socketMsg, int socketUID, DWORD timeoutAbs, DW
         Timers.Insert(i, data);
         if (Timers.IsGood())
         {
-        if (i == 0 && !Terminating) // inserting the timer with the shortest time into the timeout
+            if (i == 0 && !Terminating) // inserting the timer with the shortest time into the timeout
             {
                 DWORD ti = timeoutAbs - GetTickCount();
                 if ((int)ti > 0) // if the new timer has not yet expired (the time difference can also be negative), adjust or start the Windows timer

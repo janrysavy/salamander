@@ -1,5 +1,6 @@
 ﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
+// CommentsTranslationProject: TRANSLATED
 
 #include "precomp.h"
 
@@ -273,7 +274,7 @@ void CControlConnectionSocket::DownloadOneFile(HWND parent, const char* fileName
                                 SetFileAttributes(tgtFileName, FILE_ATTRIBUTE_NORMAL);
                                 DeleteFile(tgtFileName);
                                 ok = FALSE; // do not show any message; the user already confirmed the cancel
-                    }
+                            }
                         }
                     }
                     else

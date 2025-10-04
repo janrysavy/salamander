@@ -1,5 +1,6 @@
 ﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
+// CommentsTranslationProject: TRANSLATED
 
 #include "precomp.h"
 
@@ -829,7 +830,7 @@ void CUploadListingsOnServer::ListingFailed(const char* path, CFTPServerPathType
             listing->ListingState == ulsInProgressButMayBeOutdated)
         {
             listing->InformWaitingWorkers(uploadFirstWaitingWorker);
-                if (listing->ListingState == ulsInProgressButObsolete) // we already have the listing, so we do not mind that the worker reports a listing error
+            if (listing->ListingState == ulsInProgressButObsolete) // we already have the listing, so we do not mind that the worker reports a listing error
             {
                 listing->ListingState = ulsReady;
                 if (listingOKErrorIgnored != NULL)
@@ -1355,7 +1356,7 @@ BOOL CUploadPathListing::ParseListing(const char* pathListing, int pathListingLe
             for (k = 0; k < serverTypeListCount; k++)
             {
                 serverType = serverTypeList->At(k);
-            if (!serverType->ParserAlreadyTested) // only if we have not tried it yet
+                if (!serverType->ParserAlreadyTested) // only if we have not tried it yet
                 {
                     // serverType has been selected; try its parser on the listing
                     // serverType->ParserAlreadyTested = TRUE;  // unnecessary, not used later
@@ -1430,39 +1431,39 @@ BOOL CUploadPathListing::ParseListingToArray(const char* pathListing, int pathLi
                                              NULL, NULL, NULL);
                 serverType->CompiledParser = parser; // do not deallocate 'parser'; it is already stored in 'serverType'
             }
-                if (parser != NULL)
-                {
-                    CFileData file;
-                    const char* listing = pathListing;
-                    const char* listingEnd = pathListing + pathListingLen;
-                    BOOL isDir = FALSE;
+            if (parser != NULL)
+            {
+                CFileData file;
+                const char* listing = pathListing;
+                const char* listingEnd = pathListing + pathListingLen;
+                BOOL isDir = FALSE;
 
-                    int rightsCol = dataIface->FindRightsColumn(); // index of the column with rights (used for link detection)
+                int rightsCol = dataIface->FindRightsColumn(); // index of the column with rights (used for link detection)
 
-                    parser->BeforeParsing(listing, listingEnd, pathListingDate.Year, pathListingDate.Month,
-                                          pathListingDate.Day, FALSE); // initialize the parser
+                parser->BeforeParsing(listing, listingEnd, pathListingDate.Year, pathListingDate.Month,
+                                      pathListingDate.Day, FALSE); // initialize the parser
                 while (parser->GetNextItemFromListing(&file, &isDir, dataIface, &(serverType->Columns), &listing,
                                                       listingEnd, NULL, &err, emptyCol))
+                {
+                    if (!isDir || file.NameLen > 2 ||
+                        file.Name[0] != '.' || (file.Name[1] != 0 && file.Name[1] != '.')) // not the directories "." and ".."
                     {
-                        if (!isDir || file.NameLen > 2 ||
-                            file.Name[0] != '.' || (file.Name[1] != 0 && file.Name[1] != '.')) // not the directories "." and ".."
-                        {
                         CUploadListingItemType itemType;
                         if (rightsCol != -1 && IsUNIXLink(dataIface->GetStringFromColumn(file, rightsCol)))
                             itemType = ulitLink;
                         else
                             itemType = isDir ? ulitDirectory : ulitFile;
 
-                            BOOL sizeInBytes; // TRUE = 'size' is in bytes
-                            CQuadWord size;   // variable for the size of the current file
-                            if (itemType != ulitFile || !dataIface->GetSize(file, size, sizeInBytes) || !sizeInBytes)
-                                size = UPLOADSIZE_UNKNOWN; // the size of the file in bytes is unknown
+                        BOOL sizeInBytes; // TRUE = 'size' is in bytes
+                        CQuadWord size;   // variable for the size of the current file
+                        if (itemType != ulitFile || !dataIface->GetSize(file, size, sizeInBytes) || !sizeInBytes)
+                            size = UPLOADSIZE_UNKNOWN; // the size of the file in bytes is unknown
 
-                            err = !AddItemDoNotSort(itemType, file.Name, size);
-                        }
-                        // release the data for the file or directory
-                        dataIface->ReleasePluginData(file, isDir);
-                        SalamanderGeneral->Free(file.Name);
+                        err = !AddItemDoNotSort(itemType, file.Name, size);
+                    }
+                    // release the data for the file or directory
+                    dataIface->ReleasePluginData(file, isDir);
+                    SalamanderGeneral->Free(file.Name);
 
                     if (err)
                         break;

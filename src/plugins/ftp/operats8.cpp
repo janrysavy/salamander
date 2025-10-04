@@ -1,5 +1,6 @@
 ﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
+// CommentsTranslationProject: TRANSLATED
 
 #include "precomp.h"
 
@@ -329,9 +330,9 @@ void CFTPWorker::HandleEventInWorkingState3(CFTPWorkerEvent event, BOOL& sendQui
                                 if (WorkerDataCon != NULL)
                                 {
                                     HANDLES(LeaveCriticalSection(&WorkerCritSect));
-                                // since we are already in the CSocketsThread::CritSect section, this call
-                                // is also possible from the CSocket::SocketCritSect section (no dead-lock risk)
-                                DeleteSocket(WorkerDataCon); // it will only be deallocated
+                                    // since we are already in the CSocketsThread::CritSect section, this call
+                                    // is also possible from the CSocket::SocketCritSect section (no dead-lock risk)
+                                    DeleteSocket(WorkerDataCon); // it will only be deallocated
                                     WorkerDataCon = NULL;
                                     HANDLES(EnterCriticalSection(&WorkerCritSect));
                                     WorkerDataConState = wdcsDoesNotExist;

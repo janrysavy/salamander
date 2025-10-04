@@ -1,5 +1,6 @@
 ﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
+// CommentsTranslationProject: TRANSLATED
 
 #include "precomp.h"
 
@@ -1941,30 +1942,30 @@ void CFTPWorker::HandleEventInWorkingState5(CFTPWorkerEvent event, BOOL& sendQui
                                                                   FTP_DIGIT_1(replyCode) == FTP_D1_ERROR))
                                     {
                                         HANDLES(LeaveCriticalSection(&WorkerCritSect));
-                                    if (IsConnected()) // "manually" close the control connection
-                                    {
-                                        // because we are already in CSocketsThread::CritSect, this call is also
-                                        // possible from CSocket::SocketCritSect (no deadlock risk)
-                                        ForceClose(); // sending QUIT would be cleaner, but a certificate change is very unlikely, so it's not worth the hassle ;-)
+                                        if (IsConnected()) // "manually" close the control connection
+                                        {
+                                            // because we are already in CSocketsThread::CritSect, this call is also
+                                            // possible from CSocket::SocketCritSect (no deadlock risk)
+                                            ForceClose(); // sending QUIT would be cleaner, but a certificate change is very unlikely, so it's not worth the hassle ;-)
                                         }
                                         HANDLES(EnterCriticalSection(&WorkerCritSect));
                                         conClosedRetryItem = TRUE;
                                     }
                                     else
                                     {
-                                    if ((!ResumingFileOnServer || Oper->GetDataConWasOpenedForAppendCmd()) && // proftpd (Linux) repeatedly returns 45x (append disabled, enabled somewhere in the config), warftpd repeatedly returns 42x (some write error) -- in any case we cannot keep trying APPE endlessly (however if APPE opened the data connection, perform auto-retry because APPE works 99.9% of the time)
-                                            FTP_DIGIT_1(replyCode) == FTP_D1_TRANSIENTERROR &&
-                                            (FTP_DIGIT_2(replyCode) == FTP_D2_CONNECTION ||  // mainly "426 data connection closed, transfer aborted" (I cannot tell whether it was caused by the server admin or a connection failure, so priority goes to assuming a connection issue -> retry the upload)
-                                             FTP_DIGIT_2(replyCode) == FTP_D2_FILESYSTEM) && // "450 Transfer aborted.  Link to file server lost."
-                                            dataSSLErrorOccured != SSLCONERR_DONOTRETRY ||   // take 426 and 450 only if they were not caused by: failed to encrypt the connection, which is a permanent problem
-                                        dataConNoDataTransTimeout ||                         // connection interrupted by us due to the no-data-transfer timeout (happens during "50%" network outages, the data connection stays up but data transfer stalls, can remain open for 14000 seconds, this should address it) -> retry the upload attempt
-                                        dataSSLErrorOccured == SSLCONERR_CANRETRY)           // failed to encrypt the connection, but it is not a permanent problem
-                                    {
-                                        SubState = fwssWorkCopyDelayedAutoRetry; // use delayed auto-retry so all unexpected replies from the server can arrive
-                                        // because we are already in CSocketsThread::CritSect, this call is also
-                                        // possible from CSocket::SocketCritSect and CFTPWorker::WorkerCritSect (no deadlock risk)
-                                        SocketsThread->AddTimer(Msg, UID, GetTickCount() + WORKER_DELAYEDAUTORETRYTIMEOUT,
-                                                                WORKER_DELAYEDAUTORETRYTIMID, NULL); // ignore the error; at worst the user will press Stop
+                                        if ((!ResumingFileOnServer || Oper->GetDataConWasOpenedForAppendCmd()) && // proftpd (Linux) repeatedly returns 45x (append disabled, enabled somewhere in the config), warftpd repeatedly returns 42x (some write error) -- in any case we cannot keep trying APPE endlessly (however if APPE opened the data connection, perform auto-retry because APPE works 99.9% of the time)
+                                                FTP_DIGIT_1(replyCode) == FTP_D1_TRANSIENTERROR &&
+                                                (FTP_DIGIT_2(replyCode) == FTP_D2_CONNECTION ||  // mainly "426 data connection closed, transfer aborted" (I cannot tell whether it was caused by the server admin or a connection failure, so priority goes to assuming a connection issue -> retry the upload)
+                                                 FTP_DIGIT_2(replyCode) == FTP_D2_FILESYSTEM) && // "450 Transfer aborted.  Link to file server lost."
+                                                dataSSLErrorOccured != SSLCONERR_DONOTRETRY ||   // take 426 and 450 only if they were not caused by: failed to encrypt the connection, which is a permanent problem
+                                            dataConNoDataTransTimeout ||                         // connection interrupted by us due to the no-data-transfer timeout (happens during "50%" network outages, the data connection stays up but data transfer stalls, can remain open for 14000 seconds, this should address it) -> retry the upload attempt
+                                            dataSSLErrorOccured == SSLCONERR_CANRETRY)           // failed to encrypt the connection, but it is not a permanent problem
+                                        {
+                                            SubState = fwssWorkCopyDelayedAutoRetry; // use delayed auto-retry so all unexpected replies from the server can arrive
+                                            // because we are already in CSocketsThread::CritSect, this call is also
+                                            // possible from CSocket::SocketCritSect and CFTPWorker::WorkerCritSect (no deadlock risk)
+                                            SocketsThread->AddTimer(Msg, UID, GetTickCount() + WORKER_DELAYEDAUTORETRYTIMEOUT,
+                                                                    WORKER_DELAYEDAUTORETRYTIMID, NULL); // ignore the error; at worst the user will press Stop
                                         }
                                         else
                                         {
@@ -1972,7 +1973,7 @@ void CFTPWorker::HandleEventInWorkingState5(CFTPWorkerEvent event, BOOL& sendQui
                                                 FTP_DIGIT_1(replyCode) != FTP_D1_SUCCESS &&
                                                 (uploadRealSize == CQuadWord(0, 0) || uploadRealSize == UPLOADSIZE_UNKNOWN) &&
                                                 dataSSLErrorOccured == SSLCONERR_NOERROR)
-                                        { // STOR reports an error + nothing was uploaded == assume the "cannot create target file name" error
+                                            { // STOR reports an error + nothing was uploaded == assume the "cannot create target file name" error
                                                 if (UploadType == utOverwriteFile && !UseDeleteForOverwrite)
                                                 {
                                                     UseDeleteForOverwrite = TRUE;

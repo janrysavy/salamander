@@ -1,5 +1,6 @@
 ﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
+// CommentsTranslationProject: TRANSLATED
 
 #include "precomp.h"
 #include "spl_zlib.h"
@@ -526,7 +527,7 @@ char* CDataConnectionSocket::GiveData(int* length, BOOL* decomprErr)
             }
             else
             {
-            if (ValidBytesInReadBytesBuf < ReadBytesAllocatedSize) // try to shrink the buffer so it does not occupy memory unnecessarily
+                if (ValidBytesInReadBytesBuf < ReadBytesAllocatedSize) // try to shrink the buffer so it does not occupy memory unnecessarily
                     ret = (char*)realloc(ReadBytes, ValidBytesInReadBytesBuf);
                 if (ret == NULL)
                     ret = ReadBytes;
@@ -1092,8 +1093,8 @@ void CDataConnectionSocket::ReceiveNetEvent(LPARAM lParam, int index)
                                     }
                                     else // WSAGETSELECTEVENT(lParam) == FD_READ
                                     {
-                                    if (NeedFlushReadBuf != 3 /* flush + FD_CLOSE */)
-                                        NeedFlushReadBuf = 2; // flush + FD_READ (cannot overwrite FD_CLOSE)
+                                        if (NeedFlushReadBuf != 3 /* flush + FD_CLOSE */)
+                                            NeedFlushReadBuf = 2; // flush + FD_READ (cannot overwrite FD_CLOSE)
                                     }
                                 }
                             }

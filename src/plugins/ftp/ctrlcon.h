@@ -1,5 +1,6 @@
 ﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
+// CommentsTranslationProject: TRANSLATED
 
 #pragma once
 
@@ -485,23 +486,23 @@ public:
     // collection of methods for waiting for the user interface ("data connection") to close when the
     // command finishes successfully on the server
     virtual BOOL CanFinishSending(int replyCode, BOOL* useTimeout) = 0;       // if it returns FALSE, the
-                                                                             // event obtained via
-                                                                             // GetFinishedEvent() will be
-                                                                             // waited on
+                                                                              // event obtained via
+                                                                              // GetFinishedEvent() will be
+                                                                              // waited on
     virtual void BeforeWaitingForFinish(int replyCode, BOOL* useTimeout) = 0; // called after the first
-                                                                             // CanFinishSending() that
-                                                                             // returns FALSE
+                                                                              // CanFinishSending() that
+                                                                              // returns FALSE
     virtual void HandleDataConTimeout(DWORD* start) = 0;                      // called only if
-                                                                             // BeforeWaitingForFinish
-                                                                             // returns TRUE in
-                                                                             // 'useTimeout'
+                                                                              // BeforeWaitingForFinish
+                                                                              // returns TRUE in
+                                                                              // 'useTimeout'
     virtual HANDLE GetFinishedEvent() = 0;                                    // once it is signaled,
-                                                                             // CanFinishSending() is
-                                                                             // tested again
+                                                                              // CanFinishSending() is
+                                                                              // tested again
     virtual void HandleESCWhenWaitingForFinish(HWND parent) = 0;              // user pressed ESC while
-                                                                             // waiting (after this method
-                                                                             // CanFinishSending() is tested
-                                                                             // again)
+                                                                              // waiting (after this method
+                                                                              // CanFinishSending() is tested
+                                                                              // again)
 };
 
 class CSendCmdUserIfaceForListAndDownload : public CSendCmdUserIfaceAbstract
@@ -657,7 +658,7 @@ protected:
     CKeepAliveMode KeepAliveMode;     // current state of keep-alive processing in the "control connection"
     BOOL KeepAliveCmdAllBytesWritten; // FALSE = the last keep-alive command has not been fully sent yet (must wait for FD_WRITE)
     HANDLE KeepAliveFinishedEvent;    // signaled after the keep-alive command finishes (used by the main thread when waiting to
-                                     // start a normal command)
+                                      // start a normal command)
     // "data connection" for the keep-alive command (NLST+LIST) - it only discards data (object destruction happens inside
     // SocketsThread->CritSect, so the object cannot disappear "under the feet" of "receive" methods; before destroying the
     // object, KeepAliveDataCon is set to NULL in this object's section (the object can only be "retrieved" for the first

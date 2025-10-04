@@ -1,5 +1,6 @@
 ﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
+// CommentsTranslationProject: TRANSLATED
 
 #include "precomp.h"
 
@@ -38,7 +39,7 @@ BOOL ConvertStringRegToTxt(char* buf, int bufSize, const char* regStr)
                         if (*s == '$')
                             *d++ = '\r'; // CR
                         else
-                        *d++ = *s; // normal character
+                            *d++ = *s; // normal character
                     }
                 }
             }
@@ -672,7 +673,7 @@ BOOL CServerType::Load(HWND parent, HKEY regKey, CSalamanderRegistryAbstract* re
                 }
             }
             else
-        return FALSE; // all columns must be loaded, terminating
+                return FALSE; // all columns must be loaded, terminating
             sprintf(num, "%d", ++i);
         }
         registry->CloseKey(columnsKey);

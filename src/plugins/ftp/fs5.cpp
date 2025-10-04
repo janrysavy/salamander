@@ -1,5 +1,6 @@
 ﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
+// CommentsTranslationProject: TRANSLATED
 
 #include "precomp.h"
 
@@ -566,7 +567,7 @@ BOOL CPluginFSInterface::QuickRename(const char* fsName, int mode, HWND parent, 
                         s++;
                     if (SalamanderGeneral->StrICmp(LastServerType, s) == 0)
                     {
-                          // we found the serverType successfully used for listing, now parse the listing
+                        // we found the serverType successfully used for listing, now parse the listing
                         if (!ParseListing(NULL, NULL, serverType, &err, isVMS, newName, caseSensitive,
                                           &tgtFileExists, &tgtDirExists))
                             err = TRUE;
@@ -592,11 +593,11 @@ BOOL CPluginFSInterface::QuickRename(const char* fsName, int mode, HWND parent, 
                 }
             }
 
-              if (renameAction == 1) // rename
+            if (renameAction == 1) // rename
             {
                 ControlConnection->LogMessage(logBuf, -1, TRUE);
 
-                  TotalConnectAttemptNum = 1; // start of a user-requested action -> if reconnecting is needed, this is the first reconnect attempt
+                TotalConnectAttemptNum = 1; // start of a user-requested action -> if reconnecting is needed, this is the first reconnect attempt
                 int panel;
                 BOOL notInPanel = !SalamanderGeneral->GetPanelWithPluginFS(this, panel);
                 char changedPath[FTP_MAX_PATH];
@@ -835,44 +836,44 @@ BOOL CPluginFSInterface::CopyOrMoveFromDiskToFS(BOOL copy, int mode, const char*
             if (HomeDir[0] == 0 || HomeDir[0] != '/' && HomeDir[0] != '\\')
             { // we try skipping '/' or '\\' at the beginning of the path only if the server home dir does not start with them (the PWD result after login)
                 pathType = GetFTPServerPathType(tgtPath + 1);
-                  if (pathType == ftpsptOpenVMS || pathType == ftpsptMVS || pathType == ftpsptIBMz_VM ||
-                      pathType == ftpsptOS2 && GetFTPServerPathType("") == ftpsptOS2) // OS/2 paths clash with the Unix path "/C:/path", so we distinguish OS/2 paths even just by the SYST reply
-                  {                                                                   // VMS + MVS + IBM_z/VM + OS/2 do not have '/' or '\\' at the beginning of the path
-                      memmove(tgtPath, tgtPath + 1, strlen(tgtPath) + 1);             // remove the '/' or '\\' character from the start of the path
-                      if (tgtPath[0] == 0)                                            // generic root -> fill in according to the system type
+                if (pathType == ftpsptOpenVMS || pathType == ftpsptMVS || pathType == ftpsptIBMz_VM ||
+                    pathType == ftpsptOS2 && GetFTPServerPathType("") == ftpsptOS2) // OS/2 paths clash with the Unix path "/C:/path", so we distinguish OS/2 paths even just by the SYST reply
+                {                                                                   // VMS + MVS + IBM_z/VM + OS/2 do not have '/' or '\\' at the beginning of the path
+                    memmove(tgtPath, tgtPath + 1, strlen(tgtPath) + 1);             // remove the '/' or '\\' character from the start of the path
+                    if (tgtPath[0] == 0)                                            // generic root -> fill in according to the system type
                     {
                         isSpecRootPath = TRUE;
-                          if (pathType == ftpsptOpenVMS)
-                              lstrcpyn(tgtPath, "[000000]", FTP_MAX_PATH);
-                          else
-                          {
-                              if (pathType == ftpsptMVS)
-                                  lstrcpyn(tgtPath, "''", FTP_MAX_PATH);
-                              else
-                              {
-                                  if (pathType == ftpsptIBMz_VM)
-                                  {
-                                      if (HomeDir[0] == 0 || !FTPGetIBMz_VMRootPath(tgtPath, FTP_MAX_PATH, HomeDir))
-                                      {
-                                          lstrcpyn(tgtPath, "/", FTP_MAX_PATH); // tested server supported the Unix root "/", someone might report otherwise and we will handle it later...
-                                      }
-                                  }
-                                  else
-                                  {
-                                      if (pathType == ftpsptOS2)
-                                      {
-                                          if (HomeDir[0] == 0 || !FTPGetOS2RootPath(tgtPath, FTP_MAX_PATH, HomeDir))
-                                          {
-                                              lstrcpyn(tgtPath, "/", FTP_MAX_PATH); // try at least the Unix root "/", we cannot do anything else, someone might report otherwise and we will handle it later...
-                                          }
-                                      }
-                                  }
-                              }
-                          }
-                      }
-                  }
-                  else
-                      pathType = GetFTPServerPathType(tgtPath);
+                        if (pathType == ftpsptOpenVMS)
+                            lstrcpyn(tgtPath, "[000000]", FTP_MAX_PATH);
+                        else
+                        {
+                            if (pathType == ftpsptMVS)
+                                lstrcpyn(tgtPath, "''", FTP_MAX_PATH);
+                            else
+                            {
+                                if (pathType == ftpsptIBMz_VM)
+                                {
+                                    if (HomeDir[0] == 0 || !FTPGetIBMz_VMRootPath(tgtPath, FTP_MAX_PATH, HomeDir))
+                                    {
+                                        lstrcpyn(tgtPath, "/", FTP_MAX_PATH); // tested server supported the Unix root "/", someone might report otherwise and we will handle it later...
+                                    }
+                                }
+                                else
+                                {
+                                    if (pathType == ftpsptOS2)
+                                    {
+                                        if (HomeDir[0] == 0 || !FTPGetOS2RootPath(tgtPath, FTP_MAX_PATH, HomeDir))
+                                        {
+                                            lstrcpyn(tgtPath, "/", FTP_MAX_PATH); // try at least the Unix root "/", we cannot do anything else, someone might report otherwise and we will handle it later...
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                    pathType = GetFTPServerPathType(tgtPath);
             }
             else
                 pathType = GetFTPServerPathType(tgtPath);
@@ -903,102 +904,102 @@ BOOL CPluginFSInterface::CopyOrMoveFromDiskToFS(BOOL copy, int mode, const char*
                         char cutMaskIBMz_VM[MAX_PATH];
                         cutMaskIBMz_VM[0] = 0;
                         BOOL done = FALSE;
-                          if (pathType == ftpsptIBMz_VM)
-                          {
-                              lstrcpyn(cutTgtPathIBMz_VM, tgtPath, FTP_MAX_PATH);
-                              if (FTPIBMz_VmCutTwoDirectories(cutTgtPathIBMz_VM, FTP_MAX_PATH, cutMaskIBMz_VM, MAX_PATH))
-                              {
-                                  char* sep = strchr(cutMaskIBMz_VM, '.');
-                                  char* ast = strchr(cutMaskIBMz_VM, '*');
-                                  char* exc = strchr(cutMaskIBMz_VM, '?');
-                                  if (ast != NULL && ast < sep || exc != NULL && exc < sep)
-                                  { // the trimmed part contains '*' or '?' (wildcards) before '.' (definitely a file mask such as "*.*")
-                                      lstrcpyn(tgtPath, cutTgtPathIBMz_VM, FTP_MAX_PATH);
-                                      lstrcpyn(mask, cutMaskIBMz_VM, MAX_PATH);
-                                      done = TRUE;
-                                  }
-                              }
-                              else
-                              {
-                                  cutTgtPathIBMz_VM[0] = 0;
-                                  cutMaskIBMz_VM[0] = 0;
-                              }
-                          }
-                          if (!done)
-                          {
-                              if (cutTgtPathIBMz_VM[0] == 0 && // we need to test whether 'cutMaskIBMz_VM' contains a mask
-                                      (strchr(cutMask, '*') != NULL || strchr(cutMask, '?') != NULL) ||
-                                  pathType == ftpsptOpenVMS && cutMaybeFileName)
-                              { // the trimmed part contains '*' or '?' (wildcards) or it is a VMS file name (must be a mask, the target path is the path to that file)
-                                  lstrcpyn(tgtPath, cutTgtPath, FTP_MAX_PATH);
-                                  lstrcpyn(mask, cutMask, MAX_PATH);
-                              }
-                              else
-                              {
-                                  TotalConnectAttemptNum = 1; // start of a user-requested action -> if reconnecting is needed, this is the first reconnect attempt
+                        if (pathType == ftpsptIBMz_VM)
+                        {
+                            lstrcpyn(cutTgtPathIBMz_VM, tgtPath, FTP_MAX_PATH);
+                            if (FTPIBMz_VmCutTwoDirectories(cutTgtPathIBMz_VM, FTP_MAX_PATH, cutMaskIBMz_VM, MAX_PATH))
+                            {
+                                char* sep = strchr(cutMaskIBMz_VM, '.');
+                                char* ast = strchr(cutMaskIBMz_VM, '*');
+                                char* exc = strchr(cutMaskIBMz_VM, '?');
+                                if (ast != NULL && ast < sep || exc != NULL && exc < sep)
+                                { // the trimmed part contains '*' or '?' (wildcards) before '.' (definitely a file mask such as "*.*")
+                                    lstrcpyn(tgtPath, cutTgtPathIBMz_VM, FTP_MAX_PATH);
+                                    lstrcpyn(mask, cutMaskIBMz_VM, MAX_PATH);
+                                    done = TRUE;
+                                }
+                            }
+                            else
+                            {
+                                cutTgtPathIBMz_VM[0] = 0;
+                                cutMaskIBMz_VM[0] = 0;
+                            }
+                        }
+                        if (!done)
+                        {
+                            if (cutTgtPathIBMz_VM[0] == 0 && // we need to test whether 'cutMaskIBMz_VM' contains a mask
+                                    (strchr(cutMask, '*') != NULL || strchr(cutMask, '?') != NULL) ||
+                                pathType == ftpsptOpenVMS && cutMaybeFileName)
+                            { // the trimmed part contains '*' or '?' (wildcards) or it is a VMS file name (must be a mask, the target path is the path to that file)
+                                lstrcpyn(tgtPath, cutTgtPath, FTP_MAX_PATH);
+                                lstrcpyn(mask, cutMask, MAX_PATH);
+                            }
+                            else
+                            {
+                                TotalConnectAttemptNum = 1; // start of a user-requested action -> if reconnecting is needed, this is the first reconnect attempt
                                 int panel;
                                 BOOL notInPanel = !SalamanderGeneral->GetPanelWithPluginFS(this, panel);
                                 BOOL success = FALSE;
                                 char replyBuf[700];
-                                  if (strchr(cutMask, '*') != NULL || strchr(cutMask, '?') != NULL ||
-                                      ControlConnection->SendChangeWorkingPath(notInPanel, panel == PANEL_LEFT,
-                                                                               SalamanderGeneral->GetMsgBoxParent(),
-                                                                               tgtPath, User, USER_MAX_SIZE,
-                                                                               &success, replyBuf, 700, NULL, &TotalConnectAttemptNum,
-                                                                               NULL, FALSE, NULL))
-                                  {
-                                      if (!success) // if 'tgtPath' is a valid path, the mask is "*"; otherwise continue
-                                      {
-                                          if (ControlConnection->SendChangeWorkingPath(notInPanel, panel == PANEL_LEFT,
-                                                                                        SalamanderGeneral->GetMsgBoxParent(),
-                                                                                        cutTgtPath, User, USER_MAX_SIZE,
-                                                                                        &success, replyBuf, 700, NULL, &TotalConnectAttemptNum,
-                                                                                        NULL, FALSE, NULL))
-                                          {
-                                              if (success) // 'cutTgtPath' is a valid path - the mask is 'cutMask'
-                                              {
-                                                  lstrcpyn(tgtPath, cutTgtPath, FTP_MAX_PATH);
-                                                  lstrcpyn(mask, cutMask, MAX_PATH);
-                                              }
-                                              else // otherwise continue
-                                              {
-                                                  if (cutTgtPathIBMz_VM[0] != 0)
-                                                  {
-                                                      if (ControlConnection->SendChangeWorkingPath(notInPanel, panel == PANEL_LEFT,
-                                                                                                    SalamanderGeneral->GetMsgBoxParent(),
-                                                                                                    cutTgtPathIBMz_VM, User, USER_MAX_SIZE,
-                                                                                                    &success, replyBuf, 700, NULL, &TotalConnectAttemptNum,
-                                                                                                    NULL, FALSE, NULL))
-                                                      {
-                                                          if (success) // 'cutTgtPathIBMz_VM' is a valid path - the mask is 'cutMaskIBMz_VM'
-                                                          {
-                                                              lstrcpyn(tgtPath, cutTgtPathIBMz_VM, FTP_MAX_PATH);
-                                                              lstrcpyn(mask, cutMaskIBMz_VM, MAX_PATH);
-                                                              done = TRUE;
-                                                          }
-                                                      }
-                                                      else // connection cannot be established (even if the user does not want to reconnect)
-                                                      {
-                                                          return TRUE; // cancel
-                                                      }
-                                                  }
-                                                  if (!done) // show the path error to the user
-                                                  {
-                                                      char errBuf[900 + FTP_MAX_PATH];
-                                                      _snprintf_s(errBuf, _TRUNCATE, LoadStr(IDS_CHANGEWORKPATHERROR),
-                                                                  (cutTgtPathIBMz_VM[0] != 0 ? cutTgtPathIBMz_VM : cutTgtPath), replyBuf);
-                                                      SalamanderGeneral->ShowMessageBox(errBuf, LoadStr(IDS_FTPERRORTITLE), MSGBOX_ERROR);
-                                                      return FALSE; // invalid path
-                                                  }
-                                              }
-                                          }
-                                          else // connection cannot be established (even if the user does not want to reconnect)
-                                          {
-                                              return TRUE; // cancel
-                                          }
-                                      }
-                                  }
-                                  else // connection cannot be established (even if the user does not want to reconnect)
+                                if (strchr(cutMask, '*') != NULL || strchr(cutMask, '?') != NULL ||
+                                    ControlConnection->SendChangeWorkingPath(notInPanel, panel == PANEL_LEFT,
+                                                                             SalamanderGeneral->GetMsgBoxParent(),
+                                                                             tgtPath, User, USER_MAX_SIZE,
+                                                                             &success, replyBuf, 700, NULL, &TotalConnectAttemptNum,
+                                                                             NULL, FALSE, NULL))
+                                {
+                                    if (!success) // if 'tgtPath' is a valid path, the mask is "*"; otherwise continue
+                                    {
+                                        if (ControlConnection->SendChangeWorkingPath(notInPanel, panel == PANEL_LEFT,
+                                                                                     SalamanderGeneral->GetMsgBoxParent(),
+                                                                                     cutTgtPath, User, USER_MAX_SIZE,
+                                                                                     &success, replyBuf, 700, NULL, &TotalConnectAttemptNum,
+                                                                                     NULL, FALSE, NULL))
+                                        {
+                                            if (success) // 'cutTgtPath' is a valid path - the mask is 'cutMask'
+                                            {
+                                                lstrcpyn(tgtPath, cutTgtPath, FTP_MAX_PATH);
+                                                lstrcpyn(mask, cutMask, MAX_PATH);
+                                            }
+                                            else // otherwise continue
+                                            {
+                                                if (cutTgtPathIBMz_VM[0] != 0)
+                                                {
+                                                    if (ControlConnection->SendChangeWorkingPath(notInPanel, panel == PANEL_LEFT,
+                                                                                                 SalamanderGeneral->GetMsgBoxParent(),
+                                                                                                 cutTgtPathIBMz_VM, User, USER_MAX_SIZE,
+                                                                                                 &success, replyBuf, 700, NULL, &TotalConnectAttemptNum,
+                                                                                                 NULL, FALSE, NULL))
+                                                    {
+                                                        if (success) // 'cutTgtPathIBMz_VM' is a valid path - the mask is 'cutMaskIBMz_VM'
+                                                        {
+                                                            lstrcpyn(tgtPath, cutTgtPathIBMz_VM, FTP_MAX_PATH);
+                                                            lstrcpyn(mask, cutMaskIBMz_VM, MAX_PATH);
+                                                            done = TRUE;
+                                                        }
+                                                    }
+                                                    else // connection cannot be established (even if the user does not want to reconnect)
+                                                    {
+                                                        return TRUE; // cancel
+                                                    }
+                                                }
+                                                if (!done) // show the path error to the user
+                                                {
+                                                    char errBuf[900 + FTP_MAX_PATH];
+                                                    _snprintf_s(errBuf, _TRUNCATE, LoadStr(IDS_CHANGEWORKPATHERROR),
+                                                                (cutTgtPathIBMz_VM[0] != 0 ? cutTgtPathIBMz_VM : cutTgtPath), replyBuf);
+                                                    SalamanderGeneral->ShowMessageBox(errBuf, LoadStr(IDS_FTPERRORTITLE), MSGBOX_ERROR);
+                                                    return FALSE; // invalid path
+                                                }
+                                            }
+                                        }
+                                        else // connection cannot be established (even if the user does not want to reconnect)
+                                        {
+                                            return TRUE; // cancel
+                                        }
+                                    }
+                                }
+                                else // connection cannot be established (even if the user does not want to reconnect)
                                 {
                                     return TRUE; // cancel
                                 }

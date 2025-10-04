@@ -1,5 +1,6 @@
 ﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
+// CommentsTranslationProject: TRANSLATED
 
 #include "precomp.h"
 
@@ -673,7 +674,7 @@ BOOL COperationDlg::UpdateDataInDialog()
                 else
                 {
                     SetDlgTitle(-1, (progressTxt = LoadStr(WorkersList->EmptyOrAllShouldStop() ? IDS_OPERDLGTITLE_STOPPED : WorkersList->AtLeastOneWorkerIsWaitingForUser() ? IDS_OPERDLGTITLE_WAITING
-                                            : IDS_OPERDLGTITLE_PAUSED))); // not finished, but no workers are added, so the operation is not running...
+                                                                                                                                                                            : IDS_OPERDLGTITLE_PAUSED))); // not finished, but no workers are added, so the operation is not running...
                 }
             }
             if ((int)ProgressValue < 0)
