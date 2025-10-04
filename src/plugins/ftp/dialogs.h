@@ -682,7 +682,7 @@ public:
 public:
     CWelcomeMsgDlg(HWND parent, const char* text, BOOL serverReply = FALSE,
                    const char* sentCommand = NULL, BOOL rawListing = FALSE,
-                   int textSize = -1); // je-li 'textSize' -1 je 'text' null-terminated retezec
+                   int textSize = -1); // if 'textSize' is -1, 'text' is a null-terminated string
 
 protected:
     virtual INT_PTR DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -957,14 +957,14 @@ public:
     BOOL SelFiles;       // change attributes of files
     BOOL SelDirs;        // change attributes of dirs
     BOOL IncludeSubdirs; // include subdirs
-    DWORD AttrAndMask;   // vysledna AND maska atributu (nulovani atributu)
-    DWORD AttrOrMask;    // vysledna OR maska atributu (zapinani atributu)
+    DWORD AttrAndMask;   // resulting attribute AND mask (clearing attributes)
+    DWORD AttrOrMask;    // resulting attribute OR mask (enabling attributes)
 
 public:
     CChangeAttrsDlg(HWND parent, const char* subject, DWORD attr, DWORD attrDiff,
                     BOOL selDirs);
 
-    void RefreshNumValue(); // podle checkboxu nastavi cislo
+    void RefreshNumValue(); // set the number according to the checkbox
 
     virtual void Validate(CTransferInfo& ti);
     virtual void Transfer(CTransferInfo& ti);
@@ -1442,7 +1442,7 @@ protected:
 
 enum CSolveItemErrorSrvCmdDlgType
 {
-    siscdtSimple,     // zadne menu na Retry buttonu
+    siscdtSimple,     // no menu on the Retry button
     siscdtDeleteFile, // Delete: unable to delete file
     siscdtDeleteDir,  // Delete: unable to delete directory
 };

@@ -928,11 +928,11 @@ void CConnectDlg::Transfer(CTransferInfo& ti)
     buf[0] = 0;
     HistoryComboBox(HWindow, ti, IDE_HOSTADDRESS, buf, HOST_MAX_SIZE,
                     HOSTADDRESS_HISTORY_SIZE, Config.HostAddressHistory,
-                    Config.LastBookmark != 0 /* ukladat do historie jen pri Quick Connect*/);
+                    Config.LastBookmark != 0 /* store in history only during Quick Connect*/);
     buf[0] = 0;
     HistoryComboBox(HWindow, ti, IDE_INITIALPATH, buf, FTP_MAX_PATH,
                     INITIALPATH_HISTORY_SIZE, Config.InitPathHistory,
-                    Config.LastBookmark != 0 /* ukladat do historie jen pri Quick Connect*/);
+                    Config.LastBookmark != 0 /* store in history only during Quick Connect*/);
 }
 
 void AddToAdvancedStr(char* buf, int bufSize, const char* str)
@@ -1762,7 +1762,7 @@ CConnectDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                         if (passwordManager->EncryptPassword(plainPassword, &encryptedPassword, &encryptedPasswordSize, encrypt))
                         {
                             UpdateEncryptedPassword(&s->EncryptedPassword, &s->EncryptedPasswordSize, encryptedPassword, encryptedPasswordSize);
-                            // uvolnime buffer alokovany v EncryptPassword()
+                            // free the buffer allocated in EncryptPassword()
                             memset(encryptedPassword, 0, encryptedPasswordSize);
                             SalamanderGeneral->Free(encryptedPassword);
                         }
@@ -1859,7 +1859,7 @@ CConnectDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                         if (passwordManager->EncryptPassword(plainPassword, &encryptedPassword, &encryptedPasswordSize, encrypt))
                         {
                             UpdateEncryptedPassword(&s->EncryptedPassword, &s->EncryptedPasswordSize, encryptedPassword, encryptedPasswordSize);
-                            // uvolnime buffer alokovany v EncryptPassword()
+                            // free the buffer allocated in EncryptPassword()
                             memset(encryptedPassword, 0, encryptedPasswordSize);
                             SalamanderGeneral->Free(encryptedPassword);
                         }
@@ -1965,7 +1965,7 @@ CConnectDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 ExtraDragDropItemAdded = FALSE;
             }
 
-            // presun polozky
+            // move the item
             if (DragIndex != -1 && DragIndex != index && DragIndex + 1 != index)
             {
                 if (index > DragIndex)

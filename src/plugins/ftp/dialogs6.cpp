@@ -1048,7 +1048,7 @@ COperationDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     }
 
     case WM_QUERYDRAGICON:
-        return (BOOL)(INT_PTR)FTPOperIconBig; // nejpis zbytecne
+        return (BOOL)(INT_PTR)FTPOperIconBig; // probably unnecessary
 
     case WM_SIZE:
         LayoutDialog(wParam == SIZE_RESTORED);

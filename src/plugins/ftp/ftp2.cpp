@@ -2515,7 +2515,7 @@ void CFTPProxyServer::Save(HWND parent, HKEY regKey, CSalamanderRegistryAbstract
             if (passwordManager->EncryptPassword("", &scrambledPassword, &scrambledPasswordSize, FALSE))
             {
                 registry->SetValue(regKey, CONFIG_FTPPRXPASSWD_SCRAMBLED, REG_BINARY, scrambledPassword, scrambledPasswordSize);
-                // uvolnime buffer alokovany v EncryptPassword()
+                // free the buffer allocated in EncryptPassword()
                 SalamanderGeneral->Free(scrambledPassword);
             }
         }
@@ -2803,7 +2803,7 @@ void CFTPProxyServerList::AddProxyServer(HWND parent, HWND combo)
             Add(n);
             if (IsGood())
             {
-                n->ProxyUID = NextFreeProxyUID++; // inicializace ProxyUID
+                n->ProxyUID = NextFreeProxyUID++; // initialization of ProxyUID
                 // add to the combo box and focus the added item
                 SendMessage(combo, CB_ADDSTRING, 0, (LPARAM)n->ProxyName);
                 int count = (int)SendMessage(combo, CB_GETCOUNT, 0, 0);

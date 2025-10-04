@@ -824,7 +824,7 @@ RETRY_LABEL:
                                  proxyScriptParams.ProxyPassword, PASSWORD_MAX_SIZE, TRUE,
                                  connectingToAs, FALSE)
                         .Execute() != IDCANCEL)
-                { // zmena hodnot -> musime zmenit i originaly
+                { // value change -> we must update the originals as well
                     HANDLES(EnterCriticalSection(&SocketCritSect));
                     if (ProxyServer != NULL)
                         ProxyServer->SetProxyPassword(proxyScriptParams.ProxyPassword);

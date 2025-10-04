@@ -1171,7 +1171,7 @@ CSrvTypeTestParserDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 if (AllocatedSizeOfRawListing < len + 1)
                 {
                     AllocatedSizeOfRawListing = len + 50;
-                    char* n = (char*)realloc(*RawListing, AllocatedSizeOfRawListing); // udelame trochu rezervu
+                    char* n = (char*)realloc(*RawListing, AllocatedSizeOfRawListing); // make a bit of headroom
                     if (n == NULL)
                     {
                         TRACE_E(LOW_MEMORY);

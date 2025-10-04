@@ -1153,7 +1153,7 @@ void CFTPWorker::HandleEventInWorkingState2(CFTPWorkerEvent event, BOOL& sendQui
                                     BOOL isAS400 = pathType == ftpsptAS400;
                                     TIndirectArray<CFTPQueueItem>* ftpQueueItems = new TIndirectArray<CFTPQueueItem>(100, 500);
                                     BOOL needSimpleListing = TRUE;
-                                    int transferMode = Oper->GetTransferMode(); // parametr pro operace Copy a Move
+                                    int transferMode = Oper->GetTransferMode(); // parameter for Copy and Move operations
                                     BOOL selFiles, selDirs, includeSubdirs;     // parameters for the Change Attributes operation
                                     DWORD attrAndMask, attrOrMask;
                                     int operationsUnknownAttrs;
@@ -1163,7 +1163,7 @@ void CFTPWorker::HandleEventInWorkingState2(CFTPWorkerEvent event, BOOL& sendQui
                                     int operationsHiddenDirDel;
                                     Oper->GetParamsForDeleteOper(NULL, &operationsHiddenFileDel, &operationsHiddenDirDel);
 
-                                    // promenne pro Copy a Move operace:
+                                    // variables for Copy and Move operations:
                                     CQuadWord totalSize(0, 0); // total size (in bytes or blocks)
                                     BOOL sizeInBytes = TRUE;   // TRUE/FALSE = sizes in bytes/blocks (cannot alternate on one listing - see CFTPListingPluginDataInterface::GetSize())
 
@@ -1307,7 +1307,7 @@ void CFTPWorker::HandleEventInWorkingState2(CFTPWorkerEvent event, BOOL& sendQui
                                             Queue->UpdateItemState(CurItem, sqisFailed, ITEMPR_UNABLETOPARSELISTING, NO_ERROR, NULL, Oper);
                                             lookForNewWork = TRUE;
                                         }
-                                        else // dame do logu cim jsme to rozparsovali
+                                        else // log which parser handled it
                                         {
                                             if (listingServerType[0] != 0) // "always true"
                                             {
@@ -1576,7 +1576,7 @@ void CFTPWorker::HandleEventInWorkingState2(CFTPWorkerEvent event, BOOL& sendQui
 
                                                         // For the item/operation CurItem->ParentUID decrease NotDone by one (for CurItem in state sqisProcessing) and increase NotDone + Skipped + Failed + UINeeded according to
                                                         // childItemsNotDone + childItemsSkipped + childItemsFailed + childItemsUINeeded
-                                                        childItemsNotDone--; // snizeni o jednu za CurItem
+                                                        childItemsNotDone--; // decrease by one for CurItem
                                                         Oper->AddToItemOrOperationCounters(curItemParent, childItemsNotDone,
                                                                                            childItemsSkipped, childItemsFailed,
                                                                                            childItemsUINeeded, FALSE);
@@ -1656,7 +1656,7 @@ void CFTPWorker::HandleEventInWorkingState2(CFTPWorkerEvent event, BOOL& sendQui
                 UploadDirGetTgtPathListing = FALSE;
                 StatusType = wstNone;
                 SubState = fwssWorkStartWork;
-                postActivate = TRUE;       // impulz pro pokracovani v praci
+                postActivate = TRUE;       // trigger to continue working
                 reportWorkerChange = TRUE; // we need to hide any progress while fetching the listing
 
                 // Since we are already inside the CSocketsThread::CritSect section, this call

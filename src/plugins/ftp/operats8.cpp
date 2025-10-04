@@ -988,7 +988,7 @@ void CFTPWorker::HandleEventInWorkingState3(CFTPWorkerEvent event, BOOL& sendQui
                                                 Queue->UpdateItemState(CurItem, sqisFailed, ITEMPR_RESUMETESTFAILED, NO_ERROR, NULL, Oper);
                                                 lookForNewWork = TRUE;
                                             }
-                                            else // Resume or Overwrite: Resume nevysel, provedeme Overwrite
+                                            else // Resume or Overwrite: Resume failed, perform Overwrite
                                             {
                                                 Logs.LogMessage(LogUID, LoadStr(IDS_LOGMSGOVERWRTGTFILE), -1, TRUE);
                                                 Queue->UpdateForceAction(CurItem, fqiaOverwrite);

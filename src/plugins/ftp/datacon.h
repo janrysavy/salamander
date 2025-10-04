@@ -707,11 +707,11 @@ protected:
     // a Windows error code (came with FD_CLOSE or occurred while handling FD_CLOSE)
     virtual void SocketWasClosed(DWORD error);
 
-    // prijem timeru s ID 'id' a parametrem 'param'
+    // timer reception with ID 'id' and parameter 'param'
     virtual void ReceiveTimer(DWORD id, void* param);
 
     // called after FD_ACCEPT is received and processed (assuming CSocket::ReceiveNetEvent is used for FD_ACCEPT)
-    // CSocket::ReceiveNetEvent): 'success' je uspech acceptu, pri neuspechu je ve 'winError'
+    // CSocket::ReceiveNetEvent): 'success' is the accept success flag; on failure it is in 'winError'
     // the Windows error code and 'proxyError' is TRUE if the proxy server reported the error
     // (retrieve the error text via GetProxyError())
     // WARNING: call only after a single entry into the CSocket::SocketCritSect and CSocketsThread::CritSect critical sections

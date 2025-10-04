@@ -103,7 +103,7 @@ void CFTPWorker::HandleEventInWorkingState(CFTPWorkerEvent event, BOOL& sendQuit
 
                             // since we are already inside CSocketsThread::CritSect, this call
                             // is also possible from CSocket::SocketCritSect and CFTPWorker::WorkerCritSect (no risk of deadlock)
-                            SocketsThread->AddTimer(Msg, UID, GetTickCount() + 100 /* prvni update statusu udelame "okamzite" */,
+                            SocketsThread->AddTimer(Msg, UID, GetTickCount() + 100 /* perform the first status update "immediately" */,
                                                     WORKER_STATUSUPDATETIMID, NULL); // ignore the error; at worst the status will not update
                         }
                     }
@@ -207,7 +207,7 @@ void CFTPWorker::HandleEventInWorkingState(CFTPWorkerEvent event, BOOL& sendQuit
                             WorkerDataConState = wdcsTransferFinished;
                         else
                         {
-                            if (WorkerDataConState != wdcsWaitingForConnection) // chodi i pri chybe connectu data-connectiony
+                            if (WorkerDataConState != wdcsWaitingForConnection) // also arrives when the data connection connect fails
                                 TRACE_E("CFTPWorker::HandleEventInWorkingState(): fweUplDataConConnectionClosed: WorkerDataConState is not wdcsTransferingData!");
                         }
                     }
@@ -715,7 +715,7 @@ void CFTPWorker::HandleEventInWorkingState(CFTPWorkerEvent event, BOOL& sendQuit
                                         else // try RMD if DELE failed (hypothesis: a directory link might be deletable via RMD)
                                         {    // CurItem->Type is fqitDeleteLink or fqitMoveDeleteDirLink
                                             if (ShouldStop)
-                                                handleShouldStop = TRUE; // zkontrolujeme jestli se nema stopnout worker
+                                                handleShouldStop = TRUE; // check whether the worker should stop
                                             else
                                             {
                                                 char vmsDirName[MAX_PATH + 10];
@@ -727,7 +727,7 @@ void CFTPWorker::HandleEventInWorkingState(CFTPWorkerEvent event, BOOL& sendQuit
                                                     dirName = vmsDirName;
                                                 }
                                                 PrepareFTPCommand(buf, 200 + FTP_MAX_PATH, errBuf, 50 + FTP_MAX_PATH,
-                                                                  ftpcmdDeleteDir, &cmdLen, dirName); // nemuze nahlasit chybu
+                                                                  ftpcmdDeleteDir, &cmdLen, dirName); // cannot report an error
                                                 sendCmd = TRUE;
                                                 SubState = fwssWorkDelDirWaitForRMDRes;
                                                 finished = FALSE;
@@ -1136,7 +1136,7 @@ void CFTPWorker::HandleEvent(CFTPWorkerEvent event, char* reply, int replySize, 
             // is also possible from CSocket::SocketCritSect and CFTPWorker::WorkerCritSect (no risk of deadlock)
             SocketsThread->DeleteTimer(UID, WORKER_RECONTIMEOUTTIMID);
         }
-        else // normalni cinnost
+        else // normal activity
         {
             if (event == fweReconTimeout || event == fweWorkerShouldResume) // proceed to another connection attempt
             {
@@ -1237,7 +1237,7 @@ void CFTPWorker::HandleEvent(CFTPWorkerEvent event, char* reply, int replySize, 
                                 HANDLES(EnterCriticalSection(&WorkerCritSect));
                                 CanDeleteSocket = FALSE;
                                 ReturnToControlCon = TRUE;
-                                SalamanderGeneral->PostMenuExtCommand(FTPCMD_RETURNCONNECTION, TRUE); // pockame na "sal-idle"
+                                SalamanderGeneral->PostMenuExtCommand(FTPCMD_RETURNCONNECTION, TRUE); // wait for "sal-idle"
                                 sendQuitCmd = FALSE;                                                  // attempting to hand over the connection; "QUIT" will not be sent
                             }
                             break;
