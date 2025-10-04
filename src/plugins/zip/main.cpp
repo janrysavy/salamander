@@ -297,7 +297,7 @@ void CPluginInterface::LoadConfiguration(HWND parent, HKEY regKey, CSalamanderRe
         }
         if (!registry->GetValue(regKey, CONFIG_VERSION, REG_DWORD, &Config.Version, sizeof(DWORD)))
         {
-                        Config.Version = 1; // beta 3 did not store this value in the configuration
+            Config.Version = 1; // beta 3 did not store this value in the configuration
         }
         registry->GetValue(regKey, CONFIG_DEFSFX, REG_SZ, Config.DefSfxFile, MAX_PATH);
         ValidateDefSfxFile();
@@ -514,7 +514,7 @@ void CPluginInterface::Connect(HWND parent, CSalamanderConnectAbstract* salamand
 
     salamander->AddCustomPacker("ZIP (Plugin)", "zip", FALSE);
     salamander->AddCustomUnpacker("ZIP (Plugin)", "*.zip;*.pk3;*.jar",
-                                                                    Config.Version < 2); // before SS 1.6 beta 4 there was no *.jar support -> restore it
+                                  Config.Version < 2); // before SS 1.6 beta 4 there was no *.jar support -> restore it
     salamander->AddPanelArchiver("zip;pk3;jar", TRUE, FALSE);
 
     /* used by the export_mnu.py script that generates salmenu.mnu for Translator
