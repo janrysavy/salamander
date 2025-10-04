@@ -1389,7 +1389,7 @@ BOOL CUploadPathListing::ParseListingToArray(const char* pathListing, int pathLi
     *lowMem = FALSE;
     ClearListingItems();
 
-    // napocitame masku 'validDataMask'
+    // compute the 'validDataMask' mask
     DWORD validDataMask = VALID_DATA_HIDDEN | VALID_DATA_ISLINK; // Name + NameLen + Hidden + IsLink
     int i;
     for (i = 0; i < serverType->Columns.Count; i++)
@@ -1816,7 +1816,7 @@ CUploadListingChange::CUploadListingChange(DWORD changeTime, CUploadListingChang
     }
 }
 
-CUploadListingChange::~CUploadListingChange() // uvolneni dat, ale POZOR: nesmi uvolnit NextChange
+CUploadListingChange::~CUploadListingChange() // release the data, but WARNING: must not free NextChange
 {
     if (Name != NULL)
         SalamanderGeneral->Free(Name);
@@ -1904,7 +1904,7 @@ BOOL CFTPOpenedFiles::OpenFile(const char* user, const char* host, unsigned shor
             n = AllocatedObjects[AllocatedObjects.Count - 1];
             AllocatedObjects.Detach(AllocatedObjects.Count - 1);
             if (!AllocatedObjects.IsGood())
-                AllocatedObjects.ResetState(); // detach nemuze selhat
+                AllocatedObjects.ResetState(); // detaching cannot fail
             n->Set(uid, user, host, port, path, pathType, name, accessType);
         }
         else

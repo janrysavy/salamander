@@ -2212,11 +2212,11 @@ void CFTPWorker::HandleSocketEvent(CFTPWorkerSocketEvent event, DWORD data1, DWO
     char errBuf[300];
     char errText[200];
 
-    if (event == fwseIPReceived) // ulozime IP adresu do operace a vyvolame HandleEvent
+    if (event == fwseIPReceived) // store the IP address in the operation and call HandleEvent
     {
         CFTPWorkerEvent resEvent = fweIPReceived;
         if (data1 != INADDR_NONE)
-            Oper->SetServerIP(data1); // ulozime IP adresu, vsichni workeri si ji vyzvedavaji z operace
+            Oper->SetServerIP(data1); // store the IP address; all workers fetch it from the operation
         else                          // error, store it in ErrorDescr for later use
         {
             HANDLES(EnterCriticalSection(&WorkerCritSect));
@@ -2232,7 +2232,7 @@ void CFTPWorker::HandleSocketEvent(CFTPWorkerSocketEvent event, DWORD data1, DWO
     }
     else
     {
-        if (event == fwseConnect) // prijmeme vysledek pokusu o navazani spojeni
+        if (event == fwseConnect) // receive the result of the connection attempt
         {
             CFTPWorkerEvent resEvent = fweConnected;
             if (data1 != NO_ERROR) // error, store it in ErrorDescr for later use
@@ -2414,7 +2414,7 @@ void CFTPWorker::HandleSocketEvent(CFTPWorkerSocketEvent event, DWORD data1, DWO
                     HANDLES(LeaveCriticalSection(&SocketCritSect));
                     leaveSect = FALSE;
 
-                    ForceClose(); // "rucne" zavreme socket
+                    ForceClose(); // manually close the socket
 
                     handleClose = TRUE;
                     isTimeout = TRUE;
@@ -2456,7 +2456,7 @@ void CFTPWorker::HandleSocketEvent(CFTPWorkerSocketEvent event, DWORD data1, DWO
                     break;
                 }
 
-                case fwseWaitForCmdErr: // timeout, zavreme connectionu "rucne"
+                case fwseWaitForCmdErr: // timeout, close the connection manually
                 {
                     if (WaitForCmdErrError != NO_ERROR) // only if we have an error
                     {
@@ -2468,7 +2468,7 @@ void CFTPWorker::HandleSocketEvent(CFTPWorkerSocketEvent event, DWORD data1, DWO
                     HANDLES(LeaveCriticalSection(&SocketCritSect));
                     leaveSect = FALSE;
 
-                    ForceClose(); // "rucne" zavreme socket
+                    ForceClose(); // manually close the socket
 
                     handleClose = TRUE;
                     HANDLES(EnterCriticalSection(&WorkerCritSect));

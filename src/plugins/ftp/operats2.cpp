@@ -334,7 +334,7 @@ void CFTPOperation::SendHeaderToLog(int logUID)
     char buf[500];
     char timeBuf[100];
     BOOL ok = TRUE;
-    // sestaveni titulku okna
+    // building the window title
     int titleResID = 0;
     switch (Type)
     {
@@ -646,7 +646,7 @@ BOOL CFTPOperation::InitOperDlg(COperationDlg* dlg)
     HANDLES(EnterCriticalSection(&OperCritSect));
     BOOL ok = TRUE;
 
-    // sestaveni titulku okna
+    // building the window title
     int titleResID = 0;
     switch (Type)
     {

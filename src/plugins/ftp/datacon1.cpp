@@ -886,7 +886,7 @@ void CDataConnectionSocket::ConnectionAccepted(BOOL success, DWORD winError, BOO
     {
         NetEventLastError = winError;
         if (proxyError && NetEventLastError == NO_ERROR)
-            NetEventLastError = ERROR_INVALID_FUNCTION /* jen nesmi byt NO_ERROR */;
+            NetEventLastError = ERROR_INVALID_FUNCTION /* it just must not be NO_ERROR */;
         LogNetEventLastError(proxyError);
     }
 }
@@ -1106,7 +1106,7 @@ void CDataConnectionSocket::ReceiveNetEvent(LPARAM lParam, int index)
                                 DoPostMessageToWorker(WorkerMsgConnectionClosed);
                             }
                         }
-                        else // vsechna data se ukladaji do bufferu ReadBytes
+                        else // all data are stored in the ReadBytes buffer
                         {
                             if (!lowMem &&
                                 ReadBytesAllocatedSize - ValidBytesInReadBytesBuf < DATACON_BYTESTOREADONSOCKET) // maly buffer 'ReadBytes'

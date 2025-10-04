@@ -1105,7 +1105,7 @@ BOOL CPluginFSInterface::ListCurrentPath(CSalamanderDirectoryAbstract* dir,
                 UploadListingCache.AddOrUpdateListing(User, Host, Port, Path, pathType,
                                                       PathListing, PathListingLen,
                                                       PathListingDate, PathListingStartTime,
-                                                      TRUE /* jen update listingu */, welcomeReply, systReply,
+                                                      TRUE /* just update the listing */, welcomeReply, systReply,
                                                       AutodetectSrvType ? NULL : LastServerType);
             }
 
@@ -1243,7 +1243,7 @@ BOOL CPluginFSInterface::ListCurrentPath(CSalamanderDirectoryAbstract* dir,
                         InformAboutUnknownSrvType = FALSE;
                     }
                 }
-                else // dame do logu cim jsme to rozparsovali
+                else // log which parser handled it
                 {
                     if (LastServerType[0] != 0) // "always true"
                     {

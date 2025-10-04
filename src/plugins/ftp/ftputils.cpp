@@ -960,7 +960,7 @@ char* FTPGetErrorText(int err, char* buf, int bufSize)
     return buf;
 }
 
-// zjisti jestli text 'text' obsahuje retezec 'sub' (velikost pismen nehraje roli)
+// determine whether the text 'text' contains the string 'sub' (letter case does not matter)
 BOOL HaveSubstring(const char* text, const char* sub)
 {
     const char* t = text;
@@ -1532,7 +1532,7 @@ void GetUNIXRightsStr(char* buf, int bufSize, DWORD attrs)
 
 void FTPGetErrorTextForLog(DWORD err, char* errBuf, int bufSize)
 {
-    FTPGetErrorText(err, errBuf, bufSize - 2); // (bufSize-2) aby zbylo na nase CRLF
+    FTPGetErrorText(err, errBuf, bufSize - 2); // (bufSize-2) so there is room left for our CRLF
     char* s = errBuf + strlen(errBuf);
     while (s > errBuf && (*(s - 1) == '\n' || *(s - 1) == '\r'))
         s--;
@@ -1543,7 +1543,7 @@ BOOL FTPReadFTPReply(char* readBytes, int readBytesCount, int readBytesOffset,
                      char** reply, int* replySize, int* replyCode)
 {
     BOOL ret = FALSE;
-    if (readBytesOffset < readBytesCount) // je-li vubec neco nactene
+    if (readBytesOffset < readBytesCount) // if anything is loaded at all
     {
         char* s = readBytes + readBytesOffset;
         char* end = readBytes + readBytesCount;
@@ -1590,7 +1590,7 @@ BOOL FTPReadFTPReply(char* readBytes, int readBytesCount, int readBytesOffset,
 
                         if (s < end) // the end of the line was found
                         {
-                            s++; // preskok LF
+                            s++; // skip the LF
                             int j, code = 0;
                             for (j = 0; s < end && j < 3; j++)
                             {
@@ -1627,7 +1627,7 @@ BOOL FTPReadFTPReply(char* readBytes, int readBytesCount, int readBytesOffset,
 
                     if (s < end) // we found the end of the line - we have the entire FTP reply
                     {
-                        s++; // preskok LF
+                        s++; // skip the LF
                         ret = TRUE;
                         *reply = readBytes + readBytesOffset;
                         *replySize = (int)(s - (readBytes + readBytesOffset));
@@ -2556,7 +2556,7 @@ void FTPGenerateNewName(int* phase, char* newName, int* index, const char* origi
     case ftpsptWindows:
     case ftpsptOS2:
         *phase = 1;
-        // zde break nechybi!
+        // the break is not missing here!
     case ftpsptUnix:
     {
         if (*phase == 0) // at this stage we assume a classic UNIX (names max 255 characters, do not contain '/' or '\0')
@@ -3118,7 +3118,7 @@ void FTPGenerateNewName(int* phase, char* newName, int* index, const char* origi
         // Everything I have managed to learn about the MVS naming conventions:
         // -each part of the name (between periods):
         //   -must start with a letter or '#'
-        //   -obsahuje A-Z, 0-9, '#', '%', '§'
+        //   -contains A-Z, 0-9, '#', '%', '§'
         // I am postponing the implementation; if anyone ever uses it, which I doubt. ;-)
 
         // for now remove '\'' and optionally append "#number" to the end

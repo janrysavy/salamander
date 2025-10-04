@@ -553,7 +553,7 @@ BOOL CPluginFSInterface::QuickRename(const char* fsName, int mode, HWND parent, 
 
                 BOOL caseSensitive = FTPIsCaseSensitive(pathType);
 
-                // najdeme cim se parsoval listing
+                // find which parser handled the listing
                 CServerTypeList* serverTypeList = Config.LockServerTypeList();
                 int serverTypeListCount = serverTypeList->Count;
                 BOOL err = TRUE; // TRUE = we cannot determine whether the target file will be overwritten

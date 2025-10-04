@@ -1588,7 +1588,7 @@ void DoCreateFile(CFTPDiskWork& localWork, char* fullName, BOOL& workDone, BOOL&
                             // generate a new name
                             needCopyBack = TRUE;
                             if (suffixLen + 1 + (nameLen - extOffset) < rest) // if at least 1 character of the name + the suffix + the extension fits
-                            {                                                 // sestavime: co nejvetsi cast jmena + suffix + pripona
+                            {                                                 // assemble: the largest possible part of the name + suffix + extension
                                 int off = (nameLen + suffixLen < rest) ? extOffset : (rest - 1 - suffixLen - (nameLen - extOffset));
                                 memcpy(localWork.Name, nameBackup, off);
                                 memcpy(localWork.Name + off, suffix, suffixLen);
@@ -1676,7 +1676,7 @@ void DoCreateFile(CFTPDiskWork& localWork, char* fullName, BOOL& workDone, BOOL&
         case 3: // resume or overwrite (for already exists, transfer failed, and force action)
         {
             file = HANDLES_Q(CreateFile(fullName,
-                                        GENERIC_READ /* budeme cist a kontrolovat prekryv */ |
+                                        GENERIC_READ /* we will read and check the overlap */ |
                                             GENERIC_WRITE,
                                         FILE_SHARE_READ, NULL,
                                         OPEN_ALWAYS, FILE_FLAG_SEQUENTIAL_SCAN, NULL));
@@ -1690,7 +1690,7 @@ void DoCreateFile(CFTPDiskWork& localWork, char* fullName, BOOL& workDone, BOOL&
                     readonly = TRUE;
                     SetFileAttributes(fullName, attr & (~FILE_ATTRIBUTE_READONLY));
                     file = HANDLES_Q(CreateFile(fullName,
-                                                GENERIC_READ /* budeme cist a kontrolovat prekryv */ |
+                                                GENERIC_READ /* we will read and check the overlap */ |
                                                     GENERIC_WRITE,
                                                 FILE_SHARE_READ, NULL,
                                                 OPEN_ALWAYS, FILE_FLAG_SEQUENTIAL_SCAN, NULL));
@@ -1876,7 +1876,7 @@ void DoCheckOrWriteToFile(CFTPDiskWork& localWork, BOOL& needCopyBack)
                     }
                     else // compare the requested part of the file with the buffer contents
                     {
-                        char buf[4096];                                                                           // buffer pro cteni z disku
+                        char buf[4096];                                                                           // buffer for reading from disk
                         int bytesToCheck = (localWork.WriteOrReadFromOffset - localWork.CheckFromOffset).LoDWord; // the size of the verified tail of the file is under 1GB, so this truncation is possible
                         if (bytesToCheck > localWork.ValidBytesInFlushDataBuffer)                                 // optionally trim by the flush buffer size (we do not need to verify the entire segment at once)
                             bytesToCheck = localWork.ValidBytesInFlushDataBuffer;
@@ -1952,7 +1952,7 @@ void DoCheckOrWriteToFile(CFTPDiskWork& localWork, BOOL& needCopyBack)
                             localWork.WinError = GetLastError();
                             needCopyBack = TRUE;
                         }
-                        else // uspesne zapsano, mame uspesne hotovo
+                        else // successfully written, we are successfully done
                         {
                             if (localWork.WriteOrReadFromOffset + CQuadWord(writtenBytes, 0) < fileSize)
                             {                                     // if the write finished before the end of the file, call SetEndOfFile (trim unwanted old data that should be overwritten)
@@ -1964,7 +1964,7 @@ void DoCheckOrWriteToFile(CFTPDiskWork& localWork, BOOL& needCopyBack)
             }
         }
     }
-    else // ohlasime chybu
+    else // report an error
     {
         TRACE_E("DoCheckOrWriteToFile(): localWork.WorkFile may not be NULL!");
         localWork.State = sqisFailed;
@@ -1999,7 +1999,7 @@ void DoCreateAndWriteFile(CFTPDiskWork& localWork, BOOL& needCopyBack, BOOL& wor
         }
     }
     else
-        file = localWork.WorkFile; // jen zapis
+        file = localWork.WorkFile; // write only
 
     if (file != NULL && localWork.ValidBytesInFlushDataBuffer > 0) // write to the file
     {
@@ -2012,7 +2012,7 @@ void DoCreateAndWriteFile(CFTPDiskWork& localWork, BOOL& needCopyBack, BOOL& wor
             localWork.WinError = GetLastError();
             needCopyBack = TRUE; // return the error
         }
-        // else;  // uspesne zapsano, mame uspesne hotovo
+        // else;  // successfully written, we are successfully done
     }
 }
 
@@ -2025,8 +2025,8 @@ void DoListDirectory(CFTPDiskWork& localWork, BOOL& needCopyBack)
         localWork.DiskListing = new TIndirectArray<CDiskListingItem>(100, 500);
         if (localWork.DiskListing != NULL && localWork.DiskListing->IsGood())
         {
-            SalamanderGeneral->SalPathAppend(srcPath, "*.*", MAX_PATH + 10); // nemuze selhat
-            char* srcPathEnd = strrchr(srcPath, '\\');                       // tez nemuze selhat
+            SalamanderGeneral->SalPathAppend(srcPath, "*.*", MAX_PATH + 10); // cannot fail
+            char* srcPathEnd = strrchr(srcPath, '\\');                       // cannot fail either
             WIN32_FIND_DATA fileData;
             HANDLE search = HANDLES_Q(FindFirstFile(srcPath, &fileData));
             if (search == INVALID_HANDLE_VALUE)
@@ -2045,7 +2045,7 @@ void DoListDirectory(CFTPDiskWork& localWork, BOOL& needCopyBack)
                 {
                     char* s = fileData.cFileName;
                     if (*s == '.' && (*(s + 1) == 0 || *(s + 1) == '.' && *(s + 2) == 0))
-                        continue; // "." a ".." preskocime
+                        continue; // skip "." and ".."
                     // links: size == 0, the file size must be obtained via SalGetFileSize2() afterwards
                     BOOL isDir = (fileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
                     CQuadWord size(fileData.nFileSizeLow, fileData.nFileSizeHigh);
@@ -2236,7 +2236,7 @@ void DoReadFile(CFTPDiskWork& localWork, BOOL& needCopyBack, BOOL isASCIITrMode)
             DWORD read;
             if (isASCIITrMode) // text transfer mode = CRLF for all EOLs, we will convert
             {
-                char buf[DATACON_UPLOADFLUSHBUFFERSIZE]; // buffer pro cteni z disku
+                char buf[DATACON_UPLOADFLUSHBUFFERSIZE]; // buffer for reading from disk
                 if (ReadFile(localWork.WorkFile, buf, DATACON_UPLOADFLUSHBUFFERSIZE, &read, NULL))
                 {
                     char* textBuf = localWork.FlushDataBuffer;
@@ -2279,7 +2279,7 @@ void DoReadFile(CFTPDiskWork& localWork, BOOL& needCopyBack, BOOL isASCIITrMode)
                                 }
                             }
                             else
-                                *textBuf++ = *s; // normalni znak, jen zkopirujeme
+                                *textBuf++ = *s; // normal character, just copy it
                         }
                         s++;
                     }
@@ -2309,7 +2309,7 @@ void DoReadFile(CFTPDiskWork& localWork, BOOL& needCopyBack, BOOL isASCIITrMode)
             }
         }
     }
-    else // ohlasime chybu
+    else // report an error
     {
         TRACE_E("DoReadFile(): localWork.WorkFile may not be NULL!");
         localWork.State = sqisFailed;
@@ -2373,7 +2373,7 @@ CFTPDiskThread::Body()
         }
         HANDLES(LeaveCriticalSection(&DiskCritSect));
         if (endThread)
-            break; // ukoncime thread
+            break; // terminate the thread
 
         if (fileToClose != NULL) // close the file and optionally delete an empty file
         {
@@ -2476,7 +2476,7 @@ CFTPDiskThread::Body()
         }
         else
         {
-            // provedeme pozadovanou praci
+            // perform the requested work
             BOOL needCopyBack = FALSE;
             BOOL workDone = FALSE;
             if (work != NULL) // ATTENTION: the 'work' object must not be accessed; it may no longer exist (only the pointer value may be tested, not the memory it points to)

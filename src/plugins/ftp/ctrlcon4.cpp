@@ -181,7 +181,7 @@ BOOL CSendCmdUserIfaceForListAndDownload::IsTimeout(DWORD* start, DWORD serverTi
         {
             if (errBufSize > 0)
                 _snprintf_s(errBuf, errBufSize, _TRUNCATE, LoadStr(IDS_LOGMSGDATCONERROR), errText);
-            *errorTextID = -1; // popis je primo v 'errBuf'
+            *errorTextID = -1; // the description is directly in 'errBuf'
         }
         else
             *errorTextID = ForDownload ? IDS_LISTWNDDOWNLFILETIMEOUT : IDS_LISTCMDTIMEOUT;
@@ -1023,7 +1023,7 @@ void CControlConnectionSocket::SetupKeepAliveTimer(BOOL immediate)
     int msg;
     int uid;
     DWORD ti;
-    if (KeepAliveEnabled && KeepAliveMode == kamForbidden) // volano po dokonceni normalniho prikazu
+    if (KeepAliveEnabled && KeepAliveMode == kamForbidden) // called after completing a normal command
     {
         KeepAliveMode = kamWaiting;
         timer = TRUE;
@@ -1056,7 +1056,7 @@ void CControlConnectionSocket::SetupNextKeepAliveTimer()
 
     if (!KeepAliveCmdAllBytesWritten)
     { // this should never happen because the server's reply arrives only after the complete command is written
-        // prikazu (navic prikaz se vzdy zapise najednou, je to par bytu)
+        // of the command (the command is always written at once; it is just a few bytes)
         TRACE_E("Unexpected situation in CControlConnectionSocket::SetupNextKeepAliveTimer(): KeepAliveCmdAllBytesWritten==FALSE!");
         KeepAliveCmdAllBytesWritten = TRUE;
     }
@@ -1114,7 +1114,7 @@ void CControlConnectionSocket::ReleaseKeepAlive()
 #endif
 
     if (KeepAliveMode == kamProcessing || KeepAliveMode == kamWaitingForEndOfProcessing)
-        SetEvent(KeepAliveFinishedEvent); // pustime dal hl. thread
+        SetEvent(KeepAliveFinishedEvent); // let the main thread continue
     BOOL deleteTimer = FALSE;
     int uid;
     if (KeepAliveMode == kamWaiting)
@@ -1321,9 +1321,9 @@ void CControlConnectionSocket::ReceivePostMessage(DWORD id, void* param)
                         _snprintf_s(errBuf, _TRUNCATE, LoadStr(IDS_LOGMSGDATCONERROR), buf);
                         Logs.LogMessage(logUID, errBuf, -1, TRUE);
                     }
-                    ReleaseKeepAlive(); // koncime...
+                    ReleaseKeepAlive(); // we are finishing...
                 }
-                else // uspech, posleme prikaz "PORT"
+                else // success, send the "PORT" command
                 {
                     HANDLES(EnterCriticalSection(&SocketCritSect));
                     KeepAliveDataConState = kadcsWaitForSetPortReply;

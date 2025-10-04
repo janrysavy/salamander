@@ -212,7 +212,7 @@ BOOL CFTPServerList::CopyMembersToList(CFTPServerList& dstList)
             }
         }
         else
-            return FALSE; // chyba
+            return FALSE; // error
     }
     return TRUE;
 }
@@ -619,7 +619,7 @@ BOOL CConfiguration::InitWithSalamanderGeneral()
                             "ftp.altap.cz",
                             "/pub/altap/salamand");
 
-    // popis retezce v poli: "visible,ID,nameStrID,nameStr,descrStrID,descrStr,colType,emptyValue,leftAlignment,fixedWidth,width"
+    // description of the string in the array: "visible,ID,nameStrID,nameStr,descrStrID,descrStr,colType,emptyValue,leftAlignment,fixedWidth,width"
     const char* unix1Columns[] = {"1,name,0,\\0,0,\\0,1,\\0",    // name
                                   "1,ext,1,\\0,1,\\0,2,\\0",     // extension
                                   "1,size,2,\\0,2,\\0,3,\\0",    // size
@@ -1858,7 +1858,7 @@ BOOL CConfiguration::InitWithSalamanderGeneral()
                                  "# skip empty lines anywhere\r\n"
                                  "* skip_white_spaces();\r\n");
 
-    // popis retezce v poli: "visible,ID,nameStrID,nameStr,descrStrID,descrStr,colType,emptyValue,leftAlignment,fixedWidth,width"
+    // description of the string in the array: "visible,ID,nameStrID,nameStr,descrStrID,descrStr,colType,emptyValue,leftAlignment,fixedWidth,width"
     const char* tandemColumns[] = {"1,name,0,\\0,0,\\0,1,\\0",      // name
                                    "1,code,35,\\0,35,\\0,10,\\0,0", // code
                                    "1,size,2,\\0,2,\\0,3,\\0",      // size
@@ -1883,7 +1883,7 @@ BOOL CConfiguration::InitWithSalamanderGeneral()
                                  "# skip empty lines anywhere\r\n"
                                  "* skip_white_spaces();\r\n");
 
-    // popis retezce v poli: "visible,ID,nameStrID,nameStr,descrStrID,descrStr,colType,emptyValue,leftAlignment,fixedWidth,width"
+    // description of the string in the array: "visible,ID,nameStrID,nameStr,descrStrID,descrStr,colType,emptyValue,leftAlignment,fixedWidth,width"
     const char* IBM_AS_400Columns[] = {"1,name,0,\\0,0,\\0,1,\\0",     // name
                                        "1,ext,1,\\0,1,\\0,2,\\0",      // extension
                                        "1,size,2,\\0,2,\\0,10,\\0,0",  // size
@@ -2002,8 +2002,8 @@ BOOL CConfiguration::InitWithSalamanderGeneral()
 void CConfiguration::ReleaseDataFromSalamanderGeneral()
 {
     SalamanderGeneral->FreeSalamanderMaskGroup(ASCIIFileMasks);
-    FTPServerList.DestroyMembers();      // pro jistotu (kdyby se dealokovalo pres SalamanderGeneral)
-    FTPProxyServerList.DestroyMembers(); // pro jistotu (kdyby se dealokovalo pres SalamanderGeneral)
+    FTPServerList.DestroyMembers();      // just in case (if it were deallocated through SalamanderGeneral)
+    FTPProxyServerList.DestroyMembers(); // just in case (if it were deallocated through SalamanderGeneral)
 }
 
 void CConfiguration::GetAnonymousPasswd(char* buf, int bufSize)

@@ -1202,9 +1202,9 @@ void CFTPQueue::GetListViewDataFor(int index, NMLVDISPINFO* lvdi, char* buf, int
                     if (((CFTPQueueItemCopyOrMove*)item)->Size != CQuadWord(-1, -1))
                     { // if the size is known
                         strcpy(size, " (");
-                        if (((CFTPQueueItemCopyOrMove*)item)->SizeInBytes) // velikost v bytech
+                        if (((CFTPQueueItemCopyOrMove*)item)->SizeInBytes) // size in bytes
                             SalamanderGeneral->PrintDiskSize(size + 2, ((CFTPQueueItemCopyOrMove*)item)->Size, 0);
-                        else // velikost v blocich
+                        else // size in blocks
                         {
                             SalamanderGeneral->NumberToStr(size + 2, ((CFTPQueueItemCopyOrMove*)item)->Size);
                             strcat(size, " ");
@@ -1391,7 +1391,7 @@ void CFTPQueue::GetListViewDataFor(int index, NMLVDISPINFO* lvdi, char* buf, int
     else // for an invalid index (the list view has not refreshed yet) we must return at least an empty item
     {
         if (itemData->mask & LVIF_IMAGE)
-            itemData->iImage = 1 /* ikona souboru je mene vyrazna */;
+            itemData->iImage = 1 /* the file icon is less pronounced */;
         if (itemData->mask & LVIF_TEXT)
         {
             if (bufSize > 0)
@@ -1427,7 +1427,7 @@ CFTPQueue::FindItemWithUID(int UID)
     if (LastFoundUID == UID && LastFoundIndex < Items.Count &&
         Items[LastFoundIndex]->UID == LastFoundUID)
     {
-        return Items[LastFoundIndex]; // nalezeno v cache, nemusime prochazet cele pole
+        return Items[LastFoundIndex]; // found in the cache; no need to traverse the entire array
     }
     else
     {
@@ -1525,7 +1525,7 @@ int CFTPQueue::RetryItem(int UID, CFTPOperation* oper)
             ret = LastFoundIndex;
             found->ChangeStateAndCounters(newState, oper, this);
             if (found->ProblemID == ITEMPR_UNABLETORESUME)
-                oper->SetResumeIsNotSupported(FALSE); // aby mel Retry vubec smysl
+                oper->SetResumeIsNotSupported(FALSE); // so Retry makes any sense at all
             oper->SetSizeCmdIsSupported(TRUE);        // so that the SIZE command is tried again if needed
             found->ProblemID = ITEMPR_OK;
             found->WinError = NO_ERROR;
@@ -2027,11 +2027,11 @@ int CFTPQueue::SolveErrorOnItem(HWND parent, int UID, CFTPOperation* oper)
     int ret = -2; // no change
     if (openDlgWithID > 0)
     {
-        // otevreme dialog Solve Error
+        // open the Solve Error dialog
         INT_PTR dlgResult = IDCANCEL;
         switch (openDlgWithID)
         {
-        case 1: // nedostatek pameti
+        case 1: // insufficient memory
         {
             CSolveLowMemoryErr dlg(parent, isUploadItem ? diskPath : ftpPath, isUploadItem ? diskName : ftpName, &applyToAll);
             dlgResult = dlg.Execute();
@@ -2355,7 +2355,7 @@ int CFTPQueue::SolveErrorOnItem(HWND parent, int UID, CFTPOperation* oper)
                                     UploadListingCache.InvalidatePathListing(userBuf, hostBuf, portBuf, curItem->TgtPath, pathType);
                                 }
                                 if (found->ProblemID == ITEMPR_UNABLETORESUME)
-                                    oper->SetResumeIsNotSupported(FALSE); // aby mel Retry vubec smysl
+                                    oper->SetResumeIsNotSupported(FALSE); // so Retry makes any sense at all
                                 item->ProblemID = ITEMPR_OK;
                                 item->WinError = NO_ERROR;
                                 if (item->ErrAllocDescr != NULL)
@@ -2816,7 +2816,7 @@ void CFTPQueue::UpdateItemState(CFTPQueueItem* item, CFTPQueueItemState state, D
         item->ProblemID = problemID;
         item->WinError = winError;
         if (item->ErrAllocDescr != NULL)
-            SalamanderGeneral->Free(item->ErrAllocDescr); // uvolnime pripadnou predeslou hodnotu
+            SalamanderGeneral->Free(item->ErrAllocDescr); // free any previous value
         item->ErrAllocDescr = errAllocDescr;
     }
     else
@@ -3226,7 +3226,7 @@ BOOL CFTPQueue::SearchItemWithNewError(int* itemUID, int* itemIndex)
     HANDLES(EnterCriticalSection(&QueueCritSect));
     BOOL res = FALSE;
     if (LastFoundErrorOccurenceTime + 1 < LastErrorOccurenceTime + 1) // +1 is here because -1 is used as the initial value
-    {                                                                 // ma smysl hledat
+    {                                                                 // it makes sense to search
         int foundUID = -1;
         int foundIndex = -1;
         DWORD foundErrorOccurenceTime = -1;
@@ -3239,7 +3239,7 @@ BOOL CFTPQueue::SearchItemWithNewError(int* itemUID, int* itemIndex)
                 itemErrorOccurenceTime = item->ErrorOccurenceTime;
             if (itemErrorOccurenceTime != -1 &&                                       // the item contains an error
                 itemErrorOccurenceTime >= LastFoundErrorOccurenceTime + 1 &&          // it is a "new" error
-                (foundUID == -1 || foundErrorOccurenceTime > itemErrorOccurenceTime)) // zatim prvni nalezena nebo "nejstarsi" (chyby resime poporade jak nastaly)
+                (foundUID == -1 || foundErrorOccurenceTime > itemErrorOccurenceTime)) // so far the first found or the "oldest" (we resolve errors in the order they occurred)
             {
                 foundErrorOccurenceTime = itemErrorOccurenceTime;
                 foundUID = item->UID;
