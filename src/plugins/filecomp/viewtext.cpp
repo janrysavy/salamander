@@ -185,7 +185,7 @@ void TTextFileViewWindow<CChar>::SetData(CChar* text, CLineBuffer& lines, CLineS
     DestroyData();
     Text = text;
     Lines.swap(lines);
-    Script[0].swap(script); // TODO nemelo by se tohle presunout do parenta?
+    Script[0].swap(script); // TODO shouldn't this be moved to the parent?
     // resize POLYTEXT buffers
     int maxc = 0;
     for (CLineScript::iterator ls = Script[0].begin(); ls < Script[0].end(); ++ls)
@@ -288,7 +288,7 @@ BOOL TTextFileViewWindow<CChar>::CopySelection()
     int len = int((Lines[l2] + charEnd) - (Lines[l1] + charBegin));
     if (len)
     {
-        // nahradime LF za CRLF
+        // replace LF with CRLF
         const CChar* sour = Lines[l1] + charBegin;
         int s = 0, d = 0, i;
         int size = (int)(1.1 * len);
@@ -313,7 +313,7 @@ BOOL TTextFileViewWindow<CChar>::CopySelection()
             }
             memcpy(buffer + d, sour + s, i * sizeof(CChar));
             d += i;
-            s += i + 1; // preskocime LF
+                s += i + 1; // skip the LF
             if (s <= len)
             {
                 buffer[d++] = '\r';
@@ -458,7 +458,7 @@ template <class CChar>
 void TTextFileViewWindow<CChar>::NextCharBlock(int line, int& xpos)
 {
     int len = int(Lines[line + 1] - Lines[line]) - 1;
-    // presuneme se na konec slova/mezery/bloku jinych znaku
+    // move to the end of the word/space/block of other characters
     int cat = GetCharCat(Lines[line][xpos]);
 
     while (xpos < len && GetCharCat(Lines[line][xpos]) == cat)
@@ -514,7 +514,7 @@ void TTextFileViewWindow<CChar>::PolytextLengthFixup(typename std::vector<POLYTE
             begin->lpstr += offset;
             begin->n -= offset;
         }
-        // TODO na 4K displayich už 1024 nemusí stačit!!
+        // TODO on 4K displays 1024 might no longer be enough!!
         begin->n = min(begin->n, UINT(1024));
     }
 }
@@ -530,7 +530,7 @@ void TTextFileViewWindow<CChar>::Paint()
         oldPalette = SelectPalette(dc, Palette, FALSE);
     HFONT oldFont = (HFONT)SelectObject(dc, HFont);
 
-    // urcim interval radku, ktery je treba prekreslit
+    // determine the range of lines that needs to be repainted
     RECT clipRect;
     int clipRet = GetClipBox(dc, &clipRect);
     int clipFirstRow = 0;
@@ -543,15 +543,15 @@ void TTextFileViewWindow<CChar>::Paint()
 
     if (size_t(FirstVisibleLine + clipLastRow) >= Script[ViewMode].size())
     {
-        // skoncime posledni platnou radkou ve skriptu
+        // stop at the last valid line in the script
         clipLastRow = int(Script[ViewMode].size() - FirstVisibleLine);
     }
 
-    RECT r1; // cislo radky
+    RECT r1; // line-number area
     r1.left = 0;
     r1.right = LineNumWidth;
-    r1.bottom = 0; // abychom meli pozdeji platana data, kdyby kreslici smycka vubec neprobehla
-    RECT r2;       // vlastni radek textu
+    r1.bottom = 0; // ensure we have valid data later if the drawing loop never runs
+    RECT r2;       // actual text row
     r2.left = r1.right;
     r2.right = Width;
     //int text_x = r2.left;
@@ -574,19 +574,19 @@ void TTextFileViewWindow<CChar>::Paint()
         {
             colorScheme = LC_NORMAL;
 
-            // vykreslime lajnu oddelujici difference uprostred radky
-            // hrana ve sloupci s cisly radek
+            // draw the line that separates differences across the middle of the row
+            // edge in the line-number column
             SetBkColor(dc, LineColors[colorScheme].LineNumBkColor);
             hOldPen = (HPEN)SelectObject(dc, LineColors[colorScheme].LineNumBorderPen);
             MoveToEx(dc, r1.left, (r1.top + r1.bottom) / 2, NULL);
             LineTo(dc, r1.right, (r1.top + r1.bottom) / 2);
             ExcludeClipRect(dc, r1.left, (r1.top + r1.bottom) / 2, r1.right, (r1.top + r1.bottom) / 2 + 1);
 
-            // hrana v casti s textem souboru
+            // edge in the file-text area
             SetBkColor(dc, LineColors[colorScheme].BkColor);
             (HPEN) SelectObject(dc, LineColors[colorScheme].BorderPen);
-            // posouvame offset zacatku souradnice aby na carky spravne navazovali
-            // pri scrollu
+            // shift the starting coordinate offset so the tick marks align correctly
+            // during scrolling
             MoveToEx(dc, r1.left - FirstVisibleChar * FontWidth, (r1.top + r1.bottom) / 2, NULL);
             LineTo(dc, r2.right, (r1.top + r1.bottom) / 2);
             SelectObject(dc, hOldPen);
@@ -601,7 +601,7 @@ void TTextFileViewWindow<CChar>::Paint()
                 colorScheme = LC_FOCUS;
             else
             {
-                // aby se nam barevne nezvyraznily rozdili v prazdnych radcich pri 'ignore blank lines'
+                // avoid highlighting differences in empty rows when 'ignore blank lines' is enabled
                 if (((TTextFileViewWindow<CChar>*)Siblink)->Script[ViewMode][line].GetClass() == CLineSpec::lcCommon)
                     colorScheme = LC_NORMAL;
                 else
@@ -612,12 +612,12 @@ void TTextFileViewWindow<CChar>::Paint()
 
             if (line == SelectDiffBegin || line > 0 && line - 1 == SelectDiffEnd)
             {
-                // vykreslime cast ohraniceni aktivni difference na hornim okraji radku
-                // hrana ve sloupci s cisly radek
+                // draw part of the active difference border along the top edge of the row
+                // edge in the line-number column
                 hOldPen = (HPEN)SelectObject(dc, LineColors[LC_FOCUS].LineNumBorderPen);
                 MoveToEx(dc, r1.left, r1.top, NULL);
                 LineTo(dc, r1.right, r1.top);
-                // hrana v casti s textem souboru
+                // edge in the file-text area
                 (HPEN) SelectObject(dc, LineColors[LC_FOCUS].BorderPen);
                 LineTo(dc, r2.right, r1.top);
                 SelectObject(dc, hOldPen);
@@ -625,11 +625,11 @@ void TTextFileViewWindow<CChar>::Paint()
                 r2.top++;
             }
 
-            // vykreslime jen pozadi u cisla radky
+            // draw only the background behind the line number
             SetBkColor(dc, LineColors[colorScheme].LineNumBkColor);
             ExtTextOut(dc, 0, 0, ETO_OPAQUE /*| ETO_CLIPPED*/, &r1, NULL, 0, NULL);
 
-            // vykreslime prazdnou radku
+            // draw an empty row
             if (line >= SelectionLineBegin && line < SelectionLineEnd)
                 SetBkColor(dc, GetPALETTERGB(Colors[TEXT_BK_SELECTION]));
             else
@@ -664,12 +664,12 @@ void TTextFileViewWindow<CChar>::Paint()
 
             if (line == SelectDiffBegin || line > 0 && line - 1 == SelectDiffEnd)
             {
-                // vykreslime cast ohraniceni aktivni difference na hornim okraji radku
-                // hrana ve sloupci s cisly radek
+                // draw part of the active difference border along the top edge of the row
+                // edge in the line-number column
                 hOldPen = (HPEN)SelectObject(dc, LineColors[LC_FOCUS].LineNumBorderPen);
                 MoveToEx(dc, r1.left, r1.top, NULL);
                 LineTo(dc, r1.right, r1.top);
-                // hrana ve casti s textem souboru
+                // edge in the file-text area
                 (HPEN) SelectObject(dc, LineColors[LC_FOCUS].BorderPen);
                 LineTo(dc, r2.right, r1.top);
                 SelectObject(dc, hOldPen);
@@ -677,7 +677,7 @@ void TTextFileViewWindow<CChar>::Paint()
                 r2.top++;
             }
 
-            // vykreslime cislo radky najednou s pozadim
+            // draw the line number together with its background
             int l = Script[ViewMode][line].GetLine();
             char num[numeric_limits<size_t>::digits10 + 1];
             sprintf(num, "%*d", LineNumDigits, l + 1);
@@ -685,11 +685,11 @@ void TTextFileViewWindow<CChar>::Paint()
             SetBkColor(dc, LineColors[colorScheme].LineNumBkColor);
             MappedASCII8TextOut.DoTextOut(dc, BORDER_WIDTH, text_y, ETO_OPAQUE | ETO_CLIPPED, &r1, num, LineNumDigits, NULL);
 
-            // vykreslime radku texu najednou s pozadim
+            // draw the text row together with its background
             int len = FormatLine(dc, LineBuffer, Lines[l], Lines[l + 1] - 1);
             if (line > SelectionLineBegin && line < SelectionLineEnd)
             {
-                // cely radek je vybrany
+                // the entire row is selected
                 SetTextColor(dc, GetPALETTERGB(Colors[TEXT_FG_SELECTION]));
                 SetBkColor(dc, GetPALETTERGB(Colors[TEXT_BK_SELECTION]));
                 goto LNORMAL_PAINT;
@@ -698,9 +698,9 @@ void TTextFileViewWindow<CChar>::Paint()
             {
                 if (line == SelectionLineBegin || line == SelectionLineEnd)
                 {
-                    // je vybrana jen cast radku
-                    // vykreslime jen vybranou cast a vyjmeme ji z clipping regionu,
-                    // potom pres ni vykreslime radku normalnima barvama
+                    // only part of the row is selected
+                    // draw just the selected portion and remove it from the clipping region,
+                    // then paint the row over it with normal colors
 
                     int offset1 = 0,
                         offset2 = len - FirstVisibleChar;
@@ -786,7 +786,6 @@ void TTextFileViewWindow<CChar>::Paint()
               OutputDebugString(ss);*/
 
                         // Windows XP seems to fail on len ~ 200 000. 1024 should be enough for everybody
-                        // TODO na 4K displayich už 1024 nemusí stačit!!
                         ExtTextOutX(dc, r3.left, text_y, ETO_OPAQUE | ETO_CLIPPED, &r3,
                                     LineBuffer + FirstVisibleChar + offset1, min(1024, offset2 - offset1), NULL);
 
@@ -794,7 +793,7 @@ void TTextFileViewWindow<CChar>::Paint()
                     }
                 }
 
-                // nastavime normalni barvy
+                // set the normal colors
                 SetTextColor(dc, LineColors[colorScheme].FgColor);
                 SetBkColor(dc, LineColors[colorScheme].BkColor);
             }
@@ -808,7 +807,7 @@ void TTextFileViewWindow<CChar>::Paint()
                 size_t count;
 
                 if (((TTextFileViewWindow<CChar>*)Siblink)->Script[ViewMode][MainWindow->GetChangeFirstLine(line)].GetClass() == CLineSpec::lcBlank)
-                    goto LNORMAL_PAINT; // pouze add, nebo delete
+                    goto LNORMAL_PAINT; // only add or delete
 
                 if (Script[ViewMode][line].GetChanges())
                 {
@@ -819,11 +818,11 @@ void TTextFileViewWindow<CChar>::Paint()
                     //copy(script + 1, script + 1 + *script, LineChanges.begin());
                 }
                 else
-                    goto LCOMMON; // jde o celoradkovy blok bez differenci
+                    goto LCOMMON; // this is a whole-line block without differences
 
                 while (j < count)
                 {
-                    // spolecne znaky
+                    // common characters
                     if (LineChanges[j] != offs && LineChanges[j] > FirstVisibleChar)
                     {
                         PTCommon[c].x = r2.left + FontWidth * (offs - FirstVisibleChar);
@@ -835,29 +834,29 @@ void TTextFileViewWindow<CChar>::Paint()
                         PTCommon[c].rcl.bottom = r2.bottom;
                         if (offs < FirstVisibleChar)
                         {
-                            // zacatek bloku neni videt
+                            // the start of the block is not visible
                             PTCommon[c].rcl.left = LineNumWidth;
-                            adjusted = FALSE; // vynulujem flag
+                            adjusted = FALSE; // reset the flag
                         }
-                        else
-                        {
-                            PTCommon[c].rcl.left = r2.left + FontWidth * (offs - FirstVisibleChar);
-                            if (adjusted)
+                            else
                             {
-                                PTCommon[c].rcl.left += CaretWidth;
-                                adjusted = FALSE; // vynulujem flag
+                                PTCommon[c].rcl.left = r2.left + FontWidth * (offs - FirstVisibleChar);
+                                if (adjusted)
+                                {
+                                    PTCommon[c].rcl.left += CaretWidth;
+                                    adjusted = FALSE; // reset the flag
+                                }
                             }
-                        }
                         PTCommon[c].rcl.right = r2.left + FontWidth * (LineChanges[j] - FirstVisibleChar);
                         PTCommon[c].pdx = 0;
                         c++;
                     }
-                    // zmenene znaky
+                    // changed characters
                     offs = int(LineChanges[j]);
                     j++;
                     if (offs < LineChanges[j])
                     {
-                        // normalni blok
+                        // normal block
                         if (LineChanges[j] > FirstVisibleChar)
                         {
                             PTChange[d].x = r2.left + FontWidth * (offs - FirstVisibleChar);
@@ -878,7 +877,7 @@ void TTextFileViewWindow<CChar>::Paint()
                     }
                     else
                     {
-                        // svisly prouzek pro oznaceni mista insertion/deletion v druhem panelu
+                        // vertical stripe marking the insertion/deletion position in the other panel
                         if (offs >= FirstVisibleChar)
                         {
                             PTZeroChange[z].x = r2.left + FontWidth * (offs - FirstVisibleChar);
@@ -888,7 +887,7 @@ void TTextFileViewWindow<CChar>::Paint()
                             PTZeroChange[z].rcl.top = r2.top;
                             PTZeroChange[z].rcl.bottom = r2.bottom;
                             PTZeroChange[z].rcl.left = r2.left + FontWidth * (offs - FirstVisibleChar);
-                            PTZeroChange[z].n = offs < len ? 1 : 0; // osetrime pripad na konci radky
+                            PTZeroChange[z].n = offs < len ? 1 : 0; // handle the case at the end of the row
                             PTZeroChange[z].rcl.right = PTZeroChange[z].rcl.left + CaretWidth;
                             adjusted = TRUE;
                             PTZeroChange[z].pdx = 0;
@@ -898,7 +897,7 @@ void TTextFileViewWindow<CChar>::Paint()
                     offs = int(LineChanges[j]);
                     j++;
                 }
-            // spolecne znaky - od poslendi zmeny do konce radku
+            // common characters - from the last change to the end of the row
 
             /*if (len - offs || c > 0)
           {*/
@@ -912,7 +911,7 @@ void TTextFileViewWindow<CChar>::Paint()
                 PTCommon[c].rcl.bottom = r2.bottom;
                 if (offs < FirstVisibleChar)
                 {
-                    // zacatek bloku neni videt
+                    // the start of the block is not visible
                     PTCommon[c].rcl.left = LineNumWidth;
                 }
                 else
@@ -992,11 +991,11 @@ void TTextFileViewWindow<CChar>::Paint()
             {
             LNORMAL_PAINT:
                 if (FirstVisibleChar > len)
-                    len = FirstVisibleChar; // jen vymazeme pozadi
+                    len = FirstVisibleChar; // just clear the background
                 // Windows XP seems to fail on len ~ 200 000. 1024 should be enough for everybody
                 len -= FirstVisibleChar;
 
-                // TODO na 4K displayich už 1024 nemusí stačit!!
+                // TODO on 4K displays 1024 might no longer be enough!!
                 ExtTextOutX(dc, r2.left, text_y, ETO_OPAQUE | ETO_CLIPPED, &r2,
                             LineBuffer + FirstVisibleChar, min(1024, len), NULL);
             }
@@ -1007,19 +1006,18 @@ void TTextFileViewWindow<CChar>::Paint()
 
     if (r1.bottom < clipRect.bottom)
     {
-        // jeste vykreslime prazdny prostor od posledniho platneho
-        // radku  ve skriptu do spodniho okraje okna
+        // also draw the empty area from the last valid line in the script to the bottom edge of the window
 
         r1.top = r2.top = r1.bottom;
         r1.bottom = r2.bottom = clipRect.bottom;
 
         if (FirstVisibleLine + i - 1 == SelectDiffEnd)
         {
-            // vykreslime cast ohraniceni aktivni difference na hornim okraji radku
+            // draw part of the active difference border along the top edge of the row
             hOldPen = (HPEN)SelectObject(dc, LineColors[LC_FOCUS].LineNumBorderPen);
             MoveToEx(dc, r1.left, r1.top, NULL);
             LineTo(dc, r1.right, r1.top);
-            // hrana v casti s textem souboru
+            // edge in the file-text area
             (HPEN) SelectObject(dc, LineColors[LC_FOCUS].BorderPen);
             LineTo(dc, r2.right, r1.top);
             SelectObject(dc, hOldPen);
@@ -1027,11 +1025,11 @@ void TTextFileViewWindow<CChar>::Paint()
             r2.top++;
         }
 
-        // vykreslime jen pozadi u cisla radky
+        // draw only the background behind the line number
         SetBkColor(dc, LineColors[LC_NORMAL].LineNumBkColor);
         ExtTextOut(dc, 0, 0, ETO_OPAQUE /*| ETO_CLIPPED*/, &r1, NULL, 0, NULL);
 
-        // vykreslime prazdnou radku
+        // draw an empty row
         SetBkColor(dc, LineColors[LC_NORMAL].BkColor);
         ExtTextOut(dc, 0, 0, ETO_OPAQUE /*| ETO_CLIPPED*/, &r2, NULL, 0, NULL);
     }

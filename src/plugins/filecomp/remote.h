@@ -19,7 +19,7 @@ public:
 protected:
     CMessageCenter MessageCenter;
     static BOOL Created;
-    static HANDLE RemoteComparatorThread; // POZOR: handle threadu jen pro pouziti v ThreadQueue
+    static HANDLE RemoteComparatorThread; // NOTE: thread handle to be used only in ThreadQueue
     static HANDLE TerminateEvent;
     virtual unsigned Body();
     virtual void RecieveMessage(const CMessage* message);

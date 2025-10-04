@@ -20,7 +20,7 @@ public:
 
     LOGFONT lf;
     int FontWidth, FontHeight;
-    bool SubstCharIsSpace; // TRUE = jako substitucni znak se pouziva mezera a ne 0xB7 /* middle dot */
+    bool SubstCharIsSpace; // TRUE = use a space as the substitution character instead of 0xB7 /* middle dot */
 };
 
 // Returns true if some mapping ever can take place
@@ -38,8 +38,8 @@ bool FontHasChangedX(CChar* ViewerFontMapping, HDC memDC, int fontWidth, int fon
     for (x = start; x < end; x++)
     {
         CChar result = x;
-        // DrawTextEx by patrne selhal na jednom surrogate (bez dvojky do paru)
-        // nebo neplatnem UTF-16 znaku
+        // DrawTextEx probably failed on a single surrogate (missing the paired second code unit)
+        // or on an invalid UTF-16 character
         if (TCharSpecific<CChar>::IsValidChar(x))
         {
             ch[0] = x;
@@ -53,7 +53,7 @@ bool FontHasChangedX(CChar* ViewerFontMapping, HDC memDC, int fontWidth, int fon
             {
                 if (rect.right - rect.left != fontWidth)
                 {
-                    if (x == 0xB7 /* middle dot */) // pokud je 'middle-dot' take spatne siroky, substituujeme za mezeru, ktera snad musi byt OK
+                    if (x == 0xB7 /* middle dot */) // if the middle dot is also the wrong width, substitute a space that should be safe
                     {
                         substChar = (CChar)' ';
                         int z;
@@ -68,7 +68,7 @@ bool FontHasChangedX(CChar* ViewerFontMapping, HDC memDC, int fontWidth, int fon
             else
                 TRACE_I("CFileViewWindow::ReloadConfiguration(): DrawTextEx: error for: " << x);
         }
-        ViewerFontMapping[x] = result; // zapisujeme az vysledek, protoze hrozi soubeh vice threadu (neni synchronizovano sekci)
+        ViewerFontMapping[x] = result; // write the result only after the check because multiple threads might race (not synchronized by a critical section)
     }
     *substCharIsSpace = substChar == (CChar)' ';
     return ret;
@@ -78,10 +78,10 @@ template <class CChar>
 void TMappedTextOut<CChar>::FontHasChanged(LOGFONT* plf, HFONT font, int fontWidth, int fontHeight)
 {
     //  if (!ViewerFontMapping) return;
-    // XP64/Vista: font fixedsys obsahuje znaky, ktere nemaji ocekavanou sirku (i kdyz je to fixed-width font), proto
-    // omerujeme jednotlive znaky a ty ktere nemaji spravnou sirku mapujeme na nahradni znak o spravne sirce
+    // XP64/Vista: the Fixedsys font contains characters that do not have the expected width (even though it is a fixed-width font), so
+    // we measure individual characters and map those with the wrong width to a replacement character with the correct width
     ViewerFontNeedsMapping = false;
-    if (WindowsXP64AndLater) // krome XP64 a Visty jsme na tuhle prasecinku nenarazili, takze to nebudeme ani testovat
+    if (WindowsXP64AndLater) // apart from XP64 and Vista we have not encountered this ugly quirk, so we will not even test it
     {
         LPVOID pNewFont;
 
@@ -228,7 +228,7 @@ LPVOID CMappedFontFactory::FindFont(LOGFONT* plf, HFONT font, LPVOID* ViewerFont
                 {
                     memset(pMap, 0xFE, sizeof(wchar_t) * TCharSpecific<wchar_t>::CharCount());
                     FontHasChangedX((wchar_t*)pMap, memDC, fontWidth, fontHeight, 0, 256, &substCharIsSpace);
-                    bNeedMapping = true; // neoverujeme vsechny znaky, tedy nelze tvrdit, ze mapovani nebude potreba
+                    bNeedMapping = true; // we do not verify every character, so we cannot claim mapping will not be needed
                 }
             }
             if (bNeedMapping)

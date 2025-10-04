@@ -212,7 +212,7 @@ CFilecompWorker::Body()
 
 void CFilecompWorker::GuardedBody()
 {
-    // otevreme soubory
+    // open the files
     int i;
     for (i = 0; i <= 1; i++)
     {
@@ -241,7 +241,7 @@ void CFilecompWorker::GuardedBody()
 
     if (Options.ForceBinary)
     {
-        // srovname jako binarni soubory
+        // compare as binary files
         CompareBinaryFiles();
     }
     else
@@ -263,7 +263,7 @@ void CFilecompWorker::GuardedBody()
         if (files[0].GetType() == CTextFileReader::ftText &&
             files[1].GetType() == CTextFileReader::ftText)
         {
-            // srovnam jako text
+            // compare as text
 
             if (Options.IgnoreLineBreakChanges)
             {
@@ -275,7 +275,7 @@ void CFilecompWorker::GuardedBody()
             if (files[0].GetEncoding() == CTextFileReader::encASCII8 &&
                 files[1].GetEncoding() == CTextFileReader::encASCII8)
             {
-                // srovname jako ASCII8 text
+                // compare as ASCII8 text
                 CompareTextFiles<char>(files);
                 //TRACE_I("Total time spent by comparing files " << TotalRuntime.Read());
                 //TRACE_I("Total time spent by shifting boundaries " << ShiftBoundaries.Read());
@@ -287,29 +287,29 @@ void CFilecompWorker::GuardedBody()
             }
             else
             {
-                // srovname jako UNICODE text
+                // compare as UNICODE text
                 if (files[0].HasSurrogates() || files[1].HasSurrogates())
                 {
-                    // srovname jako UCS-4/UTF-32 text
-                    // TODO nekdy to treba budem podporovat, zatim umime jen BMP
-                    // tento kod se nikdy nespusti, HasSurrogates vraci vzdy false
+                    // compare as UCS-4/UTF-32 text
+                    // TODO maybe we will support it one day; for now we handle only BMP
+                    // this code never runs; HasSurrogates always returns false
                     throw CFilecompWorker::CException("Only BMP character set is supported.");
                     //CompareTextFiles<DWORD>(files);
                 }
                 else
                 {
-                    // srovname jako UCS-2 text (UTF-16 without surrogates)
-                    // TODO pritomne surrogates ingorujeme, uzivatel dostane warning
+                    // compare as UCS-2 text (UTF-16 without surrogates)
+                    // TODO present surrogates are ignored; the user receives a warning
                     CompareTextFiles<wchar_t>(files);
                 }
             }
         }
         else
         {
-            // uvolnime pamet
+            // free the memory
             files[0].Reset();
             files[1].Reset();
-            // srovname jako binarni soubory
+            // compare as binary files
             CompareBinaryFiles();
         }
     }
