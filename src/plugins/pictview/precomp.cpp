@@ -1,11 +1,11 @@
-﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
+// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "precomp.h"
 
-// projekt Salamander obsahuje ctyri skupiny modulu
+// The Salamander project contains four groups of modules
 //
-// 1) modul precomp.cpp, ktery postavi salamand.pch (/Yc"precomp.h")
-// 2) moduly vyuzivajici salamand.pch (/Yu"precomp.h")
-// 3) commony a tasklist.cpp maji vlastni, automaticky generovany
+// 1) module precomp.cpp, which builds salamand.pch (/Yc"precomp.h")
+// 2) modules using salamand.pch (/Yu"precomp.h")
+// 3) common files and tasklist.cpp have their own automatically generated
 //    WINDOWS.PCH (/YX"windows.h" /Fp"$(OutDir)\WINDOWS.PCH")
