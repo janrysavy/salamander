@@ -386,7 +386,7 @@ CTextFileViewWindowBase::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 }
                 break;
 
-        // horizontal scrolling
+                // horizontal scrolling
             case 'L':
             case VK_RIGHT:
             {

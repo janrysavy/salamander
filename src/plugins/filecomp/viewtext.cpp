@@ -313,7 +313,7 @@ BOOL TTextFileViewWindow<CChar>::CopySelection()
             }
             memcpy(buffer + d, sour + s, i * sizeof(CChar));
             d += i;
-                s += i + 1; // skip the LF
+            s += i + 1; // skip the LF
             if (s <= len)
             {
                 buffer[d++] = '\r';
@@ -838,15 +838,15 @@ void TTextFileViewWindow<CChar>::Paint()
                             PTCommon[c].rcl.left = LineNumWidth;
                             adjusted = FALSE; // reset the flag
                         }
-                            else
+                        else
+                        {
+                            PTCommon[c].rcl.left = r2.left + FontWidth * (offs - FirstVisibleChar);
+                            if (adjusted)
                             {
-                                PTCommon[c].rcl.left = r2.left + FontWidth * (offs - FirstVisibleChar);
-                                if (adjusted)
-                                {
-                                    PTCommon[c].rcl.left += CaretWidth;
-                                    adjusted = FALSE; // reset the flag
-                                }
+                                PTCommon[c].rcl.left += CaretWidth;
+                                adjusted = FALSE; // reset the flag
                             }
+                        }
                         PTCommon[c].rcl.right = r2.left + FontWidth * (LineChanges[j] - FirstVisibleChar);
                         PTCommon[c].pdx = 0;
                         c++;
