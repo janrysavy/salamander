@@ -1100,9 +1100,9 @@ RETRY_LABEL:
                                 params.Caption = LoadStr(IDS_FTPPLUGINTITLE);
                                 params.Text = LoadStr(IDS_WAITRETRESC);
                                 char aliasBtnNames[300];
-                                /* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-   nechame pro tlacitka msgboxu resit kolize hotkeys tim, ze simulujeme, ze jde o menu
-MENU_TEMPLATE_ITEM MsgBoxButtons[] = 
+                                /* used by the script export_mnu.py, which generates salmenu.mnu for Translator
+   we let the message box buttons resolve hotkey collisions by simulating that this is a menu
+MENU_TEMPLATE_ITEM MsgBoxButtons[] =
 {
   {MNTT_PB, 0
   {MNTT_IT, IDS_WAITRETRESCABORTBTN
@@ -1746,7 +1746,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                                                     int err;
                                                     CCertificate* unverifiedCert;
                                                     if (!EncryptSocket(logUID, &err, &unverifiedCert, &errID, errBuf, 300,
-                                                                       NULL /* pro control connection je to vzdy NULL */))
+                                                                       NULL /* it's always NULL for the control connection */))
                                                     {
                                                         allBytesWritten = TRUE; // no longer important, the socket will be closed
                                                         if (errBuf[0] == 0)

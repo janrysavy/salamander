@@ -1398,8 +1398,8 @@ CEditServerTypeDlg::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             HMENU menu = CreatePopupMenu();
             if (menu != NULL)
             {
-                /* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-   udrzovat synchronizovane s volani AppendMenu() dole...
+                /* used by the script export_mnu.py, which generates salmenu.mnu for Translator
+   keep synchronized with the AppendMenu() calls below...
 MENU_TEMPLATE_ITEM EditServerTypeADCondMenu[] =
 {
   {MNTT_PB, 0
