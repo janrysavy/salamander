@@ -59,7 +59,7 @@ CArcPluginDataInterface::SetupView(BOOL leftPanel, CSalamanderViewAbstract* view
 
         CColumn column;
         lstrcpy(column.Name, "Size2");
-        lstrcpy(column.Description, "Size in another form");
+        lstrcpy(column.Description, "Size v jinem provedeni");
         column.GetText = GetSzText;
         column.SupportSorting = 1;
         column.LeftAlignment = 0;
