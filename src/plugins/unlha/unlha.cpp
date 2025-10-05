@@ -471,9 +471,8 @@ BOOL CPluginInterfaceForArchiver::UnpackWholeArchive(CSalamanderForOperationsAbs
         const char* name = SalamanderGeneral->SalPathFindFileName(hdr.name);
         char nameBuf[MAX_PATH];
         int nameLen = (int)strlen(name);
-        if (nameLen > 0 && name[nameLen - 1] == '\') // SalPathFindFileName leaves '\' only at the end
+        if (nameLen > 0 && name[nameLen - 1] == '\\') // SalPathFindFileName leaves '\' only at the end, remove it before calling AgreeMask
         {
-            // remove it before calling AgreeMask
             lstrcpyn(nameBuf, name, min(nameLen, MAX_PATH));
             name = nameBuf;
         }
