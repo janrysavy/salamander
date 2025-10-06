@@ -561,7 +561,7 @@ STDMETHODIMP SE_QueryInterface(THIS_ REFIID riid, LPVOID* ppvObj)
     }
     else if (MyIsEqualIID(riid, &IID_IShellCopyHookW))
     {
-        WriteToLog("SE_QueryInterface: IShellCopyHookW (available, but not returned)");
+        WriteToLog("SE_QueryInterface: IShellCopyHookW (mame, ale nedavame)");
         // *ppvObj = se->m_pCHW;
     }
 #ifdef SHEXT_LOG_ENABLED
