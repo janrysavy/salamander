@@ -356,10 +356,8 @@ void CDialogData::SelCtrlsSizeToContent(HWND hDialog)
         if (idealSizeX != -1)
         {
             if (control->IsStaticText(FALSE, TRUE)) // Expand right-aligned texts to the left
-                control->TX = control->TX + control->TCX -
-                              (idealSizeX + 2) /* artificially widen the control to reduce clipping risk when the font changes */;
-            control->TCX =
-                idealSizeX + 2 /* artificially widen the control to reduce clipping risk when the font changes */;
+                control->TX = control->TX + control->TCX - (idealSizeX + 2) /* artificially widen the control to reduce clipping risk when the font changes */;
+            control->TCX = idealSizeX + 2 /* artificially widen the control to reduce clipping risk when the font changes */;
         }
         if (idealSizeY != -1)
             control->TCY = idealSizeY;
