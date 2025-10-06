@@ -759,7 +759,7 @@ BOOL CDialogData::LoadDialog(WORD* oBuff, WORD* tBuff, BOOL* showStyleWarning,
     tBuff++;
 
         if ((oStyle & ~(DS_3DLOOK | (oIsEX != tIsEX ? DS_FIXEDSYS : 0))) !=
-                (tStyle & ~(DS_3DLOOK | (oIsEX != tIsEX ? DS_FIXEDSYS : 0))) || // ignore DS_3DLOOK differences; if one dialog is DLG and the other DLG-EX, also ignore DS_FIXEDSYS
+            (tStyle & ~(DS_3DLOOK | (oIsEX != tIsEX ? DS_FIXEDSYS : 0))) || // ignore DS_3DLOOK differences; if one dialog is DLG and the other DLG-EX, also ignore DS_FIXEDSYS
         oExStyle != tExStyle ||
         oCount != tCount)
     {

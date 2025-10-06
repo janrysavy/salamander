@@ -484,7 +484,7 @@ const wchar_t* FindPluralStrParEnd(const wchar_t* s, BOOL* error, BOOL calcNumOf
                 {
                     OutWindow.AddLine(L"Plural string contains interval bound which is not a decimal number.", mteError);
                     *error = TRUE;
-                      return s; // error, only a decimal number is expected here
+                    return s; // error, only a decimal number is expected here
                 }
                 s++;
             }
