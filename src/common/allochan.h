@@ -3,24 +3,23 @@
 
 #pragma once
 
-// Zavadi handler pro reseni situace, kdy dosla pamet pri volani operatoru new nebo
-// funkce malloc (tu pouzivaji calloc, realloc a dalsi, viz help). Zarucuje, ze ani
-// operator new ani malloc nikdy bez vedomi uzivatele nevrati NULL. Zobrazuje
-// messagebox s chybou "nedostatek pameti" a uzivatel muze po zavreni dalsich
-// aplikaci zopakovat pokus o alokaci pameti. Uzivatel muze tez terminovat proces
-// nebo nechat propadnout chybu alokace do aplikace (operator new nebo malloc
-// vrati NULL, alokace velkych bloku pameti by na to mely byt pripravene, jinak
-// dojde k padu - uzivatel je o tom informovany).
+// Introduces a handler for addressing the situation when memory runs out during a call to operator new or
+// the malloc function (used by calloc, realloc, and others; see help). It guarantees that neither
+// operator new nor malloc will ever return NULL without the user's knowledge. It displays a
+// message box with an "out of memory" error and the user can retry the memory allocation after closing
+// other applications. The user can also terminate the process or let the allocation error propagate to the application
+// (operator new or malloc returns NULL; allocations of large memory blocks should be prepared for that,
+// otherwise it will crash - the user is informed about this).
 
-// nastaveni lokalizovane podoby hlasky o nedostatku pameti a varovnych hlasek
-// (pokud se string nema menit, pouzijte NULL); ocekavany obsah zni:
+// localized settings of the out-of-memory message and warning prompts
+// (use NULL if the string should not change); the expected content reads:
 // message:
 // Insufficient memory to allocate %u bytes. Try to release some memory (e.g.
 // close some running application) and click Retry. If it does not help, you can
 // click Ignore to pass memory allocation error to this application or click Abort
 // to terminate this application.
-// title: (pouziva se pro oboji: "message" i "warning")
-// doporucujeme pouzit jmeno aplikace, at user vi, ktera aplikace si stezuje
+// title: (used for both "message" and "warning")
+// we recommend using the application name so the user knows which application is complaining
 // warningIgnore:
 // Do you really want to pass memory allocation error to this application?\n\n
 // WARNING: Application may crash and then all unsaved data will be lost!\n
