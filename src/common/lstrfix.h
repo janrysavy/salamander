@@ -3,11 +3,11 @@
 
 #pragma once
 
-// nasledujici funkce nepadaji pri praci s neplatnou pameti (ani pri praci s NULL):
-// lstrcpy, lstrcpyn, lstrlen a lstrcat (ty jsou definovane s priponou A nebo W, proto
-// je primo neredefinujeme), v zajmu snazsiho odladeni chyb potrebujeme, aby padaly,
-// protoze jinak se na chybu prijde pozdeji v miste, kde uz nemusi byt jasne, co ji
-// zpusobilo
+// The Win32 helper functions lstrcpy, lstrcpyn, lstrlen, and lstrcat tolerate
+// invalid memory (including NULL) without crashing. They exist only with the A/W
+// suffixes, so we wrap them instead of redefining the base names. For debugging
+// purposes we prefer them to fail immediately; otherwise the crash appears later
+// when the original cause is much harder to track down.
 #define lstrcpyA _sal_lstrcpyA
 #define lstrcpyW _sal_lstrcpyW
 #define lstrcpynA _sal_lstrcpynA
