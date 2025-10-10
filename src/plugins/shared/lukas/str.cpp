@@ -9,7 +9,7 @@ WORD CType[256];
 
 // ****************************************************************************
 //
-// automaticka inicializace modulu
+// Automatic module initialization
 //
 
 class CSTR
@@ -37,7 +37,7 @@ CSTR::CSTR()
 
 // ****************************************************************************
 
-// optimalizace: předpokládá, že s2 je v lowercase
+// Optimization: assumes that s2 is in lowercase
 
 int MemCmpI(const char* s1, const char* s2, int n)
 {
@@ -52,7 +52,7 @@ int MemCmpI(const char* s1, const char* s2, int n)
     return 0;
 }
 
-// optimalizace: předpokládá, že s je v lowercase
+// Optimization: assumes that s is in lowercase
 
 char* MemChrI(char* s, char c, int n)
 {

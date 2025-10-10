@@ -5,16 +5,17 @@
 
 //******************************************************************************
 //
-// metody tridy CResEdit nahrazuji API funkce BeginUpdateResource, UpdateResource, EndUpdateResource
+// the methods of the CResEdit class replace the API functions BeginUpdateResource,
+// UpdateResource, and EndUpdateResource
 //
-// co neni jeste vychytany:
-// - .rsrc section musi v exaci existovat
-// - .rsrc section muze byt pouze na konci PE souboru, neni-li (napr. u debug verse exace)
-//  dojde k prepsani zbytku exace
-// -nejde smazat resource z exace (v API to lze predanim hodnoty NULL parametru 'lpData' do
-//  funkce UpdateResource)
-// -nelze blize urcit chybu, vsechny tri metody nenastavuji last error a v pripade chyby
-//  vraceji pouze FALSE
+// Known limitations:
+// - the .rsrc section must exist in the executable
+// - the .rsrc section can only be at the end of the PE file; if it is not (e.g. in a
+//   debug build), the remainder of the executable is overwritten
+// - it is not possible to delete a resource from the executable (the API allows it by
+//   passing NULL in the 'lpData' parameter to UpdateResource)
+// - errors cannot be diagnosed in more detail; all three methods leave the last
+//   error unset and return only FALSE on failure
 
 class CResEditRoot
 {
@@ -59,8 +60,8 @@ public:
         Sections = NULL;
     }
 
-    // The BeginUpdateResource initilalize CResEdit class and begin resource update in
-    // an executable file.
+    // The BeginUpdateResource method initializes CResEdit and begins a resource
+    // update on an executable file.
     BOOL BeginUpdateResource(
         LPCSTR pFileName,             // executable file name
         BOOL bDeleteExistingResources // deletion option
@@ -76,19 +77,18 @@ public:
         DWORD cbData    // length of resource data
     );
 
-    // The RemoveAllResources function deletes all resources from executable.
+    // The RemoveAllResources function deletes all resources from the executable.
     BOOL RemoveAllResources();
 
-    // The GetResourceDirectory function obstain a copy of resource directory
-    // tree. Returns pointer to copy of resource directory tree or NULL in case
-    // of error (low memory).
+    // The GetResourceDirectory function obtains a copy of the resource directory
+    // tree. Returns a pointer to the copy or NULL in case of an error (low memory).
     CResDir* GetResourceDirectory();
 
-    // The SetResourceDirectory function  replace current resource directory
-    // tree by 'directory'.
+    // The SetResourceDirectory function replaces the current resource directory
+    // tree with 'directory'.
     BOOL SetResourceDirectory(CResDir* directory);
 
-    // The FreeResourceDirectory function frees memory occupied by 'directory'.
+    // The FreeResourceDirectory function frees the memory occupied by 'directory'.
     BOOL FreeResourceDirectory(CResDir* directory);
 
     // The EndUpdateResource function ends a resource update in an executable file.
