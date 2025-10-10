@@ -6,7 +6,7 @@
 #include <windows.h>
 #include <crtdbg.h>
 #include <ostream>
-#include <commctrl.h> // potrebuju LPCOLORMAP
+#include <commctrl.h> // we need LPCOLORMAP
 
 #if defined(_DEBUG) && defined(_MSC_VER) // without passing file+line to 'new' operator, list of memory leaks shows only 'crtdbg.h(552)'
 #define new new (_NORMAL_BLOCK, __FILE__, __LINE__)
@@ -14,7 +14,7 @@
 
 #ifndef STR_DISABLE
 
-#ifdef INSIDE_SPL // pro pouziti v pluginech
+#ifdef INSIDE_SPL // for use in plugins
 #include "spl_base.h"
 #include "dbg.h"
 #else                     //INSIDE_SPL
@@ -26,7 +26,7 @@
 
 #include "str.h"
 
-#ifndef INSIDE_SPL // krome pouziti v pluginech
+#ifndef INSIDE_SPL // except for use in plugins
 
 // The order here is important.
 // Section names must be 8 characters or less.
@@ -38,15 +38,15 @@
 // boundaries so we can find the real functions
 // that we need to call for initialization.
 
-#pragma warning(disable : 4075) // chceme definovat poradi inicializace modulu
+#pragma warning(disable : 4075) // we want to define the module initialization order
 
 typedef void(__cdecl* _PVFV)(void);
 
 #pragma section(".i_str$a", read)
-__declspec(allocate(".i_str$a")) const _PVFV i_str = (_PVFV)1; // na zacatek sekce .i_str si dame promennou i_str
+__declspec(allocate(".i_str$a")) const _PVFV i_str = (_PVFV)1; // place the i_str variable at the beginning of the .i_str section
 
 #pragma section(".i_str$z", read)
-__declspec(allocate(".i_str$z")) const _PVFV i_str_end = (_PVFV)1; // a na konec sekce .i_str si dame promennou i_str_end
+__declspec(allocate(".i_str$z")) const _PVFV i_str_end = (_PVFV)1; // and place the i_str_end variable at the end of the .i_str section
 
 void Initialize__Str()
 {
@@ -65,7 +65,7 @@ BYTE UpperCase[256];
 
 void InitializeCase();
 
-class C__STR_module // automaticka inicializace modulu
+class C__STR_module // automatic module initialization
 {
 public:
     C__STR_module() { InitializeCase(); }
@@ -125,16 +125,16 @@ int StrICpy(char* dest, const char* src)
     while (*src != 0)
         *dest++ = LowerCase[*src++];
     *dest = 0;
-    return (int)(src - s); // vratime pocet nakopirovanych znaku
+    return (int)(src - s); // return the number of copied characters
 }
 
 //
 //*****************************************************************************
 
 #ifdef _WIN64
-// Ani ve VC11 MS nedodali x64 ASM verze stringovych operaci, takze zatim take zustavame v C++
+// Even in VC11 Microsoft did not provide x64 ASM versions of string operations, so for now we also remain in C++
 
-// puvodni funkce
+// original function
 int StrICmp(const char* s1, const char* s2)
 {
     int res;
@@ -190,8 +190,8 @@ done:
 
     }
 
-    // navratova hodnota je v eax, abychom obesli warning prekladace
-    // pro funkce bez navratove hodnoty, udelame nasledujici opicarnu
+    // the return value is in eax; to avoid the compiler warning
+    // for functions without a return value, we perform the following hack
     BOOL retVal;
     __asm {mov retVal, eax}
     return retVal;
@@ -202,8 +202,8 @@ done:
 //*****************************************************************************
 
 /*
-// puvodni funkce
-// pozor, zde je chyba StrNICmp("a", "aa", 2) vraci 0
+// original function
+// beware, there is a bug: StrNICmp("a", "aa", 2) returns 0
 int StrNICmp(const char *s1, const char *s2, int n)
 {
   int res;
@@ -218,9 +218,9 @@ int StrNICmp(const char *s1, const char *s2, int n)
 */
 
 #ifdef _WIN64
-// Ani ve VC11 MS nedodali x64 ASM verze stringovych operaci, takze zatim take zustavame v C++
+// Even in VC11 Microsoft did not provide x64 ASM versions of string operations, so for now we also remain in C++
 
-// opravena verze
+// fixed version
 int StrNICmp(const char* s1, const char* s2, int n)
 {
     int res;
@@ -293,8 +293,8 @@ differ:
 toend:
     mov     eax,ecx // move return value to eax
     }
-    // navratova hodnota je v eax, abychom obesli warning prekladace
-    // pro funkce bez navratove hodnoty, udelame nasledujici opicarnu
+    // the return value is in eax; to avoid the compiler warning
+    // for functions without a return value, we perform the following hack
     BOOL retVal;
     __asm {mov retVal, eax}
     return retVal;
@@ -306,11 +306,11 @@ toend:
 //*****************************************************************************
 
 #ifdef _WIN64
-// Ani ve VC11 MS nedodali x64 ASM verze stringovych operaci, takze zatim take zustavame v C++
+// Even in VC11 Microsoft did not provide x64 ASM versions of string operations, so for now we also remain in C++
 int MemICmp(const void* buf1, const void* buf2, int n)
 {
     int ret = _memicmp(buf1, buf2, n);
-    // normalizujeme navratovou hodnotu dle nasi specifikace
+    // normalize the return value according to our specification
     if (ret == 0)
         return 0;
     return (ret < 0) ? -1 : 1;
@@ -365,8 +365,8 @@ differ:
 toend:
     mov     eax,ecx // move return value to eax
     }
-    // navratova hodnota je v eax, abychom obesli warning prekladace
-    // pro funkce bez navratove hodnoty, udelame nasledujici opicarnu
+    // the return value is in eax; to avoid the compiler warning
+    // for functions without a return value, we perform the following hack
     BOOL retVal;
     __asm {mov retVal, eax}
     return retVal;
@@ -377,9 +377,9 @@ toend:
 //*****************************************************************************
 
 #ifdef _WIN64
-// Ani ve VC11 MS nedodali x64 ASM verze stringovych operaci, takze zatim take zustavame v C++
+// Even in VC11 Microsoft did not provide x64 ASM versions of string operations, so for now we also remain in C++
 
-// puvodni funkce
+// original function
 int StrICmpEx(const char* s1, int l1, const char* s2, int l2)
 {
     int res, l = (l1 < l2) ? l1 : l2;
@@ -396,7 +396,7 @@ int StrICmpEx(const char* s1, int l1, const char* s2, int l2)
 }
 
 /*
-// princip asm funkce
+// principle of the asm function
 int StrICmpEx(const char *s1, int l1, const char *s2, int l2)
 {
   int l = (l1 < l2) ? l1 : l2;
@@ -466,8 +466,8 @@ int StrICmpEx(const char* s1, int l1, const char* s2, int l2)
   toend:
       mov     eax,ecx // move return value to eax
         }
-        // navratova hodnota je v eax, abychom obesli warning prekladace
-        // pro funkce bez navratove hodnoty, udelame nasledujici opicarnu
+        // the return value is in eax; to avoid the compiler warning
+        // for functions without a return value, we perform the following hack
         BOOL retVal;
         __asm {mov retVal, eax}
         if (retVal != 0) return retVal;
@@ -484,7 +484,7 @@ int StrICmpEx(const char* s1, int l1, const char* s2, int l2)
 //*****************************************************************************
 
 /*
-// puvodni funkce
+// original function
 int StrCmpEx(const char *s1, int l1, const char *s2, int l2)
 {
   int res, l = (l1 < l2) ? l1 : l2;
@@ -498,7 +498,7 @@ int StrCmpEx(const char *s1, int l1, const char *s2, int l2)
 }
 */
 
-// rychlejsi varianta
+// faster variant
 int StrCmpEx(const char* s1, int l1, const char* s2, int l2)
 {
     int l = (l1 < l2) ? l1 : l2;
@@ -566,7 +566,7 @@ int StrLen(const char *str)
   while (1)
   {
     if ((((*(DWORD *)s) & 0xF0F0F0F0) - 0x10101010) & 0x8F0F0F0F)
-    {                            // je tam znak < 16
+    {                            // there is a character < 16
       if (*s != 0) s++;
       else break;
       if (*s != 0) s++;
@@ -585,7 +585,7 @@ int StrLen(const char *str)
 /*
 //*****************************************************************************
 //
-// Tabulky pro prevod kodu Kamenickych do MS Windows
+// Tables for converting the Kamenicky code page to MS Windows
 //
 
 BYTE KodKamenickych[CONVERT_TAB_CHARS] =
