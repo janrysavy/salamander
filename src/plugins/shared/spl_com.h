@@ -12,7 +12,7 @@
 #pragma once
 
 #ifdef _MSC_VER
-#pragma pack(push, enter_include_spl_com) // aby byly struktury nezavisle na nastavenem zarovnavani
+#pragma pack(push, enter_include_spl_com) // so that the structures are independent of the alignment settings
 #pragma pack(4)
 #pragma warning(3 : 4706) // warning C4706: assignment within conditional expression
 #endif                    // _MSC_VER
@@ -20,28 +20,27 @@
 #pragma option -a4
 #endif // __BORLANDC__
 
-// v pluginu je treba definovat promennou SalamanderVersion (int) a v SalamanderPluginEntry tuto
-// promennou inicializovat:
+// The plugin must define the SalamanderVersion (int) variable and initialize it in SalamanderPluginEntry:
 // SalamanderVersion = salamander->GetVersion();
 
-// globalni promenna s verzi Salamandera, ve kterem je tento plugin nacteny
+// Global variable with the version of the Salamander in which this plugin is loaded
 extern int SalamanderVersion;
 
 //
 // ****************************************************************************
 // CSalamanderDirectoryAbstract
 //
-// trida reprezentuje adresarovou strukturu - soubory a adresare na pozadovanych cestach, root cesta je "",
-// oddelovace v ceste jsou backslashe ('\\')
+// The class represents a directory structure—files and directories on requested paths, the root path is "",
+// separators in the path are backslashes ('\\')
 //
 
-// CQuadWord - 64-bitovy unsigned integer pro velikosti souboru
-// triky:
-//  -rychlejsi predani vstupniho parametru typu CQuadWord: const CQuadWord &
-//  -priradit 64-bit integer: quadWord.Value = XXX;
-//  -pocitat pomer velikosti: quadWord1.GetDouble() / quadWord2.GetDouble()  // ztrata presnosti pred delenim se projevi malo (max. 1e-15)
-//  -oriznout na DWORD: (DWORD)quadWord.Value
-//  -prevest (unsigned) __int64 na CQuadWord: CQuadWord().SetUI64(XXX)
+// CQuadWord - 64-bit unsigned integer for file sizes
+// tips:
+//  -faster passing of an input parameter of type CQuadWord: const CQuadWord&
+//  -assign a 64-bit integer: quadWord.Value = XXX;
+//  -compute a size ratio: quadWord1.GetDouble() / quadWord2.GetDouble()  // the loss of precision before the division is minimal (max. 1e-15)
+//  -truncate to DWORD: (DWORD)quadWord.Value
+//  -convert (unsigned) __int64 to CQuadWord: CQuadWord().SetUI64(XXX)
 
 struct CQuadWord
 {
@@ -55,9 +54,9 @@ struct CQuadWord
         unsigned __int64 Value;
     };
 
-    // POZOR: nesmi sem prijit operator prirazeni ani konstruktor pro jeden DWORD,
-    //        jinak bude pouziti 8-bytovych cisel zcela nekontrolovatelne (C++ vse
-    //        vzajemne prevede, coz nemusi byt vzdy prave ono)
+    // WARNING: Do not add an assignment operator or a constructor that takes a single DWORD here,
+    //          otherwise the use of 8-byte numbers becomes completely uncontrollable (C++ converts
+    //          everything implicitly, which might not be what you want)
 
     CQuadWord() {}
     CQuadWord(DWORD lo, DWORD hi)
@@ -185,11 +184,11 @@ struct CQuadWord
     BOOL operator<=(const CQuadWord& qw) const { return Value <= qw.Value; }
     BOOL operator>=(const CQuadWord& qw) const { return Value >= qw.Value; }
 
-    // prevod na double (pozor na ztratu presnosti u velkych cisel - double ma jen 15 platnych cislic)
+    // conversion to double (beware of precision loss for large numbers—double has only 15 significant digits)
     double GetDouble() const
-    { // MSVC neumi konverzi unsigned __int64 na double, takze si musime pomoct sami
+    { // MSVC cannot convert unsigned __int64 to double, so we have to do it ourselves
         if (Value < CQuadWord(0, 0x80000000).Value)
-            return (double)(__int64)Value; // kladne cislo
+            return (double)(__int64)Value; // positive number
         else
             return 9223372036854775808.0 + (double)(__int64)(Value - CQuadWord(0, 0x80000000).Value);
     }
@@ -197,82 +196,80 @@ struct CQuadWord
 
 #define QW_MAX CQuadWord(0xFFFFFFFF, 0xFFFFFFFF)
 
-#define ICONOVERLAYINDEX_NOTUSED 15 // hodnota pro CFileData::IconOverlayIndex v pripade, ze ikona nema overlay
+#define ICONOVERLAYINDEX_NOTUSED 15 // value for CFileData::IconOverlayIndex when the icon has no overlay
 
-// zaznam kazdeho souboru a adresare v Salamanderovi (zakladni data o souboru/adresari)
-struct CFileData // nesmi sem prijit destruktor !
+// record of every file and directory in Salamander (basic information about the file/directory)
+struct CFileData // do not add a destructor here!
 {
-    char* Name;                    // naalokovane jmeno souboru (bez cesty), nutne alokovat na heapu
-                                   // Salamandera (viz CSalamanderGeneralAbstract::Alloc/Realloc/Free)
-    char* Ext;                     // ukazatel do Name za prvni tecku zprava (vcetne tecky na zacatku jmena,
-                                   // na Windows se chape jako pripona, narozdil od UNIXu) nebo na konec
-                                   // Name, pokud pripona neexistuje; je-li v konfiguraci nastaveno FALSE
-                                   // pro SALCFG_SORTBYEXTDIRSASFILES, je v Ext pro adresare ukazatel na konec
-                                   // Name (adresare nemaji pripony)
-    CQuadWord Size;                // velikost souboru v bytech
-    DWORD Attr;                    // atributy souboru - ORovane konstanty FILE_ATTRIBUTE_XXX
-    FILETIME LastWrite;            // cas posledniho zapisu do souboru (UTC-based time)
-    char* DosName;                 // naalokovane DOS 8.3 jmeno souboru, neni-li treba je NULL, nutne
-                                   // alokovat na heapu Salamandera (viz CSalamanderGeneralAbstract::Alloc/Realloc/Free)
-    DWORD_PTR PluginData;          // pouziva plugin skrze CPluginDataInterfaceAbstract, Salamander ignoruje
-    unsigned NameLen : 9;          // delka retezce Name (strlen(Name)) - POZOR: maximalni delka jmena je (MAX_PATH - 5)
-    unsigned Hidden : 1;           // je hidden? (je-li 1, ikonka je pruhlednejsi o 50% - ghosted)
-    unsigned IsLink : 1;           // je link? (je-li 1, ikonka ma overlay linku) - standardni plneni viz CSalamanderGeneralAbstract::IsFileLink(CFileData::Ext), pri zobrazeni ma prednost pred IsOffline, ale IconOverlayIndex ma prednost
-    unsigned IsOffline : 1;        // je offline? (je-li 1, ikonka ma overlay offline - cerne hodiny), pri zobrazeni ma IsLink i IconOverlayIndex prednost
-    unsigned IconOverlayIndex : 4; // index icon-overlaye (pokud ikona nema zadny overlay, je zde hodnota ICONOVERLAYINDEX_NOTUSED), pri zobrazeni ma prednost pred IsLink a IsOffline
+    char* Name;                    // allocated file name (without path), must be allocated on Salamander's
+                                   // heap (see CSalamanderGeneralAbstract::Alloc/Realloc/Free)
+    char* Ext;                     // pointer into Name to the first dot from the right (including the dot at the start of the name,
+                                   // on Windows it is considered an extension, unlike UNIX) or to the end of Name if the extension
+                                   // does not exist; if the configuration has FALSE set for SALCFG_SORTBYEXTDIRSASFILES, Ext for
+                                   // directories points to the end of Name (directories do not have extensions)
+    CQuadWord Size;                // file size in bytes
+    DWORD Attr;                    // file attributes - ORed FILE_ATTRIBUTE_XXX constants
+    FILETIME LastWrite;            // time of the last write to the file (UTC-based time)
+    char* DosName;                 // allocated DOS 8.3 file name, NULL if not needed, must
+                                   // be allocated on Salamander's heap (see CSalamanderGeneralAbstract::Alloc/Realloc/Free)
+    DWORD_PTR PluginData;          // used by the plugin via CPluginDataInterfaceAbstract, ignored by Salamander
+    unsigned NameLen : 9;          // length of the Name string (strlen(Name)) - WARNING: the maximum name length is (MAX_PATH - 5)
+    unsigned Hidden : 1;           // is it hidden? (if 1, the icon is 50% more transparent - ghosted)
+    unsigned IsLink : 1;           // is it a link? (if 1, the icon has a link overlay) - standard filling see CSalamanderGeneralAbstract::IsFileLink(CFileData::Ext), when displayed it has priority over IsOffline, but IconOverlayIndex takes precedence
+    unsigned IsOffline : 1;        // is it offline? (if 1, the icon has an offline overlay - black clock), when displayed IsLink and IconOverlayIndex take precedence
+    unsigned IconOverlayIndex : 4; // index of the icon overlay (if the icon has no overlay, the value here is ICONOVERLAYINDEX_NOTUSED), when displayed it has priority over IsLink and IsOffline
 
-    // flagy pro interni pouziti v Salamanderovi: nuluji se pri pridani do CSalamanderDirectoryAbstract
-    unsigned Association : 1;     // vyznam jen pro zobrazeni 'simple icons' - ikona asociovaneho souboru, jinak 0
-    unsigned Selected : 1;        // read-only flag oznaceni (0 - polozka neoznacena, 1 - polozka oznacena)
-    unsigned Shared : 1;          // je adresar sdileny? u souboru se nepouziva
-    unsigned Archive : 1;         // jedna se o archiv? pouziva se pro zobrazovani ikony archivu v panelu
-    unsigned SizeValid : 1;       // je u adresare napocitana jeho velikost?
-    unsigned Dirty : 1;           // je potreba tuto polozku prekreslit? (pouze docasna platnost; mezi nastavenim bitu a prekreslenim panelu nesmi byt pumpovana message queue, jinak muze dojit k prekresleni ikonky (icon reader) a tim resetu bitu! v dusledku se neprekresli polozka)
-    unsigned CutToClip : 1;       // je CUT-nutej na clipboardu? (je-li 1, ikonka je pruhlednejsi o 50% - ghosted)
-    unsigned IconOverlayDone : 1; // jen pro potreby icon-reader-threadu: ziskavame nebo uz jsme ziskavali icon-overlay? (0 - ne, 1 - ano)
+    // flags for internal use in Salamander: they are reset when added to CSalamanderDirectoryAbstract
+    unsigned Association : 1;     // meaningful only for displaying 'simple icons' - icon of the associated file, otherwise 0
+    unsigned Selected : 1;        // read-only selection flag (0 - item not selected, 1 - item selected)
+    unsigned Shared : 1;          // is the directory shared? not used for files
+    unsigned Archive : 1;         // is it an archive? used to display the archive icon in the panel
+    unsigned SizeValid : 1;       // has the directory size been computed?
+    unsigned Dirty : 1;           // does this item need to be redrawn? (temporary validity only; between setting the bit and redrawing the panel the message queue must not be pumped, otherwise the icon (icon reader) might be redrawn and thus the bit reset! as a result the item is not redrawn)
+    unsigned CutToClip : 1;       // is it CUT to the clipboard? (if 1, the icon is 50% more transparent - ghosted)
+    unsigned IconOverlayDone : 1; // only for the icon-reader thread: are we obtaining or have we already obtained the icon overlay? (0 - no, 1 - yes)
 };
 
-// konstanty urcujici platnost dat, ktera jsou primo ulozena v CFileData (velikost, pripona, atd.)
-// nebo se generuji z primo ulozenych dat automaticky (file-type se generuje z pripony);
-// Name + NameLen jsou povinne (musi byt platne vzdy); platnost PluginData si ridi plugin sam
-// (Salamander tento atribut ignoruje)
-#define VALID_DATA_EXTENSION 0x0001   // pripona je ulozena v Ext (bez: vsechny Ext = konec Name)
-#define VALID_DATA_DOSNAME 0x0002     // DOS name je ulozeno v DosName (bez: vsechny DosName = NULL)
-#define VALID_DATA_SIZE 0x0004        // velikost v bytech je ulozena v Size (bez: vsechny Size = 0)
-#define VALID_DATA_TYPE 0x0008        // file-type muze byt generovan z Ext (bez: negeneruje se)
-#define VALID_DATA_DATE 0x0010        // datum modifikace (UTC-based) je ulozen v LastWrite (bez: vsechny datumy v LastWrite jsou 1.1.1602 v local time)
-#define VALID_DATA_TIME 0x0020        // cas modifikace (UTC-based) je ulozen v LastWrite (bez: vsechny casy v LastWrite jsou 0:00:00 v local time)
-#define VALID_DATA_ATTRIBUTES 0x0040  // atributy jsou ulozeny v Attr (ORovane Win32 API konstanty FILE_ATTRIBUTE_XXX) (bez: vsechny Attr = 0)
-#define VALID_DATA_HIDDEN 0x0080      // "ghosted" priznak ikony je ulozen v Hidden (bez: vsechny Hidden = 0)
-#define VALID_DATA_ISLINK 0x0100      // IsLink obsahuje 1 pokud jde o link, ikonka ma overlay linku (bez: vsechny IsLink = 0)
-#define VALID_DATA_ISOFFLINE 0x0200   // IsOffline obsahuje 1 pokud jde o offline soubor/adresar, ikonka ma offline overlay (bez: vsechny IsOffline = 0)
-#define VALID_DATA_PL_SIZE 0x0400     // ma smysl jen bez pouziti VALID_DATA_SIZE: plugin ma aspon pro nektere soubory/adresare ulozenou velikost v bytech (nekde v PluginData), pro ziskani teto velikosti Salamander vola CPluginDataInterfaceAbstract::GetByteSize()
-#define VALID_DATA_PL_DATE 0x0800     // ma smysl jen bez pouziti VALID_DATA_DATE: plugin ma aspon pro nektere soubory/adresare ulozeny datum modifikace (nekde v PluginData), pro ziskani teto velikosti Salamander vola CPluginDataInterfaceAbstract::GetLastWriteDate()
-#define VALID_DATA_PL_TIME 0x1000     // ma smysl jen bez pouziti VALID_DATA_TIME: plugin ma aspon pro nektere soubory/adresare ulozeny cas modifikace (nekde v PluginData), pro ziskani teto velikosti Salamander vola CPluginDataInterfaceAbstract::GetLastWriteTime()
-#define VALID_DATA_ICONOVERLAY 0x2000 // IconOverlayIndex je index icon-overlaye (zadny overlay = hodnota ICONOVERLAYINDEX_NOTUSED) (bez: vsechny IconOverlayIndex = ICONOVERLAYINDEX_NOTUSED), zadani ikon viz CSalamanderGeneralAbstract::SetPluginIconOverlays
+// constants determining the validity of the data stored directly in CFileData (size, extension, etc.)
+// or automatically generated from directly stored data (file type is generated from the extension);
+// Name + NameLen are mandatory (must always be valid); the plugin manages the validity of PluginData itself
+// (Salamander ignores this attribute)
+#define VALID_DATA_EXTENSION 0x0001   // the extension is stored in Ext (without: all Ext point to the end of Name)
+#define VALID_DATA_DOSNAME 0x0002     // the DOS name is stored in DosName (without: all DosName are NULL)
+#define VALID_DATA_SIZE 0x0004        // the size in bytes is stored in Size (without: all Size are 0)
+#define VALID_DATA_TYPE 0x0008        // the file type can be generated from Ext (without: it is not generated)
+#define VALID_DATA_DATE 0x0010        // the modification date (UTC-based) is stored in LastWrite (without: all dates in LastWrite are 1.1.1602 in local time)
+#define VALID_DATA_TIME 0x0020        // the modification time (UTC-based) is stored in LastWrite (without: all times in LastWrite are 0:00:00 in local time)
+#define VALID_DATA_ATTRIBUTES 0x0040  // the attributes are stored in Attr (ORed Win32 API constants FILE_ATTRIBUTE_XXX) (without: all Attr are 0)
+#define VALID_DATA_HIDDEN 0x0080      // the "ghosted" icon flag is stored in Hidden (without: all Hidden are 0)
+#define VALID_DATA_ISLINK 0x0100      // IsLink contains 1 if it is a link, the icon has a link overlay (without: all IsLink are 0)
+#define VALID_DATA_ISOFFLINE 0x0200   // IsOffline contains 1 if it is an offline file/directory, the icon has an offline overlay (without: all IsOffline are 0)
+#define VALID_DATA_PL_SIZE 0x0400     // meaningful only without using VALID_DATA_SIZE: the plugin stores the size in bytes for at least some files/directories (somewhere in PluginData); to obtain this size Salamander calls CPluginDataInterfaceAbstract::GetByteSize()
+#define VALID_DATA_PL_DATE 0x0800     // meaningful only without using VALID_DATA_DATE: the plugin stores the modification date for at least some files/directories (somewhere in PluginData); to obtain this value Salamander calls CPluginDataInterfaceAbstract::GetLastWriteDate()
+#define VALID_DATA_PL_TIME 0x1000     // meaningful only without using VALID_DATA_TIME: the plugin stores the modification time for at least some files/directories (somewhere in PluginData); to obtain this value Salamander calls CPluginDataInterfaceAbstract::GetLastWriteTime()
+#define VALID_DATA_ICONOVERLAY 0x2000 // IconOverlayIndex is the icon overlay index (no overlay = value ICONOVERLAYINDEX_NOTUSED) (without: all IconOverlayIndex are ICONOVERLAYINDEX_NOTUSED), icon assignment see CSalamanderGeneralAbstract::SetPluginIconOverlays
 
-#define VALID_DATA_NONE 0 // pomocna konstanta - platne je jen Name a NameLen
+#define VALID_DATA_NONE 0 // helper constant - only Name and NameLen are valid
 
 #ifdef INSIDE_SALAMANDER
-// VALID_DATA_ALL a VALID_DATA_ALL_FS_ARC jsou jen pro interni pouziti v Salamanderovi (jadre),
-// pluginy si naORuji jen konstanty odpovidajici pluginem dodavanym datum (zamezi se tak problemum
-// pri zavedeni dalsich konstant a jim odpovidajicim datum)
+// VALID_DATA_ALL and VALID_DATA_ALL_FS_ARC are for internal use in Salamander (the core) only;
+// plugins OR together only the constants corresponding to the data provided by the plugin (this prevents issues
+// when additional constants and corresponding data are introduced)
 #define VALID_DATA_ALL 0xFFFF
-#define VALID_DATA_ALL_FS_ARC (0xFFFF & ~VALID_DATA_ICONOVERLAY) // pro FS a archivy: vse krome icon-overlays
+#define VALID_DATA_ALL_FS_ARC (0xFFFF & ~VALID_DATA_ICONOVERLAY) // for file systems and archives: everything except icon overlays
 #endif                                                           // INSIDE_SALAMANDER
 
-// Pokud je zapnuto skryvani hidden a system souboru a adresaru, nezobrazuji se v panelech polozky s
-// Hidden==1 a Attr obsahujicim FILE_ATTRIBUTE_HIDDEN a/nebo FILE_ATTRIBUTE_SYSTEM.
+// If hiding hidden and system files and directories is enabled, items with Hidden==1 and Attr containing
+// FILE_ATTRIBUTE_HIDDEN and/or FILE_ATTRIBUTE_SYSTEM are not displayed in the panels.
 
-// konstanty priznaku pro CSalamanderDirectoryAbstract:
-// jmena souboru a adresaru (i v cestach) se maji porovnavat case-sensitive (bez tohoto flagu je
-// porovnavani case-insensitive - standardni chovani ve Windows)
+// flag constants for CSalamanderDirectoryAbstract:
+// file and directory names (including in paths) should be compared case-sensitively (without this flag the
+// comparison is case-insensitive—the standard behavior on Windows)
 #define SALDIRFLAG_CASESENSITIVE 0x0001
-// jmena podadresaru v ramci kazdeho adresare se nebudou testovat na duplicitu (tento
-// test je casove narocny a je nutny jen v archivech, pokud se pridavaji polozky nejen
-// do rootu - aby fungovalo napr. pridani "file1" na "dir1" nasledovane pridanim
-// "dir1" - "dir1" se prida prvni operaci (automaticky se prida neexistujici cesta),
-// druha operace uz jen obnovi udaje o "dir1" (nesmi ho pridat znovu))
+// subdirectory names within each directory will not be checked for duplicates (this test is time-consuming
+// and is needed only in archives when items are added not just into the root—to allow, for example, adding
+// "file1" to "dir1" followed by adding "dir1"—"dir1" is added by the first operation (a missing path is
+// created automatically), the second operation only refreshes the data about "dir1" (it must not add it again))
 #define SALDIRFLAG_IGNOREDUPDIRS 0x0002
 
 class CPluginDataInterfaceAbstract;
@@ -280,134 +277,133 @@ class CPluginDataInterfaceAbstract;
 class CSalamanderDirectoryAbstract
 {
 public:
-    // vycisti cely objekt, pripravi ho pro dalsi pouziti; pokud 'pluginData' neni NULL, pouzije
-    // se pro soubory a adresare k uvolneni dat specifickych pluginu (CFileData::PluginData);
-    // nastavuje standardni hodnotu masky platnych dat (suma vsech VALID_DATA_XXX krome
-    // VALID_DATA_ICONOVERLAY) a priznaku objektu (viz metoda SetFlags)
+    // clears the entire object and prepares it for reuse; if 'pluginData' is not NULL it is used
+    // to release plugin-specific data (CFileData::PluginData) for files and directories;
+    // sets the default value of the valid data mask (the sum of all VALID_DATA_XXX except
+    // VALID_DATA_ICONOVERLAY) and the object flags (see the SetFlags method)
     virtual void WINAPI Clear(CPluginDataInterfaceAbstract* pluginData) = 0;
 
-    // zadani masky platnych dat, podle ktere se urcuje, ktera data z CFileData jsou platna
-    // a ktera se maji pouze "nulovat" (viz komentar k VALID_DATA_XXX); maska 'validData'
-    // obsahuje ORovane hodnoty VALID_DATA_XXX; standardni hodnota masky je suma vsech
-    // VALID_DATA_XXX krome VALID_DATA_ICONOVERLAY; masku platnych dat je potreba nastavit
-    // pred volanim AddFile/AddDir
+    // defines the valid data mask that determines which CFileData members are valid
+    // and which should only be "zeroed" (see the comment for VALID_DATA_XXX); the 'validData'
+    // mask contains ORed VALID_DATA_XXX values; the default value of the mask is the sum of all
+    // VALID_DATA_XXX except VALID_DATA_ICONOVERLAY; the valid data mask must be set
+    // before calling AddFile/AddDir
     virtual void WINAPI SetValidData(DWORD validData) = 0;
 
-    // nastaveni priznaku pro tento objekt; 'flags' je kombinace ORovanych priznaku SALDIRFLAG_XXX,
-    // standardni hodnota priznaku objektu je nula pro archivatory (zadny priznak neni nastaven)
-    // a SALDIRFLAG_IGNOREDUPDIRS pro file-systemy (smi se pridavat jen do rootu, test na duplicitu
-    // adresaru je zbytecny)
+    // sets flags for this object; 'flags' is a combination of ORed SALDIRFLAG_XXX flags;
+    // the default value of the object flags is zero for archivers (no flag is set)
+    // and SALDIRFLAG_IGNOREDUPDIRS for file systems (items may only be added into the root,
+    // so checking directory duplicates is pointless)
     virtual void WINAPI SetFlags(DWORD flags) = 0;
 
-    // prida soubor na zadanou cestou (relativni k tomuto "salamander-adresari"), vraci uspech
-    // retezec path se pouziva jen uvnitr funkce, obsah struktury file se pouziva i mimo funkci
-    // (neuvolnovat pamet naalokovanou pro promenne uvnitr struktury)
-    // v pripade neuspechu, je treba obsah struktury file uvolnit;
-    // parametr 'pluginData' neni NULL jen pro archivy (FS pouzivaji jen prazdne 'path' (==NULL));
-    // neni-li 'pluginData' NULL, pouziva se 'pluginData' pri zakladani novych adresaru (pokud
-    // 'path' neexistuje), viz CPluginDataInterfaceAbstract::GetFileDataForNewDir;
-    // kontrola unikatnosti jmena souboru na ceste 'path' se neprovadi
+    // adds a file at the specified path (relative to this "Salamander directory"), returns success;
+    // the path string is used only inside the function, the contents of the file structure are used outside the function as well
+    // (do not release the memory allocated for the variables within the structure)
+    // if the operation fails, the contents of the file structure must be released;
+    // the 'pluginData' parameter is non-NULL only for archives (file systems use only an empty 'path' (==NULL));
+    // if 'pluginData' is not NULL, 'pluginData' is used when creating new directories (if the
+    // 'path' does not exist), see CPluginDataInterfaceAbstract::GetFileDataForNewDir;
+    // uniqueness of the file name on the 'path' is not checked
     virtual BOOL WINAPI AddFile(const char* path, CFileData& file, CPluginDataInterfaceAbstract* pluginData) = 0;
 
-    // prida adresar na zadanou cestu (relativni k tomuto "salamander-adresari"), vraci uspech
-    // retezec path se pouziva jen uvnitr funkce, obsah struktury file se pouziva i mimo funkci
-    // (neuvolnovat pamet naalokovanou pro promenne uvnitr struktury)
-    // v pripade neuspechu, je treba obsah struktury file uvolnit;
-    // parametr 'pluginData' neni NULL jen pro archivy (FS pouzivaji jen prazdne 'path' (==NULL));
-    // neni-li 'pluginData' NULL, pouziva se pri zakladani novych adresaru (pokud 'path' neexistuje),
-    // viz CPluginDataInterfaceAbstract::GetFileDataForNewDir;
-    // kontrola unikatnosti jmena adresare na ceste 'path' se provadi, dochazi-li k pridani
-    // jiz existujiciho adresare, dojde k uvolneni puvodnich dat (neni-li 'pluginData' NULL, vola
-    // se pro uvolneni dat i CPluginDataInterfaceAbstract::ReleasePluginData) a ulozeni dat z 'dir'
-    // (je nutne pro obnovu dat adresaru, ktere se vytvori automaticky pri neexistenci 'path');
-    // specialita pro FS (nebo objekt alokovany pres CSalamanderGeneralAbstract::AllocSalamanderDirectory
-    // s 'isForFS'==TRUE): je-li dir.Name "..", je adresar pridan jako up-dir (muze byt jen jeden,
-    // zobrazuje se vzdy na zacatku listingu a ma specialni ikonu)
+    // adds a directory at the specified path (relative to this "Salamander directory"), returns success;
+    // the path string is used only inside the function, the contents of the file structure are used outside the function as well
+    // (do not release the memory allocated for the variables within the structure)
+    // if the operation fails, the contents of the file structure must be released;
+    // the 'pluginData' parameter is non-NULL only for archives (file systems use only an empty 'path' (==NULL));
+    // if 'pluginData' is not NULL, it is used when creating new directories (if 'path' does not exist),
+    // see CPluginDataInterfaceAbstract::GetFileDataForNewDir;
+    // uniqueness of the directory name on the 'path' is checked; if an existing directory is added again,
+    // the original data is released (if 'pluginData' is not NULL, CPluginDataInterfaceAbstract::ReleasePluginData is called to release the data)
+    // and replaced with data from 'dir' (this is necessary to refresh data for directories that were created automatically when the 'path' did not exist);
+    // special case for file systems (or an object allocated via CSalamanderGeneralAbstract::AllocSalamanderDirectory
+    // with 'isForFS'==TRUE): if dir.Name is "..", the directory is added as an up-dir (there may be only one,
+    // it is always displayed at the beginning of the listing and has a special icon)
     virtual BOOL WINAPI AddDir(const char* path, CFileData& dir, CPluginDataInterfaceAbstract* pluginData) = 0;
 
-    // vraci pocet souboru v objektu
+    // returns the number of files in the object
     virtual int WINAPI GetFilesCount() const = 0;
 
-    // vraci pocet adresaru v objektu
+    // returns the number of directories in the object
     virtual int WINAPI GetDirsCount() const = 0;
 
-    // vraci soubor z indexu 'index', vracena data lze pouzit jen pro cteni
+    // returns the file at index 'index'; the returned data may only be used for reading
     virtual CFileData const* WINAPI GetFile(int index) const = 0;
 
-    // vraci adresar z indexu 'index', vracena data lze pouzit jen pro cteni
+    // returns the directory at index 'index'; the returned data may only be used for reading
     virtual CFileData const* WINAPI GetDir(int index) const = 0;
 
-    // vraci objekt CSalamanderDirectory pro adresar z indexu 'index', vraceny objekt lze
-    // pouzit jen pro cteni (objekty pro prazdne adresare nejsou alokovany, vraci se jeden
-    // globalni prazdny objekt - zmena tohoto objektu by se projevila globalne)
+    // returns the CSalamanderDirectory object for the directory at index 'index'; the returned object may only
+    // be used for reading (objects for empty directories are not allocated, a single global empty object is returned—
+    // modifying this object would have a global effect)
     virtual CSalamanderDirectoryAbstract const* WINAPI GetSalDir(int index) const = 0;
 
-    // Pluginu umoznuje predem sdelit predpokladany pocet souboru a adresaru v tomto adresari.
-    // Salamander si upravi realokacni strategii tak, aby pridavani prvku prilis nebrzdilo.
-    // Ma smysl volat pro adresare obsahujici tisice souboru nebo adresaru. V pripade desitek
-    // tisic uz je zavolani teto metody temer nutnost, jinak realokace zaberou nekolik vterin.
-    // 'files' a 'dirs' tedy vyjadruji priblizny celkovy pocet souboru a adresaru.
-    // Pokud je nektera z hodnot -1, bude ji Salamander ignorovat.
-    // Metodu ma vyznam volat pouze pokud je adresar prazdny, tedy nebylo volano AddFile nebo AddDir.
+    // Allows the plugin to provide the expected number of files and directories in this directory in advance.
+    // Salamander adjusts its reallocation strategy so that adding items is not slowed down too much.
+    // It makes sense to call this for directories containing thousands of files or directories. In the case of tens
+    // of thousands, calling this method is almost mandatory; otherwise reallocations will take several seconds.
+    // 'files' and 'dirs' therefore express the approximate total number of files and directories.
+    // If any of the values is -1, Salamander ignores it.
+    // The method should only be called if the directory is empty, i.e. AddFile or AddDir has not been called yet.
     virtual void WINAPI SetApproximateCount(int files, int dirs) = 0;
 };
 
 //
 // ****************************************************************************
-// SalEnumSelection a SalEnumSelection2
+// SalEnumSelection and SalEnumSelection2
 //
 
-// konstanty vracene z SalEnumSelection a SalEnumSelection2 v parametru 'errorOccured'
-#define SALENUM_SUCCESS 0 // chyba nenastala
-#define SALENUM_ERROR 1   // nastala chyba a uzivatel si preje pokracovat v operaci (vynechaly se jen chybne soubory/adresare)
-#define SALENUM_CANCEL 2  // nastala chyba a uzivatel si preje zrusit operaci
+// constants returned from SalEnumSelection and SalEnumSelection2 in the 'errorOccured' parameter
+#define SALENUM_SUCCESS 0 // no error occurred
+#define SALENUM_ERROR 1   // an error occurred and the user wants to continue (only the faulty files/directories were skipped)
+#define SALENUM_CANCEL 2  // an error occurred and the user wants to cancel the operation
 
-// enumerator, vraci jmena souboru, konci vracenim NULL;
-// 'enumFiles' == -1 -> reset enumerace (po tomto volani zacina enumerace opet od zacatku), vsechny
-//                      dalsi parametry (az na 'param') jsou ignorovany, nema navratove hodnoty (dava
-//                      vse na nulu)
-// 'enumFiles' == 0 -> enumerace souboru a podadresaru jen z korene
-// 'enumFiles' == 1 -> enumerace vsech souboru a podadresaru
-// 'enumFiles' == 2 -> enumerace vsech podadresaru, soubory jen z korene;
-// k chybe muze dojit jen pri 'enumFiles' == 1 nebo 'enumFiles' == 2 ('enumFiles' == 0 nekompletuje
-// jmena a cesty); 'parent' je parent pripadnych messageboxu s chybami (NULL znamena nezobrazovat
-// chyby); v 'isDir' (neni-li NULL) vraci TRUE pokud jde o adresar; v 'size' (neni-li NULL) vraci
-// velikost souboru (u adresaru se vraci velikost jen pri 'enumFiles' == 0 - jinak je nulova);
-// neni-li 'fileData' NULL, vraci se v nem ukazatel na strukturu CFileData vraceneho
-// souboru/adresare (pokud enumerator vraci NULL, vraci se v 'fileData' take NULL);
-// 'param' je parametr 'nextParam' predavany spolu s ukazatelem na funkci tohoto
-// typu; v 'errorOccured' (neni-li NULL) se vraci SALENUM_ERROR, pokud se pri sestavovani vracenych
-// jmen narazilo na prilis dlouhe jmeno a uzivatel se rozhodl preskocit jen chybne soubory/adresare,
-// POZOR: chyba se netyka prave vraceneho jmena, to je OK; v 'errorOccured' (neni-li NULL) se vraci
-// SALENUM_CANCEL pokud se pri chybe uzivatel rozhodl pro zruseni operace (cancel), zaroven
-// enumerator vraci NULL (konci); v 'errorOccured' (neni-li NULL) se vraci SALENUM_SUCCESS pokud
-// zadna chyba nenastala
+// enumerator; returns file names and ends by returning NULL
+// 'enumFiles' == -1 -> resets the enumeration (after this call the enumeration starts from the beginning again), all
+//                      other parameters (except for 'param') are ignored, it has no return value (sets
+//                      everything to zero)
+// 'enumFiles' == 0 -> enumerates files and subdirectories only from the root
+// 'enumFiles' == 1 -> enumerates all files and subdirectories
+// 'enumFiles' == 2 -> enumerates all subdirectories, files only from the root
+// an error can occur only for 'enumFiles' == 1 or 'enumFiles' == 2 ('enumFiles' == 0 does not complete
+// names and paths); 'parent' is the parent of potential error message boxes (NULL means do not show
+// errors); in 'isDir' (if not NULL) it returns TRUE if the item is a directory; in 'size' (if not NULL) it returns
+// the file size (for directories the size is returned only for 'enumFiles' == 0—otherwise it is zero)
+// if 'fileData' is not NULL, it returns a pointer to the CFileData structure of the returned
+// file/directory (if the enumerator returns NULL, 'fileData' also receives NULL)
+// 'param' is the 'nextParam' parameter passed along with the pointer to a function of this
+// type; in 'errorOccured' (if not NULL) SALENUM_ERROR is returned if a name that was too long was encountered
+// while building the returned names and the user decided to skip only the faulty files/directories.
+// WARNING: the error does not apply to the name just returned—that one is OK; in 'errorOccured' (if not NULL)
+// SALENUM_CANCEL is returned if the user decided to cancel the operation when an error occurred;
+// in that case the enumerator returns NULL (stops); in 'errorOccured' (if not NULL) SALENUM_SUCCESS is returned if
+// no error occurred
 typedef const char*(WINAPI* SalEnumSelection)(HWND parent, int enumFiles, BOOL* isDir, CQuadWord* size,
                                               const CFileData** fileData, void* param, int* errorOccured);
 
-// enumerator, vraci jmena souboru, konci vracenim NULL;
-// 'enumFiles' == -1 -> reset enumerace (po tomto volani zacina enumerace opet od zacatku), vsechny
-//                      dalsi parametry (az na 'param') jsou ignorovany, nema navratove hodnoty (dava
-//                      vse na nulu)
-// 'enumFiles' == 0 -> enumerace souboru a podadresaru jen z korene
-// 'enumFiles' == 1 -> enumerace vsech souboru a podadresaru
-// 'enumFiles' == 2 -> enumerace vsech podadresaru, soubory jen z korene;
-// 'enumFiles' == 3 -> enumerace vsech souboru a podadresaru + symbolicke linky na soubory maji
-//                     velikost ciloveho souboru (pri 'enumFiles' == 1 maji velikost linku, coz je snad
-//                     vzdy nula); POZOR: 'enumFiles' musi zustat 3 pro vsechna volani enumeratoru;
-// k chybe muze dojit jen pri 'enumFiles' == 1, 2 nebo 3 ('enumFiles' == 0 vubec
-// nepracuje s diskem ani nekompletuje jmena a cesty); 'parent' je parent pripadnych messageboxu
-// s chybami (NULL znamena nezobrazovat chyby); v 'dosName' (neni-li NULL) vraci DOSovy nazev
-// (8.3; jen pokud existuje, jinak NULL); v 'isDir' (neni-li NULL) vraci TRUE pokud jde o adresar;
-// v 'size' (neni-li NULL) vraci velikost souboru (u adresaru nulu); v 'attr' (neni-li NULL)
-// vraci atributy souboru/adresare; v 'lastWrite' (neni-li NULL) vraci cas posledniho zapisu
-// do souboru/adresare; 'param' je parametr 'nextParam' predavany spolu s ukazatelem na funkci
-// tohoto typu; v 'errorOccured' (neni-li NULL) se vraci SALENUM_ERROR, pokud doslo behem cteni
-// dat z disku k chybe nebo se pri sestavovani vracenych jmen narazilo na prilis dlouhe jmeno
-// a uzivatel se rozhodl preskocit jen chybne soubory/adresare, POZOR: chyba se netyka prave
-// vraceneho jmena, to je OK; v 'errorOccured' (neni-li NULL) se vraci SALENUM_CANCEL pokud se
-// pri chybe uzivatel rozhodl pro zruseni operace (cancel), zaroven enumerator vraci NULL (konci);
-// v 'errorOccured' (neni-li NULL) se vraci SALENUM_SUCCESS pokud zadna chyba nenastala
+// enumerator; returns file names and ends by returning NULL
+// 'enumFiles' == -1 -> resets the enumeration (after this call the enumeration starts from the beginning again), all
+//                      other parameters (except for 'param') are ignored, it has no return value (sets
+//                      everything to zero)
+// 'enumFiles' == 0 -> enumerates files and subdirectories only from the root
+// 'enumFiles' == 1 -> enumerates all files and subdirectories
+// 'enumFiles' == 2 -> enumerates all subdirectories, files only from the root
+// 'enumFiles' == 3 -> enumerates all files and subdirectories, and symbolic links to files have
+//                     the size of the target file (for 'enumFiles' == 1 they have the size of the link, which is
+//                     usually zero); WARNING: 'enumFiles' must stay 3 for all calls of the enumerator
+// an error can occur only for 'enumFiles' == 1, 2, or 3 ('enumFiles' == 0 does not
+// work with the disk at all and does not complete names or paths); 'parent' is the parent of possible
+// error message boxes (NULL means do not show errors); in 'dosName' (if not NULL) it returns the DOS name
+// (8.3; only if it exists, otherwise NULL); in 'isDir' (if not NULL) it returns TRUE if the item is a directory;
+// in 'size' (if not NULL) it returns the file size (zero for directories); in 'attr' (if not NULL)
+// it returns the file/directory attributes; in 'lastWrite' (if not NULL) it returns the time of the last write
+// to the file/directory; 'param' is the 'nextParam' parameter passed along with the pointer to a function
+// of this type; in 'errorOccured' (if not NULL) SALENUM_ERROR is returned if an error occurred while reading
+// data from the disk or if a name that was too long was encountered while building the returned names
+// and the user decided to skip only the faulty files/directories. WARNING: the error does not apply to the
+// name just returned—that one is OK; in 'errorOccured' (if not NULL) SALENUM_CANCEL is returned if the
+// user decided to cancel the operation when an error occurred; in that case the enumerator returns NULL
+// (stops); in 'errorOccured' (if not NULL) SALENUM_SUCCESS is returned if no error occurred
 typedef const char*(WINAPI* SalEnumSelection2)(HWND parent, int enumFiles, const char** dosName,
                                                BOOL* isDir, CQuadWord* size, DWORD* attr,
                                                FILETIME* lastWrite, void* param, int* errorOccured);
@@ -416,9 +412,9 @@ typedef const char*(WINAPI* SalEnumSelection2)(HWND parent, int enumFiles, const
 // ****************************************************************************
 // CSalamanderViewAbstract
 //
-// sada metod Salamandera pro praci se sloupci v panelu (vypinani/zapinani/pridavani/nastavovani)
+// set of Salamander methods for working with panel columns (turning them off/on/adding/configuring)
 
-// rezimy pohledu panelu
+// panel view modes
 #define VIEW_MODE_TREE 1
 #define VIEW_MODE_BRIEF 2
 #define VIEW_MODE_DETAILED 3
@@ -426,164 +422,160 @@ typedef const char*(WINAPI* SalEnumSelection2)(HWND parent, int enumFiles, const
 #define VIEW_MODE_THUMBNAILS 5
 #define VIEW_MODE_TILES 6
 
-#define TRANSFER_BUFFER_MAX 1024 // velikost bufferu pro prenos obsahu sloupcu z pluginu do Salamandera
+#define TRANSFER_BUFFER_MAX 1024 // buffer size for transferring column contents from the plugin to Salamander
 #define COLUMN_NAME_MAX 30
 #define COLUMN_DESCRIPTION_MAX 100
 
-// Identifikatory sloupcu. Sloupce vlozene pluginem maji nastaveno ID==COLUMN_ID_CUSTOM.
-// Standardni sloupce Salamandera maji ostatni ID.
-#define COLUMN_ID_CUSTOM 0 // sloupec je poskytovan pluginem - o ulozeni jeho dat se postara plugin
-#define COLUMN_ID_NAME 1   // zarovnano vlevo, podporuje FixedWidth
-// zarovnano vlevo, podporuje FixedWidth; samostatny sloupec "Ext", muze byt jen na indexu==1;
-// pokud sloupec neexistuje a v datech panelu (viz CSalamanderDirectoryAbstract::SetValidData())
-// se nastavi VALID_DATA_EXTENSION, je sloupec "Ext" zobrazen ve sloupci "Name"
+// Column identifiers. Columns inserted by a plugin have ID == COLUMN_ID_CUSTOM.
+// Salamander's standard columns use the remaining IDs.
+#define COLUMN_ID_CUSTOM 0 // column provided by the plugin—the plugin is responsible for storing its data
+#define COLUMN_ID_NAME 1   // left-aligned, supports FixedWidth
+// left-aligned, supports FixedWidth; standalone "Ext" column, may only be at index == 1
+// if the column does not exist and VALID_DATA_EXTENSION is set in the panel data
+// (see CSalamanderDirectoryAbstract::SetValidData()), the "Ext" column is shown within the "Name" column
 #define COLUMN_ID_EXTENSION 2
-#define COLUMN_ID_DOSNAME 3     // zarovnano vlevo
-#define COLUMN_ID_SIZE 4        // zarovnano vpravo
-#define COLUMN_ID_TYPE 5        // zarovnano vlevo, podporuje FixedWidth
-#define COLUMN_ID_DATE 6        // zarovnano vpravo
-#define COLUMN_ID_TIME 7        // zarovnano vpravo
-#define COLUMN_ID_ATTRIBUTES 8  // zarovnano vpravo
-#define COLUMN_ID_DESCRIPTION 9 // zarovnano vlevo, podporuje FixedWidth
+#define COLUMN_ID_DOSNAME 3     // left-aligned
+#define COLUMN_ID_SIZE 4        // right-aligned
+#define COLUMN_ID_TYPE 5        // left-aligned, supports FixedWidth
+#define COLUMN_ID_DATE 6        // right-aligned
+#define COLUMN_ID_TIME 7        // right-aligned
+#define COLUMN_ID_ATTRIBUTES 8  // right-aligned
+#define COLUMN_ID_DESCRIPTION 9 // left-aligned, supports FixedWidth
 
-// Callback pro naplneni bufferu znakama, ktere se maji zobrazit v prislusnem sloupci.
-// Z duvodu optimalizace funkce nedostava/nevraci promenne prostrednictvim parametru,
-// ale prostrednictvim globalni promennych (CSalamanderViewAbstract::GetTransferVariables).
+// Callback for filling the buffer with characters that should be shown in the respective column.
+// For optimization the function does not receive/return values via parameters,
+// but through global variables (CSalamanderViewAbstract::GetTransferVariables).
 typedef void(WINAPI* FColumnGetText)();
 
-// Callback pro ziskani indexu jednoduchych ikon pro FS s vlastnimi ikonami (pitFromPlugin).
-// Z duvodu optimalizace funkce nedostava/nevraci promenne prostrednictvim parametru,
-// ale prostrednictvim globalni promennych (CSalamanderViewAbstract::GetTransferVariables).
-// Z globalnich promennych callback vyuziva jen TransferFileData a TransferIsDir.
+// Callback for obtaining indices of simple icons for file systems with custom icons (pitFromPlugin).
+// For optimization the function does not receive/return values via parameters,
+// but through global variables (CSalamanderViewAbstract::GetTransferVariables).
+// From the global variables the callback uses only TransferFileData and TransferIsDir.
 typedef int(WINAPI* FGetPluginIconIndex)();
 
-// sloupec muze vzniknout dvema zpusoby:
-// 1) Sloupec vytvoril Salamander na zaklade sablony aktualniho pohledu.
-//    V tomto pripade ukazatel 'GetText' (na plnici funkci) ukazuje do Salamandera
-//    a ziskava texty standardne z CFileData.
-//    Hodnota promenne 'ID' je ruzna od COLUMN_ID_CUSTOM.
+// A column can be created in two ways:
+// 1) Salamander creates the column according to the template of the current view.
+//    In this case the 'GetText' pointer (to the filling function) points into Salamander
+//    and obtains texts directly from CFileData.
+//    The 'ID' member then has a value other than COLUMN_ID_CUSTOM.
 //
-// 2) Sloupec pridal plugin na zaklade svych potreb.
-//    'GetText' ukazuje do pluginu a 'ID' je rovno COLUMN_ID_CUSTOM.
+// 2) The plugin adds the column according to its own needs.
+//    'GetText' points into the plugin and 'ID' equals COLUMN_ID_CUSTOM.
 
 struct CColumn
 {
-    char Name[COLUMN_NAME_MAX]; // "Name", "Ext", "Size", ... nazev sloupce, pod
-                                // kterym sloupec vystupuje v pohledu a v menu
-                                // Nesmi obsahovat prazdny retezec.
-                                // POZOR: Muze obsahovat (za prvnim null-terminatorem)
-                                // i nazev sloupce "Ext" - toto nastava pokud neexistuje
-                                // samostatny sloupec "Ext" a v datech panelu (viz
-                                // CSalamanderDirectoryAbstract::SetValidData()) se
-                                // nastavi VALID_DATA_EXTENSION. Pro spojeni dvou
-                                // retezcu poslouzi CSalamanderGeneralAbstract::AddStrToStr().
+    char Name[COLUMN_NAME_MAX]; // "Name", "Ext", "Size", ... column title
+                                // under which the column appears in the view and the menu
+                                // Must not be an empty string.
+                                // WARNING: It may contain (after the first null terminator)
+                                // also the title of the "Ext" column—this happens if a standalone
+                                // "Ext" column is missing and VALID_DATA_EXTENSION is set
+                                // in the panel data (see CSalamanderDirectoryAbstract::SetValidData()).
+                                // Use CSalamanderGeneralAbstract::AddStrToStr() to concatenate the two strings.
 
-    char Description[COLUMN_DESCRIPTION_MAX]; // Tooltip v header line
-                                              // Nesmi obsahovat prazdny retezec.
-                                              // POZOR: Muze obsahovat (za prvnim null-terminatorem)
-                                              // i popis sloupce "Ext" - toto nastava pokud neexistuje
-                                              // samostatny sloupec "Ext" a v datech panelu (viz
-                                              // CSalamanderDirectoryAbstract::SetValidData()) se
-                                              // nastavi VALID_DATA_EXTENSION. Pro spojeni dvou
-                                              // retezcu poslouzi CSalamanderGeneralAbstract::AddStrToStr().
+    char Description[COLUMN_DESCRIPTION_MAX]; // Tooltip in the header line
+                                              // Must not be an empty string.
+                                              // WARNING: It may contain (after the first null terminator)
+                                              // also the description of the "Ext" column—this happens if a standalone
+                                              // "Ext" column is missing and VALID_DATA_EXTENSION is set
+                                              // in the panel data (see CSalamanderDirectoryAbstract::SetValidData()).
+                                              // Use CSalamanderGeneralAbstract::AddStrToStr() to concatenate the two strings.
 
-    FColumnGetText GetText; // callback pro ziskani textu (popis u deklatace typu FColumnGetText)
+    FColumnGetText GetText; // callback for obtaining the text (see the FColumnGetText type declaration)
 
-    // FIXME_X64 - male pro ukazatel, neni nekdy potreba?
-    DWORD CustomData; // Neni pouzivana Salamanderem;  plugin ji muze
-                      // vyuzit pro rozliseni svych pridanych sloupcu.
+    // FIXME_X64 - small for a pointer, is it ever needed?
+    DWORD CustomData; // Not used by Salamander; the plugin can
+                      // use it to distinguish its added columns.
 
-    unsigned SupportSorting : 1; // je sloupec mozne radit?
+    unsigned SupportSorting : 1; // can the column be sorted?
 
-    unsigned LeftAlignment : 1; // pro TRUE je sloupec zarovnavan vlevo; jinak vpravo
+    unsigned LeftAlignment : 1; // TRUE for left alignment; otherwise right-aligned
 
-    unsigned ID : 4; // identifikator sloupce
-                     // Pro standardni sloupce poskytovane Salamanderem
-                     // obsahuje hodnoty ruzne od COLUMN_ID_CUSTOM.
-                     // Pro sloupce pridane pluginem obsahuje vzdy
-                     // hodnotu COLUMN_ID_CUSTOM.
+    unsigned ID : 4; // column identifier
+                     // For standard columns provided by Salamander
+                     // contains values different from COLUMN_ID_CUSTOM.
+                     // For columns added by the plugin it always
+                     // contains the value COLUMN_ID_CUSTOM.
 
-    // Promenne Width a FixedWidth muzou byt zmeneny uzivatelem behem prace s panelem.
-    // Standardni sloupce poskytovane Salamanderem maji zajisteno ukladani/nacitani
-    // techto hodnot.
-    // Hodnoty techto promennych pro sloupce poskytovane pluginem je treba ulozit/nacist
-    // v ramci pluginu.
-    // Sloupce, jejichz sirku pocita Salamander na zaklade obsahu a uzivatel ji nemuze
-    // menit, nazyvame 'elasticke'. Sloupce, pro ktere muze uzivatel nastavit sirku nazyvame
-    // 'pevne'/'fixed'.
-    unsigned Width : 16;     // Sirka sloupce v pripade, ze je v rezimu pevne (nastavitelne) sirky.
-    unsigned FixedWidth : 1; // Je sloupec v rezimu pevne (nastavitelne) sirky?
+    // Members Width and FixedWidth can be changed by the user while working with the panel.
+    // Standard columns provided by Salamander automatically store/load
+    // these values.
+    // The plugin must store/load the values for columns it provides
+    // itself.
+    // Columns whose width is computed by Salamander based on their content
+    // and cannot be changed by the user are called 'elastic'. Columns whose width
+    // the user can set are called 'fixed'.
+    unsigned Width : 16;     // Column width if it is in the fixed (user-adjustable) width mode.
+    unsigned FixedWidth : 1; // Is the column in the fixed (user-adjustable) width mode?
 
-    // pracovni promenne (nikam se neukladaji a neni treba je inicializovat)
-    // jsou urcene pro interni potreby Salamandera a pluginy je ignoruji,
-    // protoze jejich obsah neni pri volani pluginu zaruceny
-    unsigned MinWidth : 16; // Minimalni sirka, na kterou muze byt sloupce smrsten.
-                            // Je pocitana na zaklade nazvu sloupce a jeho raditelnosti
-                            // tak, aby byla hlavicka sloupce vzdy viditelna
+    // working variables (not stored anywhere and no initialization is needed)
+    // intended for Salamander's internal use; plugins ignore them
+    // because their values are not guaranteed when the plugin is called
+    unsigned MinWidth : 16; // Minimum width to which the column may be shrunk.
+                            // Calculated from the column title and whether it supports sorting
+                            // so that the column header is always readable
 };
 
-// Plugin prostrednictvim tohoto rozhrani muze pri zmene cesty zmenit rezim
-// zobrazeni v panelu. Veskera prace se sloupci se tyka jen vsech detailed rezimu
-// (Detailed + Types + tri volitelne rezimy Alt+8/9/0). Pri zmene cesty dostane
-// plugin standardni sadu sloupcu nagenerovanou na zaklade sablony aktualniho
-// pohledu. Plugin muze tuto sadu modifikovat. Modifikace neni trvaleho razu
-// a pri pristi zmene cesty obdrzi plugin opet standardni sadu sloupcu. Muze tak
-// napriklad odstranit nektery ze std. sloupcu. Pred novym plnenim std. sloupci
-// dostane plugin prilezitost ulozeni informaci o svych sloupcich (COLUMN_ID_CUSTOM).
-// Muze tak ulozit jejich 'Width' a 'FixedWidth', ktere uzivatel mohl v panelu
-// nastavit (viz ColumnFixedWidthShouldChange() a ColumnWidthWasChanged() v interfacu
-// CPluginDataInterfaceAbstract). Pokud plugin zmeni rezim pohledu, zmena je trvala
-// (napr. prepnuti na rezim Thumbnails zustane i po opusteni pluginove cesty).
+// Through this interface the plugin can change the panel view mode when the path changes.
+// All column-related work concerns only the detailed modes
+// (Detailed + Types + the three optional Alt+8/9/0 modes). When the path changes
+// the plugin receives the standard column set generated from the template
+// of the current view. The plugin may modify this set. The modification is not permanent
+// and on the next path change the plugin receives the standard set again. This allows it
+// to remove a standard column, for example. Before Salamander repopulates the standard columns
+// the plugin gets a chance to store information about its columns (COLUMN_ID_CUSTOM).
+// That way it can store their 'Width' and 'FixedWidth' values that the user might have set in the panel
+// (see ColumnFixedWidthShouldChange() and ColumnWidthWasChanged() in the
+// CPluginDataInterfaceAbstract interface). If the plugin changes the view mode, the change is permanent
+// (for example, switching to the Thumbnails mode persists even after leaving the plugin's path).
 
 class CSalamanderViewAbstract
 {
 public:
     // -------------- panel ----------------
 
-    // vraci rezim, ve kterem je zobrazen panel (tree/brief/detailed/icons/thumbnails/tiles)
-    // vraci jednu z hodnot VIEW_MODE_xxxx (rezim Detailed, Types a tri volitelne rezimy jsou
-    // vsechny VIEW_MODE_DETAILED)
+    // returns the mode in which the panel is displayed (tree/brief/detailed/icons/thumbnails/tiles)
+    // returns one of the VIEW_MODE_xxxx values (the Detailed, Types, and the three optional modes
+    // are all VIEW_MODE_DETAILED)
     virtual DWORD WINAPI GetViewMode() = 0;
 
-    // Nastavi rezim panelu na 'viewMode'. Pokud jde o nektery z detailed rezimu, muze
-    // odstranit nektere ze standardnich sloupcu (viz. 'validData'). Proto je vhodne tuto
-    // funkci volat jako prvni - pred ostatnimi funkcemi z toho ifacu, ktere modifikuji
-    // sloupce.
+    // Sets the panel mode to 'viewMode'. If it is one of the detailed modes, it can
+    // remove some of the standard columns (see 'validData'). Therefore this function
+    // should be called first—before the other interface methods that modify columns.
     //
-    // 'viewMode' je jedna z hodnot VIEW_MODE_xxxx
-    // Rezim panelu nelze zmenit ani na Types ani na jeden ze tri volitelnych detailed rezimu
-    // (vsechny zastupuje konstanta VIEW_MODE_DETAILED pouzita pro Detailed rezim panelu).
-    // Ovsem pokud je zrovna jeden z techto ctyr rezimu v panelu zvoleny a 'viewMode' je
-    // VIEW_MODE_DETAILED, zustane tento rezim zvoleny (aneb neprepne se na Detailed rezim).
-    // Zmena rezimu panelu je trvala (pretrva i po opusteni pluginove cesty).
+    // 'viewMode' is one of the VIEW_MODE_xxxx values
+    // The panel mode cannot be switched directly to Types or one of the three optional detailed modes
+    // (they are all represented by VIEW_MODE_DETAILED, the constant used for the Detailed panel mode).
+    // However, if one of these four modes is currently selected and 'viewMode' equals
+    // VIEW_MODE_DETAILED, the existing mode stays selected (it does not switch to the plain Detailed mode).
+    // The change of the panel mode is persistent (it remains even after leaving the plugin path).
     //
-    // 'validData' informuje o tom, jaka data si plugin preje zobrazit v detailed rezimu, hodnota
-    // se ANDuje s maskou platnych dat zadanou pomoci CSalamanderDirectoryAbstract::SetValidData
-    // (nema smysl zobrazovat sloupce s "nulovanymi" hodnotami).
+    // 'validData' specifies which data the plugin wants to show in detailed mode; the value is ANDed
+    // with the valid data mask set via CSalamanderDirectoryAbstract::SetValidData
+    // (there is no point in showing columns whose values are all zeroed).
     virtual void WINAPI SetViewMode(DWORD viewMode, DWORD validData) = 0;
 
-    // Vyzvedne ze Salamandera umisteni promennych, ktere nahrazuji parametry callbacku
-    // CColumn::GetText. Na strane Salamandera se jedna o globalni promenne. Plugin si
-    // ukazatele na ne ulozi do vlastnich globalnich promennych.
+    // Retrieves from Salamander the locations of variables that replace the parameters of the
+    // CColumn::GetText callback. Salamander stores these as global variables. The plugin saves
+    // the pointers to its own global variables.
     //
-    // promenne:
-    //   transferFileData        [IN]     data, na jejichz zaklade se ma vykreslit polozka
-    //   transferIsDir           [IN]     rovno 0, pokud jde o soubor (lezi v poli Files),
-    //                                    rovno 1, pokud jde o adresar (lezi v poli Dirs),
-    //                                    rovno 2, pokud jde o up-dir symbol
-    //   transferBuffer          [OUT]    sem se nalejou data, maximalne TRANSFER_BUFFER_MAX znaku
-    //                                    neni treba je terminovat nulou
-    //   transferLen             [OUT]    pred navratem z callbacku se do teto promenne nastavi
-    //                                    pocet naplnenych znaku bez terminatoru (terminator neni
-    //                                    treba do bufferu zapisovat)
-    //   transferRowData         [IN/OUT] ukazuje na DWORD, ktery je vzdy pred kreslenim sloupcu
-    //                                    pro kazdy radek nulovan; lze pouzit pro optimalizace
-    //                                    Salamander ma vyhrazene bity 0x00000001 az 0x00000008.
-    //                                    Ostatni bity jsou k dispozici pro plugin.
-    //   transferPluginDataIface [IN]     plugin-data-interface panelu, do ktereho se polozka
-    //                                    vykresluje (patri k (*transferFileData)->PluginData)
-    //   transferActCustomData   [IN]     CustomData sloupce, pro ktery se ziskava text (pro ktery
-    //                                    se vola callback)
+    // variables:
+    //   transferFileData        [IN]     data describing the item that should be rendered
+    //   transferIsDir           [IN]     equals 0 for a file (entry from the Files array),
+    //                                    equals 1 for a directory (entry from the Dirs array),
+    //                                    equals 2 for the up-directory symbol
+    //   transferBuffer          [OUT]    buffer to receive the data, at most TRANSFER_BUFFER_MAX characters
+    //                                    there is no need to terminate it with zero
+    //   transferLen             [OUT]    before returning from the callback this variable is set
+    //                                    to the number of characters written without the terminator
+    //                                    (there is no need to store the terminator in the buffer)
+    //   transferRowData         [IN/OUT] points to a DWORD that is zeroed for every row before drawing the columns;
+    //                                    can be used for optimizations
+    //                                    Salamander reserves bits 0x00000001 to 0x00000008.
+    //                                    The remaining bits are available to the plugin.
+    //   transferPluginDataIface [IN]     plugin-data interface of the panel where the item
+    //                                    is drawn (matches (*transferFileData)->PluginData)
+    //   transferActCustomData   [IN]     CustomData of the column whose text is being retrieved (the callback target)
     virtual void WINAPI GetTransferVariables(const CFileData**& transferFileData,
                                              int*& transferIsDir,
                                              char*& transferBuffer,
@@ -592,49 +584,49 @@ public:
                                              CPluginDataInterfaceAbstract**& transferPluginDataIface,
                                              DWORD*& transferActCustomData) = 0;
 
-    // jen pro FS s vlastnimi ikonami (pitFromPlugin):
-    // Nastavi callback pro ziskani indexu jednoduchych ikon (viz
-    // CPluginDataInterfaceAbstract::GetSimplePluginIcons). Pokud tento callback
-    // plugin nenastavi, bude se vykreslovat vzdy jen ikona z indexu 0.
-    // Z globalnich promennych callback vyuziva jen TransferFileData a TransferIsDir.
+    // for file systems with custom icons only (pitFromPlugin):
+    // Sets the callback for obtaining simple icon indices (see
+    // CPluginDataInterfaceAbstract::GetSimplePluginIcons). If the plugin does not set this callback,
+    // the icon at index 0 is always drawn.
+    // From the global variables the callback uses only TransferFileData and TransferIsDir.
     virtual void WINAPI SetPluginSimpleIconCallback(FGetPluginIconIndex callback) = 0;
 
     // ------------- columns ---------------
 
-    // vraci pocet sloupcu v panelu (vzdy minimalne jeden, protoze nazev bude vzdy zobrazen)
+    // returns the number of columns in the panel (always at least one, because the name is always shown)
     virtual int WINAPI GetColumnsCount() = 0;
 
-    // vraci ukazatel na sloupec (pouze pro cteni)
-    // 'index' udava, ktery ze sloupcu bude vracen; pokud sloupec 'index' neexistuje, vraci NULL
+    // returns a pointer to a column (read-only)
+    // 'index' specifies which column is returned; returns NULL if the column does not exist
     virtual const CColumn* WINAPI GetColumn(int index) = 0;
 
-    // Vlozi sloupec na pozici 'index'. Na pozici 0 je vzdy umisten sloupec Name,
-    // pokud je zobrazen sloupec Ext, bude na pozici 1. Jinak lze sloupec umistit
-    // libovolne. Struktura 'column' bude prekopirovana do vnitrnich struktur
-    // Salamandera. Vraci TRUE pokud byl sloupec vlozen.
+    // Inserts a column at position 'index'. Column Name is always at position 0,
+    // if the Ext column is shown it must be at position 1. Otherwise the column can be placed
+    // anywhere. The 'column' structure is copied into Salamander's internal structures.
+    // Returns TRUE if the column was inserted.
     virtual BOOL WINAPI InsertColumn(int index, const CColumn* column) = 0;
 
-    // Vlozi standardni sloupec s ID 'id' na pozici 'index'. Na pozici 0 je vzdy
-    // umisten sloupec Name, pokud je vkladan sloupec Ext, musi to byt na pozici 1.
-    // Jinak lze sloupec umistit libovolne. 'id' je jedna z hodnot COLUMN_ID_xxxx,
-    // mimo COLUMN_ID_CUSTOM a COLUMN_ID_NAME.
+    // Inserts a standard column with ID 'id' at position 'index'. Column Name is always
+    // at position 0; if the Ext column is inserted it must be at position 1.
+    // Otherwise the column can be placed anywhere. 'id' is one of the COLUMN_ID_xxxx values,
+    // except COLUMN_ID_CUSTOM and COLUMN_ID_NAME.
     virtual BOOL WINAPI InsertStandardColumn(int index, DWORD id) = 0;
 
-    // Nastavi nazev a popis sloupce (nesmi byt prazdne retezce ani NULL). Delky
-    // retezu se omezi na COLUMN_NAME_MAX a COLUMN_DESCRIPTION_MAX. Vraci uspech.
-    // POZOR: Jmeno a popis sloupce "Name" muzou obsahovat (vzdy za prvnim
-    // null-terminatorem) i jmeno a popis sloupce "Ext" - toto nastava pokud
-    // neexistuje samostatny sloupec "Ext" a v datech panelu (viz
-    // CSalamanderDirectoryAbstract::SetValidData()) se nastavi VALID_DATA_EXTENSION.
-    // V tomto pripade je potreba nastavovat dvojite retezce (s dvoumi
-    // null-terminatory) - viz CSalamanderGeneralAbstract::AddStrToStr().
+    // Sets the column title and description (must not be empty strings or NULL). Lengths
+    // are limited to COLUMN_NAME_MAX and COLUMN_DESCRIPTION_MAX. Returns success.
+    // WARNING: The title and description of the "Name" column may contain (always after the first
+    // null terminator) also the title and description of the "Ext" column—this happens if
+    // there is no standalone "Ext" column and VALID_DATA_EXTENSION is set
+    // in the panel data (see CSalamanderDirectoryAbstract::SetValidData()).
+    // In that case you must provide a double string (two null terminators)
+    // see CSalamanderGeneralAbstract::AddStrToStr().
     virtual BOOL WINAPI SetColumnName(int index, const char* name, const char* description) = 0;
 
-    // Odstrani sloupec na pozici 'index'. Lze odstranit jak sloupce pridane pluginem,
-    // tak standardni sloupce Salamandera. Nelze odstranit sloupec 'Name', ktery je vzdy
-    // na indexu 0. Pozor pri odstranovani sloupce 'Ext', pokud je v datech pluginu
-    // (viz CSalamanderDirectoryAbstract::SetValidData()) VALID_DATA_EXTENSION, musi
-    // se jmeno+popis sloupce 'Ext' objevit u sloupce 'Name'.
+    // Removes the column at position 'index'. Both plugin-added columns
+    // and Salamander standard columns can be removed. Column 'Name' cannot be removed; it is always
+    // at index 0. Be careful when removing column 'Ext': if VALID_DATA_EXTENSION is set
+    // in the plugin data (see CSalamanderDirectoryAbstract::SetValidData()),
+    // the title/description of the 'Ext' column must appear within the 'Name' column.
     virtual BOOL WINAPI DeleteColumn(int index) = 0;
 };
 
@@ -642,184 +634,179 @@ public:
 // ****************************************************************************
 // CPluginDataInterfaceAbstract
 //
-// sada metod pluginu, ktere potrebuje Salamander pro ziskani specifickych dat
-// pluginu do pluginem pridanych sloupcu (pracuje s CFileData::PluginData)
+// set of plugin methods Salamander needs to obtain plugin-specific data
+// for columns added by the plugin (works with CFileData::PluginData)
 
 class CPluginInterfaceAbstract;
 
 class CPluginDataInterfaceAbstract
 {
 #ifdef INSIDE_SALAMANDER
-private: // ochrana proti nespravnemu primemu volani metod (viz CPluginDataInterfaceEncapsulation)
+private: // protection against improper direct method calls (see CPluginDataInterfaceEncapsulation)
     friend class CPluginDataInterfaceEncapsulation;
 #else  // INSIDE_SALAMANDER
 public:
 #endif // INSIDE_SALAMANDER
 
-    // vraci TRUE pokud se ma zavolat metoda ReleasePluginData pro vsechny soubory vazane
-    // k tomuto interfacu, jinak vraci FALSE
+    // returns TRUE if ReleasePluginData should be called for all files associated
+    // with this interface; otherwise returns FALSE
     virtual BOOL WINAPI CallReleaseForFiles() = 0;
 
-    // vraci TRUE pokud se ma zavolat metoda ReleasePluginData pro vsechny adresare vazane
-    // k tomuto interfacu, jinak vraci FALSE
+    // returns TRUE if ReleasePluginData should be called for all directories associated
+    // with this interface; otherwise returns FALSE
     virtual BOOL WINAPI CallReleaseForDirs() = 0;
 
-    // uvolni data specificka pluginu (CFileData::PluginData) pro 'file' (soubor nebo
-    // adresar - 'isDir' FALSE nebo TRUE; struktura vlozena do CSalamanderDirectoryAbstract
-    // pri listovani archivu nebo FS); vola se pro vsechny soubory, pokud CallReleaseForFiles
-    // vrati TRUE, a pro vsechny adresare, pokud CallReleaseForDirs vrati TRUE
+    // releases plugin-specific data (CFileData::PluginData) for 'file' (file or directory—
+    // 'isDir' FALSE or TRUE; the structure inserted into CSalamanderDirectoryAbstract
+    // while listing archives or file systems); called for all files if CallReleaseForFiles
+    // returns TRUE, and for all directories if CallReleaseForDirs returns TRUE
     virtual void WINAPI ReleasePluginData(CFileData& file, BOOL isDir) = 0;
 
-    // jen pro data archivu (pro FS se nedoplnuje up-dir symbol):
-    // pozmenuje navrhovany obsah up-dir symbolu (".." nahore v panelu); 'archivePath'
-    // je cesta v archivu, pro kterou je symbol urcen; v 'upDir' vstupuji navrzena
-    // data symbolu: jmeno ".." (nemenit), date&time archivu, zbytek nulovany;
-    // v 'upDir' vystupuji zmeny pluginu, predevsim by mel zmenit 'upDir.PluginData',
-    // ktery bude vyuzivan na up-dir symbolu pri ziskavani obsahu pridanych sloupcu;
-    // pro 'upDir' se nebude volat ReleasePluginData, jakekoliv potrebne uvolnovani
-    // je mozne provest vzdy pri dalsim volani GetFileDataForUpDir nebo pri uvolneni
-    // celeho interfacu (v jeho destruktoru - volan z
-    // CPluginInterfaceAbstract::ReleasePluginDataInterface)
+    // archive data only (file systems do not supply an up-dir symbol):
+    // adjusts the proposed content of the up-dir symbol (".." at the top of the panel); 'archivePath'
+    // is the path in the archive for which the symbol is intended; 'upDir' contains the proposed
+    // symbol data: name ".." (do not change), archive date & time, the rest zeroed;
+    // 'upDir' returns the plugin's modifications, primarily it should update 'upDir.PluginData',
+    // which will be used for the up-dir symbol when retrieving data for added columns;
+    // ReleasePluginData will not be called for 'upDir'; any necessary cleanup can be performed
+    // during the next GetFileDataForUpDir call or when the entire interface is released
+    // (in its destructor—called from CPluginInterfaceAbstract::ReleasePluginDataInterface)
     virtual void WINAPI GetFileDataForUpDir(const char* archivePath, CFileData& upDir) = 0;
 
-    // jen pro data archivu (FS pouziva jen root cestu v CSalamanderDirectoryAbstract):
-    // pri pridavani souboru/adresare do CSalamanderDirectoryAbstract se muze stat, ze
-    // zadana cesta neexistuje a je ji tedy potreba vytvorit, jednotlive adresare teto
-    // cesty se tvori automaticky a tato metoda umoznuje pluginu pridat sva specificka
-    // data (pro sve sloupce) k temto vytvarenym adresarum; 'dirName' je plna cesta
-    // pridavaneho adresare v archivu; v 'dir' vstupuji navrhovana data: jmeno adresare
-    // (alokovane na heapu Salamandera), date&time prevzaty od pridavaneho souboru/adresare,
-    // zbytek nulovany; v 'dir' vystupuji zmeny pluginu, predevsim by mel zmenit
-    // 'dir.PluginData'; vraci TRUE pokud se pridani dat pluginu povedlo, jinak FALSE;
-    // pokud vrati TRUE, bude 'dir' uvolnen klasickou cestou (Salamanderovska cast +
-    // ReleasePluginData) a to bud az pri kompletnim uvolneni listingu nebo jeste behem
-    // jeho tvorby v pripade, ze bude ten samy adresar pridan pomoci
-    // CSalamanderDirectoryAbstract::AddDir (premazani automatickeho vytvoreni pozdejsim
-    // normalnim pridanim); pokud vrati FALSE, bude z 'dir' uvolnena jen Salamanderovska cast
+    // archive data only (file systems use only the root path in CSalamanderDirectoryAbstract):
+    // when adding a file/directory to CSalamanderDirectoryAbstract the specified path might not exist
+    // and therefore needs to be created; individual directories on that path are created automatically,
+    // and this method lets the plugin add its specific data (for its columns) to these directories.
+    // 'dirName' is the full path of the directory being added in the archive; 'dir' contains the proposed
+    // data: directory name (allocated on Salamander's heap), date & time copied from the added file/directory,
+    // the rest zeroed; 'dir' returns the plugin's modifications, primarily it should update
+    // 'dir.PluginData'; returns TRUE if the plugin's data were added successfully, otherwise FALSE;
+    // if TRUE is returned, 'dir' is released through the standard path (Salamander part +
+    // ReleasePluginData), either when the entire listing is released or even during its creation
+    // if the same directory is later added via CSalamanderDirectoryAbstract::AddDir
+    // (overwriting the automatic creation with a regular addition); if FALSE is returned, only
+    // Salamander's part of 'dir' is released
     virtual BOOL WINAPI GetFileDataForNewDir(const char* dirName, CFileData& dir) = 0;
 
-    // jen pro FS s vlastnimi ikonami (pitFromPlugin):
-    // vraci image-list s jednoduchymi ikonami, behem kresleni polozek v panelu se
-    // pomoci call-backu ziskava icon-index do tohoto image-listu; vola se vzdy po
-    // ziskani noveho listingu (po volani CPluginFSInterfaceAbstract::ListCurrentPath),
-    // takze je mozne image-list predelavat pro kazdy novy listing;
-    // 'iconSize' urcuje pozadovanou velikost ikon a jde o jednu z hodnot SALICONSIZE_xxx
-    // destrukci image-listu si plugin zajisti pri dalsim volani GetSimplePluginIcons
-    // nebo pri uvolneni celeho interfacu (v jeho destruktoru - volan z
+    // for file systems with custom icons only (pitFromPlugin):
+    // returns an image list with simple icons; while drawing items in the panel the icon index
+    // is retrieved through the callback into this image list; called after every new listing
+    // is obtained (after CPluginFSInterfaceAbstract::ListCurrentPath),
+    // so the image list may be rebuilt for each listing;
+    // 'iconSize' specifies the desired icon size and is one of the SALICONSIZE_xxx values
+    // the plugin is responsible for destroying the image list during the next GetSimplePluginIcons call
+    // or when the entire interface is released (in its destructor—called from
     // CPluginInterfaceAbstract::ReleasePluginDataInterface)
-    // pokud image-list nelze vytvorit, vraci NULL a aktualni plugin-icons-type
-    // degraduje na pitSimple
+    // if the image list cannot be created, NULL is returned and the current plugin-icons type
+    // falls back to pitSimple
     virtual HIMAGELIST WINAPI GetSimplePluginIcons(int iconSize) = 0;
 
-    // jen pro FS s vlastnimi ikonami (pitFromPlugin):
-    // vraci TRUE, pokud pro dany soubor/adresar ('isDir' FALSE/TRUE) 'file'
-    // ma byt pouzita jednoducha ikona; vraci FALSE, pokud se ma pro ziskani ikony volat
-    // z threadu pro nacitani ikon metoda GetPluginIcon (nacteni ikony "na pozadi");
-    // zaroven v teto metode muze byt predpocitan icon-index pro jednoduchou ikonu
-    // (u ikon ctenych "na pozadi" se az do okamziku nacteni pouzivaji take jednoduche
-    // ikony) a ulozen do CFileData (nejspise do CFileData::PluginData);
-    // omezeni: z CSalamanderGeneralAbstract je mozne pouzivat jen metody, ktere lze
-    // volat z libovolneho threadu (metody nezavisle na stavu panelu)
+    // for file systems with custom icons only (pitFromPlugin):
+    // returns TRUE if a simple icon should be used for the given file/directory ('isDir' FALSE/TRUE) 'file'
+    // returns FALSE if the icon should be obtained by calling GetPluginIcon from the icon-loading thread
+    // (loading the icon in the background);
+    // this method can also precompute the simple icon index
+    // (for icons loaded in the background simple icons are used until the icon is loaded)
+    // and store it into CFileData (typically CFileData::PluginData);
+    // limitation: only methods from CSalamanderGeneralAbstract that may be called from any thread
+    // (methods independent of the panel state) may be used
     virtual BOOL WINAPI HasSimplePluginIcon(CFileData& file, BOOL isDir) = 0;
 
-    // jen pro FS s vlastnimi ikonami (pitFromPlugin):
-    // vraci ikonu pro soubor nebo adresar 'file' nebo NULL pokud ikona nelze ziskat; vraci-li
-    // v 'destroyIcon' TRUE, vola se pro uvolneni vracene ikony Win32 API funkce DestroyIcon;
-    // 'iconSize' urcuje velikost pozadovane ikony a jde o jednu z hodnot SALICONSIZE_xxx
-    // omezeni: jelikoz se vola z threadu pro nacitani ikon (neni to hlavni thread), lze z
-    // CSalamanderGeneralAbstract pouzivat jen metody, ktere lze volat z libovolneho threadu
+    // for file systems with custom icons only (pitFromPlugin):
+    // returns an icon for the file or directory 'file', or NULL if the icon cannot be obtained;
+    // if 'destroyIcon' is returned as TRUE, the Win32 API function DestroyIcon must be called to free the icon;
+    // 'iconSize' specifies the desired icon size and is one of the SALICONSIZE_xxx values
+    // limitation: since it is called from the icon-loading thread (not the main thread),
+    // only methods from CSalamanderGeneralAbstract that may be called from any thread may be used
     virtual HICON WINAPI GetPluginIcon(const CFileData* file, int iconSize, BOOL& destroyIcon) = 0;
 
-    // jen pro FS s vlastnimi ikonami (pitFromPlugin):
-    // porovna 'file1' (muze jit o soubor i adresar) a 'file2' (muze jit o soubor i adresar),
-    // nesmi pro zadne dve polozky listingu vratit, ze jsou shodne (zajistuje jednoznacne
-    // prirazeni vlastni ikony k souboru/adresari); pokud nehrozi duplicitni jmena v listingu
-    // cesty (obvykly pripad), lze jednoduse implementovat jako:
+    // for file systems with custom icons only (pitFromPlugin):
+    // compares 'file1' (file or directory) and 'file2' (file or directory);
+    // it must never report that any two listing entries are equal (this guarantees a unique
+    // mapping of custom icons to files/directories); if duplicate names cannot occur in the listing
+    // (the usual case), the implementation can simply be:
     // {return strcmp(file1->Name, file2->Name);}
-    // vraci cislo mensi nez nula pokud 'file1' < 'file2', nulu pokud 'file1' == 'file2' a
-    // cislo vetsi nez nula pokud 'file1' > 'file2';
-    // omezeni: jelikoz se vola i z threadu pro nacitani ikon (nejen z hlavniho threadu), lze
-    // z CSalamanderGeneralAbstract pouzivat jen metody, ktere lze volat z libovolneho threadu
+    // returns a negative value if 'file1' < 'file2', zero if 'file1' == 'file2',
+    // and a positive value if 'file1' > 'file2';
+    // limitation: because it is also called from the icon-loading thread (not only the main thread),
+    // only methods from CSalamanderGeneralAbstract that may be called from any thread may be used
     virtual int WINAPI CompareFilesFromFS(const CFileData* file1, const CFileData* file2) = 0;
 
-    // slouzi k nastaveni parametru pohledu, tato metoda je zavolana vzdy pred zobrazenim noveho
-    // obsahu panelu (pri zmene cesty) a pri zmene aktualniho pohledu (i rucni zmena sirky
-    // sloupce); 'leftPanel' je TRUE pokud jde o levy panel (FALSE pokud jde o pravy panel);
-    // 'view' je interface pro modifikaci pohledu (nastaveni rezimu, prace se
-    // sloupci); jde-li o data archivu, obsahuje 'archivePath' soucasnou cestu v archivu,
-    // pro data FS je 'archivePath' NULL; jde-li o data archivu, je 'upperDir' ukazatel na
-    // nadrazeny adresar (je-li soucasna cesta root archivu, je 'upperDir' NULL), pro data
-    // FS je vzdy NULL;
-    // POZOR: behem volani teto metody nesmi dojit k prekresleni panelu (muze se zde zmenit
-    //        velikost ikon, atd.), takze zadne messageloopy (zadne dialogy, atd.)!
-    // omezeni: z CSalamanderGeneralAbstract je mozne pouzivat jen metody, ktere lze
-    //          volat z libovolneho threadu (metody nezavisle na stavu panelu)
+    // sets view parameters; this method is called before each new panel content is displayed
+    // (when the path changes) and when the current view changes (including manual column width changes);
+    // 'leftPanel' is TRUE for the left panel (FALSE for the right panel);
+    // 'view' is the interface for modifying the view (setting modes, working with columns);
+    // for archive data 'archivePath' contains the current path in the archive, for file-system data it is NULL;
+    // for archive data 'upperDir' points to the parent directory (NULL if the current path is the archive root);
+    // for file-system data it is always NULL;
+    // WARNING: while this method is executing the panel must not be redrawn (icon size etc. may change),
+    //          so no message loops (no dialogs, etc.)!
+    // limitation: only methods from CSalamanderGeneralAbstract that may be called from any thread
+    //             (methods independent of the panel state) may be used
     virtual void WINAPI SetupView(BOOL leftPanel, CSalamanderViewAbstract* view,
                                   const char* archivePath, const CFileData* upperDir) = 0;
 
-    // nastaveni nove hodnoty "column->FixedWidth" - uzivatel pouzil kontextove menu
-    // na pluginem pridanem sloupci v header-line > "Automatic Column Width"; plugin
-    // by si mel ulozit novou hodnotu column->FixedWidth ulozenou v 'newFixedWidth'
-    // (je to vzdy negace column->FixedWidth), aby pri nasledujicich volanich SetupView() mohl
-    // sloupec pridat uz se spravne nastavenou FixedWidth; zaroven pokud se zapina pevna
-    // sirka sloupce, mel by si plugin nastavit soucasnou hodnotu "column->Width" (aby
-    // se timto zapnutim pevne sirky nezmenila sirka sloupce) - idealni je zavolat
-    // "ColumnWidthWasChanged(leftPanel, column, column->Width)"; 'column' identifikuje
-    // sloupec, ktery se ma zmenit; 'leftPanel' je TRUE pokud jde o sloupec z leveho
-    // panelu (FALSE pokud jde o sloupec z praveho panelu)
+    // sets the new value of "column->FixedWidth"—the user used the context menu
+    // on a plugin-added column in the header line > "Automatic Column Width"; the plugin
+    // should store the new value of column->FixedWidth provided in 'newFixedWidth'
+    // (it is always the negation of column->FixedWidth) so that during subsequent SetupView() calls
+    // it can add the column with the correct FixedWidth setting; if fixed width is being enabled,
+    // the plugin should also store the current "column->Width" (so enabling the fixed width does not
+    // change the column width)—ideally by calling
+    // "ColumnWidthWasChanged(leftPanel, column, column->Width)"; 'column' identifies
+    // the column to be changed; 'leftPanel' is TRUE for a column from the left panel
+    // (FALSE for a column from the right panel)
     virtual void WINAPI ColumnFixedWidthShouldChange(BOOL leftPanel, const CColumn* column,
                                                      int newFixedWidth) = 0;
 
-    // nastaveni nove hodnoty "column->Width" - uzivatel mysi zmenil sirku pluginem pridaneho
-    // sloupce v header-line; plugin by si mel ulozit novou hodnotu column->Width (je ulozena
-    // i v 'newWidth'), aby pri nasledujicich volanich SetupView() mohl sloupec pridat uz se
-    // spravne nastavenou Width; 'column' identifikuje sloupec, ktery se zmenil; 'leftPanel'
-    // je TRUE pokud jde o sloupec z leveho panelu (FALSE pokud jde o sloupec z praveho panelu)
+    // sets the new value of "column->Width"—the user changed the width of a plugin-added
+    // column in the header line using the mouse; the plugin should store the new column->Width value
+    // (also provided in 'newWidth') so that during subsequent SetupView() calls the column can be added
+    // with the correct Width; 'column' identifies the column that changed; 'leftPanel'
+    // is TRUE for a column from the left panel (FALSE for a column from the right panel)
     virtual void WINAPI ColumnWidthWasChanged(BOOL leftPanel, const CColumn* column,
                                               int newWidth) = 0;
 
-    // ziska obsah Information Line pro soubor/adresar ('isDir' TRUE/FALSE) 'file'
-    // nebo oznacene soubory a adresare ('file' je NULL a pocty oznacenych souboru/adresaru
-    // jsou v 'selectedFiles'/'selectedDirs') v panelu ('panel' je jeden z PANEL_XXX);
-    // vola se i pri prazdnem listingu (tyka se jen FS, u archivu nemuze nastat, 'file' je NULL,
-    // 'selectedFiles' a 'selectedDirs' jsou 0); je-li 'displaySize' TRUE, je znama velikost
-    // vsech oznacenych adresaru (viz CFileData::SizeValid; pokud neni nic oznaceneho, je zde
-    // TRUE); v 'selectedSize' je soucet cisel CFileData::Size oznacenych souboru a adresaru
-    // (pokud neni nic oznaceneho, je zde nula); 'buffer' je buffer pro vraceny text (velikost
-    // 1000 bytu); 'hotTexts' je pole (velikost 100 DWORDu), ve kterem se vraci informace o poloze
-    // hot-textu, vzdy spodni WORD obsahuje pozici hot-textu v 'buffer', horni WORD obsahuje
-    // delku hot-textu; v 'hotTextsCount' je velikost pole 'hotTexts' (100) a vraci se v nem pocet
-    // zapsanych hot-textu v poli 'hotTexts'; vraci TRUE pokud je 'buffer' + 'hotTexts' +
-    // 'hotTextsCount' nastaveno, vraci FALSE pokud se ma Information Line plnit standardnim
-    // zpusobem (jako na disku)
+    // Retrieves the Information Line content for 'file' ('isDir' TRUE for directories, FALSE for files)
+    // or for the current selection if 'file' is NULL. The counts of selected files and directories
+    // are provided in 'selectedFiles' and 'selectedDirs'; 'panel' identifies the panel (one of PANEL_XXX).
+    // The method is invoked even for an empty listing (file systems only—archives never encounter this);
+    // in that case 'file' is NULL and both 'selectedFiles' and 'selectedDirs' are zero. When 'displaySize'
+    // is TRUE the size of all selected directories is known (see CFileData::SizeValid; TRUE if nothing is
+    // selected). 'selectedSize' contains the sum of CFileData::Size values for the selection (zero if no
+    // items are selected). 'buffer' points to storage for the formatted text (1000 bytes). 'hotTexts' is an
+    // array of 100 DWORDs that receives hot-text positions: the low WORD stores the offset in 'buffer', the
+    // high WORD the hot-text length. 'hotTextsCount' provides the array capacity (100) and returns how many
+    // hot texts were written. Return TRUE after filling 'buffer', 'hotTexts', and 'hotTextsCount'; return
+    // FALSE to request the default Information Line formatting used for standard file-system paths.
     virtual BOOL WINAPI GetInfoLineContent(int panel, const CFileData* file, BOOL isDir, int selectedFiles,
                                            int selectedDirs, BOOL displaySize, const CQuadWord& selectedSize,
                                            char* buffer, DWORD* hotTexts, int& hotTextsCount) = 0;
 
-    // jen pro archivy: uzivatel ulozil soubory/adresare z archivu na clipboard, ted zavira
-    // archiv v panelu: pokud metoda vrati TRUE, tento objekt zustane otevreny (optimalizace
-    // pripadneho Paste z clipboardu - archiv uz je vylistovany), pokud metoda vrati FALSE,
-    // tento objekt se uvolni (pripadny Paste z clipboardu zpusobi listovani archivu, pak
-    // teprve dojde k vybaleni vybranych souboru/adresaru); POZNAMKA: pokud je po zivotnost
-    // objektu otevreny soubor archivu, metoda by mela vracet FALSE, jinak bude po celou
-    // dobu "pobytu" dat na clipboardu soubor archivu otevreny (nepujde smazat, atd.)
+    // archives only: the user copied files/directories from the archive to the clipboard and is now closing
+    // the archive in the panel; if the method returns TRUE, this object remains open (optimization
+    // for a potential Paste from the clipboard—the archive is already listed); if it returns FALSE,
+    // the object is released (a subsequent Paste from the clipboard will relist the archive before
+    // extracting the selected files/directories); NOTE: if the archive file itself remains open for the lifetime
+    // of the object, the method should return FALSE, otherwise the file will stay open the entire time
+    // otherwise the archive file would remain open for as long as the data stay on the clipboard (it could not be deleted, etc.)
     virtual BOOL WINAPI CanBeCopiedToClipboard() = 0;
 
-    // jen pri zadani VALID_DATA_PL_SIZE do CSalamanderDirectoryAbstract::SetValidData():
-    // vraci TRUE pokud je velikost souboru/adresare ('isDir' TRUE/FALSE) 'file' znama,
-    // jinak vraci FALSE; velikost vraci v 'size'
+    // only when VALID_DATA_PL_SIZE was specified via CSalamanderDirectoryAbstract::SetValidData():
+    // returns TRUE if the size of the file/directory ('isDir' TRUE/FALSE) 'file' is known,
+    // otherwise returns FALSE; the size is returned in 'size'
     virtual BOOL WINAPI GetByteSize(const CFileData* file, BOOL isDir, CQuadWord* size) = 0;
 
-    // jen pri zadani VALID_DATA_PL_DATE do CSalamanderDirectoryAbstract::SetValidData():
-    // vraci TRUE pokud je datum souboru/adresare ('isDir' TRUE/FALSE) 'file' znamy,
-    // jinak vraci FALSE; datum vraci v "datumove" casti struktury 'date' ("casova" cast
-    // by mela zustat netknuta)
+    // only when VALID_DATA_PL_DATE was specified via CSalamanderDirectoryAbstract::SetValidData():
+    // returns TRUE if the date of the file/directory ('isDir' TRUE/FALSE) 'file' is known,
+    // otherwise returns FALSE; the date is returned in the "date" part of the 'date' structure
+    // (the "time" part should remain untouched)
     virtual BOOL WINAPI GetLastWriteDate(const CFileData* file, BOOL isDir, SYSTEMTIME* date) = 0;
 
-    // jen pri zadani VALID_DATA_PL_TIME do CSalamanderDirectoryAbstract::SetValidData():
-    // vraci TRUE pokud je cas souboru/adresare ('isDir' TRUE/FALSE) 'file' znamy,
-    // jinak vraci FALSE; cas vraci v "casove" casti struktury 'time' ("datumova" cast
-    // by mela zustat netknuta)
+    // only when VALID_DATA_PL_TIME was specified via CSalamanderDirectoryAbstract::SetValidData():
+    // returns TRUE if the time of the file/directory ('isDir' TRUE/FALSE) 'file' is known,
+    // otherwise returns FALSE; the time is returned in the "time" part of the 'time' structure
+    // (the "date" part should remain untouched)
     virtual BOOL WINAPI GetLastWriteTime(const CFileData* file, BOOL isDir, SYSTEMTIME* time) = 0;
 };
 
@@ -827,57 +814,57 @@ public:
 // ****************************************************************************
 // CSalamanderForOperationsAbstract
 //
-// sada metod ze Salamandera pro podporu provadeni operaci, platnost interfacu je
-// omezena na metodu, ktere je interface predan jako parametr; tedy lze volat pouze
-// z tohoto threadu a v teto metode (objekt je na stacku, takze po navratu zanika)
+// set of Salamander methods supporting operations; the interface is valid only
+// for the method to which it is passed as a parameter, so it can be used only
+// from that thread and within that method (the object lives on the stack, so it ends when the call returns)
 
 class CSalamanderForOperationsAbstract
 {
 public:
-    // PROGRESS DIALOG: dialog obsahuje jeden/dva ('twoProgressBars' FALSE/TRUE) progress-metry
-    // otevre progress-dialog s titulkem 'title'; 'parent' je parent okno progress-dialogu (je-li
-    // NULL, pouzije se hlavni okno); pokud obsahuje jen jeden progress-metr, muze byt popsan
-    // jako "File" ('fileProgress' je TRUE) nebo "Total" ('fileProgress' je FALSE)
+    // PROGRESS DIALOG: the dialog contains one or two ('twoProgressBars' FALSE/TRUE) progress bars
+    // opens the progress dialog with the title 'title'; 'parent' is the parent window of the dialog (if
+    // NULL, the main window is used); if it contains only one progress bar it can be labeled
+    // either "File" ('fileProgress' is TRUE) or "Total" ('fileProgress' is FALSE)
     //
-    // dialog nebezi ve vlastnim threadu; pro jeho fungovani (tlacitko Cancel + vnitrni timer)
-    // je treba obcas vyprazdni message queue; to zajistuji metody ProgressDialogAddText,
-    // ProgressAddSize a ProgressSetSize
+    // the dialog does not run in its own thread; for it to function (Cancel button + internal timer)
+    // the message queue must occasionally be pumped; this is done by the ProgressDialogAddText,
+    // ProgressAddSize, and ProgressSetSize methods
     //
-    // protoze real-time zobrazovani textu a zmen v progress bare silne zdrzuje, maji
-    // metody ProgressDialogAddText, ProgressAddSize a ProgressSetSize parametr
-    // 'delayedPaint'; ten by mel byt TRUE pro vsechny rychle se menici texty a hodnoty;
-    // metody si pak ulozi texty a zobrazi je az po doruceni vnitrniho timeru dialogu;
-    // 'delayedPaint' nastavime na FALSE pro inicializacni/koncove texty typu "preparing data..."
-    // nebo "canceling operation...", po jejiz zobrazeni nedame dialogu prilezitost k distribuci
-    // zprav (timeru); pokud je u takove operace pravdepodobne, ze bude trvat dlouho, meli
-    // bychom behem teto doby dialog "obcerstvovat" volanim ProgressAddSize(CQuadWord(0, 0), TRUE)
-    // a podle jeji navratove hodnoty akci pripadne predcasne ukoncit
+    // because real-time text updates and progress bar changes slow things down significantly,
+    // the methods ProgressDialogAddText, ProgressAddSize, and ProgressSetSize have the
+    // 'delayedPaint' parameter; it should be TRUE for all rapidly changing texts and values;
+    // the methods then cache the texts and display them once the dialog's internal timer fires;
+    // set 'delayedPaint' to FALSE for initial/final texts such as "preparing data..."
+    // or "canceling operation..." after which the dialog is not given a chance to process messages
+    // messages (timer); if such an operation is likely to take a long time, the dialog should be
+    // "refreshed" during that time by calling ProgressAddSize(CQuadWord(0, 0), TRUE)
+    // and the return value can be used to abort the action early if needed
     virtual void WINAPI OpenProgressDialog(const char* title, BOOL twoProgressBars,
                                            HWND parent, BOOL fileProgress) = 0;
-    // vypise text 'txt' (i nekolik radku - provadi se rozpad na radky) do progress-dialogu
+    // prints the text 'txt' (multiple lines allowed—the text is split into lines) into the progress dialog
     virtual void WINAPI ProgressDialogAddText(const char* txt, BOOL delayedPaint) = 0;
-    // neni-li 'totalSize1' CQuadWord(-1, -1), nastavi 'totalSize1' jako 100 procent prvniho progress-metru,
-    // neni-li 'totalSize2' CQuadWord(-1, -1), nastavi 'totalSize2' jako 100 procent druheho progress-metru
-    // (pro progress-dialog s jednim progress-metrem je povinne 'totalSize2' CQuadWord(-1, -1))
+    // if 'totalSize1' is not CQuadWord(-1, -1), sets 'totalSize1' as 100 percent of the first progress bar
+    // if 'totalSize2' is not CQuadWord(-1, -1), sets 'totalSize2' as 100 percent of the second progress bar
+    // (for a progress dialog with one progress bar 'totalSize2' must be CQuadWord(-1, -1))
     virtual void WINAPI ProgressSetTotalSize(const CQuadWord& totalSize1, const CQuadWord& totalSize2) = 0;
-    // neni-li 'size1' CQuadWord(-1, -1), nastavi velikost 'size1' (size1/total1*100 procent) na prvnim progress-metru,
-    // neni-li 'size2' CQuadWord(-1, -1), nastavi velikost 'size2' (size2/total2*100 procent) na druhem progress-metru
-    // (pro progress-dialog s jednim progress-metrem je povinne 'size2' CQuadWord(-1, -1)), vraci informaci jestli ma
-    // akce pokracovat (FALSE = konec)
+    // if 'size1' is not CQuadWord(-1, -1), sets the value 'size1' (size1/total1*100 percent) on the first progress bar
+    // if 'size2' is not CQuadWord(-1, -1), sets the value 'size2' (size2/total2*100 percent) on the second progress bar
+    // (for a progress dialog with one progress bar 'size2' must be CQuadWord(-1, -1)); returns whether the action should continue
+    // (FALSE = stop)
     virtual BOOL WINAPI ProgressSetSize(const CQuadWord& size1, const CQuadWord& size2, BOOL delayedPaint) = 0;
-    // prida (pripadne k oboum progress-metrum) velikost 'size' (size/total*100 procent progressu),
-    // vraci informaci jestli ma akce pokracovat (FALSE = konec)
+    // adds the amount 'size' (size/total*100 percent progress) to the progress bar(s),
+    // returns whether the action should continue (FALSE = stop)
     virtual BOOL WINAPI ProgressAddSize(int size, BOOL delayedPaint) = 0;
-    // enabluje/disabluje tlacitko Cancel
+    // enables/disables the Cancel button
     virtual void WINAPI ProgressEnableCancel(BOOL enable) = 0;
-    // vraci HWND dialogu progressu (hodi se pri vypisu chyb a dotazu pri otevrenem progress-dialogu)
+    // returns the HWND of the progress dialog (useful for error messages and prompts while the dialog is open)
     virtual HWND WINAPI ProgressGetHWND() = 0;
-    // zavre progress-dialog
+    // closes the progress dialog
     virtual void WINAPI CloseProgressDialog() = 0;
 
-    // presune vsechny soubory ze 'source' adresare do 'target' adresare,
-    // navic premapovava predpony zobrazovanych jmen ('remapNameFrom' -> 'remapNameTo')
-    // vraci uspech operace
+    // moves all files from the 'source' directory to the 'target' directory
+    // additionally remaps the displayed name prefixes ('remapNameFrom' -> 'remapNameTo')
+    // returns whether the operation succeeded
     virtual BOOL WINAPI MoveFiles(const char* source, const char* target, const char* remapNameFrom,
                                   const char* remapNameTo) = 0;
 };
