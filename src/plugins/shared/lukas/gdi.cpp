@@ -6,8 +6,8 @@
 
 // ****************************************************************************
 //
-// CBackbufferedDC -- DC s back bufferem, pro hladke kresleni slozitejsich
-// grafickych celku
+// CBackbufferedDC -- device context with a back buffer for smooth rendering of
+// more complex graphics
 //
 
 CBackbufferedDC::CBackbufferedDC()
