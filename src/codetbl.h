@@ -79,6 +79,8 @@ public:
     //  3. westeuro
     //  4. first in list
     //  5. if the list is empty, return an empty string
+    void GetBestPreloadedConversion(const char* cfgDirName, char* dirName);
+
     // prepares the object for use by loading convert.cfg; hWindow is the parent window for message boxes
     // returns TRUE when other methods can be called
     BOOL Init(HWND hWindow);
@@ -105,6 +107,7 @@ public:
     // enumerates all encodings ("name" may contain "&" characters used as menu hotkeys)
     BOOL EnumCodeTables(HWND parent, int* index, const char** name, const char** table);
     // returns WinCodePage
+    void GetWinCodePage(char* buf);
     // determines from the buffer "pattern" of length "patternLen" whether it is text
     // (there exists a code page containing only allowed printable/control characters)
     // and if so, also finds the most probable code page

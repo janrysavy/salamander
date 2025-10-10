@@ -1220,6 +1220,7 @@ public:
     int GetNextTemplateIndex(BOOL forward, BOOL wrap);
 
     // returns TRUE if templateIndex points to a template that can be switched to via SelectViewTemplate
+    BOOL IsViewTemplateValid(int templateIndex);
 
     // sets the panel's current template
     // the first templates are fixed and the others can be edited by the user

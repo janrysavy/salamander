@@ -80,6 +80,7 @@ public:
     // if the icons are currently displayed in an open menu (see UserMenuIconsInUse) it returns FALSE;
     // if they are not displayed it returns TRUE and WARNING: the critical section is not exited,
     // so other threads (mostly the Find dialog) remain blocked. After updating icons use LeaveCSAfterUMIconsUpdate() to exit.
+    BOOL EnterCSIfCanUpdateUMIcons(CUserMenuIconDataArr** bkgndReaderData, DWORD threadID);
     void LeaveCSAfterUMIconsUpdate();
 
     void ResetSysColorsChanged() { SysColorsChanged = FALSE; }

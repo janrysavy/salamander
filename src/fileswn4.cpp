@@ -1492,13 +1492,13 @@ void CFilesWindow::DrawIconThumbnailItem(HDC hTgtDC, int itemIndex, RECT* itemRe
             r.bottom += FontCharHeight;
 
         // clear the background around the text
-        // clear the background around the text
         if ((drawFlags & DRAWFLAG_MASK) == 0) // when drawing the mask (b&w), the background color must not be painted
             FillIntersectionRegion(hDC, &outerRect, &r);
 
         if (drawFocusFrame) // shrink by the frame if it will be drawn
+            InflateRect(&r, -1, -1);
 
-            int oldRTop = r.top;
+        int oldRTop = r.top;
 
         // display the centered first line; also clear for the second line
         // DRAWFLAG_MASK: hack, under XP small artifacts appeared before short texts in the mask; skipping text avoids it

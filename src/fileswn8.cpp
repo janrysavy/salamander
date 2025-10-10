@@ -485,54 +485,27 @@ void CFilesWindow::FilesAction(CActionType type, CFilesWindow* target, int count
                      (path[0] == '/' || path[0] == '\\') && (path[1] == '/' || path[1] == '\\') || // UNC paths
                      Is(ptDisk) || Is(ptZIPArchive)))                                              // disk/archive relative paths
                                                                                                    // it's a disk path (absolute or relative) - convert all '/' to '\' and remove duplicate '\'
+                {
                     SlashesToBackslashesAndRemoveDups(path);
-            }
-
-            int len = (int)strlen(path);
-            BOOL backslashAtEnd = (len > 0 && path[len - 1] == '\\'); // path ends with a backslash -> must be a directory
-            BOOL mustBePath = (len == 2 && LowerCase[path[0]] >= 'a' && LowerCase[path[0]] <= 'z' &&
-                               path[1] == ':'); // a path like "c:" must remain a directory after expansion
-
-            int pathType;
-            BOOL pathIsDir;
-            char* secondPart;
-            char textBuf[2 * MAX_PATH + 200];
-            if (ParsePath(path, pathType, pathIsDir, secondPart,
-                          type == atCopy ? LoadStr(IDS_ERRORCOPY) : LoadStr(IDS_ERRORMOVE),
-                          count <= 1 ? nextFocus : NULL, NULL, 2 * MAX_PATH))
-            {
-                // use 'if' instead of a 'switch' so that 'break' and 'continue' work
-                if (pathType == PATH_TYPE_WINDOWS) // Windows path (drive + UNC)
-                {
-                    if (strlen(path) >= MAX_PATH)
-                    {
-                        SalMessageBox(HWindow, LoadStr(IDS_TOOLONGPATH),
-                                      (type == atCopy) ? LoadStr(IDS_ERRORCOPY) : LoadStr(IDS_ERRORMOVE),
-                                      MB_OK | MB_ICONEXCLAMATION);
-                        continue;
-                    }
-
-                    CFileData* dir = (count == 0) ? f : ((indexes[0] < Dirs->Count) ? &Dirs->At(indexes[0]) : &Files->At(indexes[0] - Dirs->Count));
-
-                    if (SalSplitWindowsPath(HWindow, LoadStr(type == atCopy ? IDS_COPY : IDS_MOVE),
-                                            LoadStr(type == atCopy ? IDS_ERRORCOPY : IDS_ERRORMOVE),
-                                            count, path, secondPart, pathIsDir, backslashAtEnd || mustBePath,
-                                            dir->Name, GetPath(), mask))
-                    {
-                        if (nextFocus[0] != 0 && secondPart[0] == 0)
-                            copyToExistingDir = TRUE;
-                        break; // exit the Copy/Move loop and perform the operation
-                    }
-                    else
-                    {
-                        continue; // back to the Copy/Move dialog
-                    }
                 }
-                else
+
+                int len = (int)strlen(path);
+                BOOL backslashAtEnd = (len > 0 && path[len - 1] == '\\'); // path ends with a backslash -> must be a directory
+                BOOL mustBePath = (len == 2 && LowerCase[path[0]] >= 'a' && LowerCase[path[0]] <= 'z' &&
+                                   path[1] == ':'); // a path like "c:" must remain a directory after expansion
+
+                int pathType;
+                BOOL pathIsDir;
+                char* secondPart;
+                char textBuf[2 * MAX_PATH + 200];
+                if (ParsePath(path, pathType, pathIsDir, secondPart,
+                              type == atCopy ? LoadStr(IDS_ERRORCOPY) : LoadStr(IDS_ERRORMOVE),
+                              count <= 1 ? nextFocus : NULL, NULL, 2 * MAX_PATH))
                 {
-                    if (pathType == PATH_TYPE_ARCHIVE) // path into an archive
+                    // use 'if' instead of a 'switch' so that 'break' and 'continue' work
+                    if (pathType == PATH_TYPE_WINDOWS) // Windows path (drive + UNC)
                     {
-                        if (strlen(secondPart) >= MAX_PATH) // isn't the path inside the archive too long?
+                        if (strlen(path) >= MAX_PATH)
                         {
                             SalMessageBox(HWindow, LoadStr(IDS_TOOLONGPATH),
                                           (type == atCopy) ? LoadStr(IDS_ERRORCOPY) : LoadStr(IDS_ERRORMOVE),
@@ -540,169 +513,27 @@ void CFilesWindow::FilesAction(CActionType type, CFilesWindow* target, int count
                             continue;
                         }
 
-                        if (criteriaPtr != NULL && Configuration.CnfrmCopyMoveOptionsNS) // archives don't support options from the Copy/Move dialog
-                        {
-                            MSGBOXEX_PARAMS params;
-                            memset(&params, 0, sizeof(params));
-                            params.HParent = HWindow;
-                            params.Flags = MB_OK | MB_ICONINFORMATION | MSGBOXEX_HINT;
-                            params.Caption = LoadStr(IDS_INFOTITLE);
-                            params.Text = LoadStr(IDS_MOVECOPY_OPTIONS_NOTSUPPORTED);
-                            params.CheckBoxText = LoadStr(IDS_MOVECOPY_OPTIONS_NOTSUPPORTED_AGAIN);
-                            int dontShow = !Configuration.CnfrmCopyMoveOptionsNS;
-                            params.CheckBoxValue = &dontShow;
-                            SalMessageBoxEx(&params);
-                            Configuration.CnfrmCopyMoveOptionsNS = !dontShow;
-                        }
+                        CFileData* dir = (count == 0) ? f : ((indexes[0] < Dirs->Count) ? &Dirs->At(indexes[0]) : &Files->At(indexes[0] - Dirs->Count));
 
-                        CPanelTmpEnumData data;
-                        int oneIndex = -1;
-                        if (count > 0) // some files are selected
+                        if (SalSplitWindowsPath(HWindow, LoadStr(type == atCopy ? IDS_COPY : IDS_MOVE),
+                                                LoadStr(type == atCopy ? IDS_ERRORCOPY : IDS_ERRORMOVE),
+                                                count, path, secondPart, pathIsDir, backslashAtEnd || mustBePath,
+                                                dir->Name, GetPath(), mask))
                         {
-                            data.IndexesCount = count;
-                            data.Indexes = indexes; // deallocated via 'indexes'
-                        }
-                        else // take the focused item
-                        {
-                            oneIndex = GetCaretIndex();
-                            data.IndexesCount = 1;
-                            data.Indexes = &oneIndex; // not deallocated
-                        }
-                        data.CurrentIndex = 0;
-                        data.ZIPPath = GetZIPPath();
-                        data.Dirs = Dirs;
-                        data.Files = Files;
-                        data.ArchiveDir = GetArchiveDir();
-                        lstrcpyn(data.WorkPath, GetPath(), MAX_PATH);
-                        data.EnumLastDir = NULL;
-                        data.EnumLastIndex = -1;
-
-                        //---  check if it's a zero-size file
-                        BOOL nullFile;
-                        BOOL hasPath = *secondPart != 0;
-                        if (hasPath && !backslashAtEnd && !mustBePath) // check whether they used an operational mask -> we can't handle that
-                        {
-                            SalMessageBox(HWindow, LoadStr(IDS_MOVECOPY_OPMASKSNOTSUP),
-                                          (type == atCopy) ? LoadStr(IDS_ERRORCOPY) : LoadStr(IDS_ERRORMOVE),
-                                          MB_OK | MB_ICONEXCLAMATION);
-                            continue; // back to the copy/move dialog
-                        }
-
-                        *secondPart = 0; // 'path' holds the archive file name
-                        BOOL haveSize = FALSE;
-                        CQuadWord size;
-                        DWORD err;
-                        HANDLE hFile = HANDLES_Q(CreateFile(path, GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL));
-                        if (hFile != INVALID_HANDLE_VALUE)
-                        {
-                            haveSize = SalGetFileSize(hFile, size, err);
-                            HANDLES(CloseHandle(hFile));
-                        }
-                        else
-                            err = GetLastError();
-                        if (haveSize)
-                        {
-                            nullFile = (size == CQuadWord(0, 0));
-
-                            //---  if it's a zero-size file we must delete it; archivers can't handle them
-                            DWORD nullFileAttrs;
-                            if (nullFile)
-                            {
-                                nullFileAttrs = SalGetFileAttributes(path);
-                                ClearReadOnlyAttr(path, nullFileAttrs); // so it can be deleted even if read-only
-                                DeleteFile(path);
-                            }
-                            //---  actual compression
-                            SetCurrentDirectory(GetPath());
-                            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
-                            if (PackCompress(HWindow, this, path, hasPath ? secondPart + 1 : "",
-                                             type == atMove, GetPath(), PanelEnumDiskSelection, &data))
-                            {                   // compression succeeded
-                                if (nullFile && // a zero-size file might have a different compressed attribute; set the archive to the same
-                                    nullFileAttrs != INVALID_FILE_ATTRIBUTES)
-                                {
-                                    HANDLE hFile2 = HANDLES_Q(CreateFile(path, GENERIC_READ | GENERIC_WRITE,
-                                                                         0, NULL, OPEN_EXISTING,
-                                                                         0, NULL));
-                                    if (hFile2 != INVALID_HANDLE_VALUE)
-                                    {
-                                        // restore the 'compressed' flag; it simply doesn't work on FAT or FAT32
-                                        USHORT state = (nullFileAttrs & FILE_ATTRIBUTE_COMPRESSED) ? COMPRESSION_FORMAT_DEFAULT : COMPRESSION_FORMAT_NONE;
-                                        ULONG length;
-                                        DeviceIoControl(hFile2, FSCTL_SET_COMPRESSION, &state,
-                                                        sizeof(USHORT), NULL, 0, &length, FALSE);
-                                        HANDLES(CloseHandle(hFile2));
-                                        SetFileAttributes(path, nullFileAttrs);
-                                    }
-                                }
-                                SetSel(FALSE, -1, TRUE);                        // explicit redraw
-                                PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
-                            }
-                            else
-                            {
-                                if (nullFile) // it failed, we have to create it again
-                                {
-                                    HANDLE hFile2 = HANDLES_Q(CreateFile(path, GENERIC_READ | GENERIC_WRITE,
-                                                                         0, NULL, OPEN_ALWAYS,
-                                                                         0, NULL));
-                                    if (hFile2 != INVALID_HANDLE_VALUE)
-                                    {
-                                        if (nullFileAttrs != INVALID_FILE_ATTRIBUTES)
-                                        {
-                                            // restore the "compressed" flag; on FAT and FAT32 it simply doesn't work
-                                            USHORT state = (nullFileAttrs & FILE_ATTRIBUTE_COMPRESSED) ? COMPRESSION_FORMAT_DEFAULT : COMPRESSION_FORMAT_NONE;
-                                            ULONG length;
-                                            DeviceIoControl(hFile2, FSCTL_SET_COMPRESSION, &state,
-                                                            sizeof(USHORT), NULL, 0, &length, FALSE);
-                                        }
-                                        HANDLES(CloseHandle(hFile2));
-                                        if (nullFileAttrs != INVALID_FILE_ATTRIBUTES)
-                                            SetFileAttributes(path, nullFileAttrs);
-                                    }
-                                }
-                            }
-                            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
-                            SetCurrentDirectoryToSystem();
-
-                            UpdateWindow(MainWindow->HWindow);
-
-                            //---  refresh of non-auto-refreshed directories
-                            // change in the directory with the target archive (the archive file changes)
-                            CutDirectory(path); // 'path' is the archive name -> must always succeed
-                            MainWindow->PostChangeOnPathNotification(path, FALSE);
-                            if (type == atMove)
-                            {
-                                // changes on the source path (moving files to the archive should have done
-                                // deleting files/directories)
-                                MainWindow->PostChangeOnPathNotification(GetPath(), TRUE);
-                            }
+                            if (nextFocus[0] != 0 && secondPart[0] == 0)
+                                copyToExistingDir = TRUE;
+                            break; // exit the Copy/Move loop and perform the operation
                         }
                         else
                         {
-                            sprintf(textBuf, LoadStr(IDS_FILEERRORFORMAT), path, GetErrorText(err));
-                            SalMessageBox(HWindow, textBuf,
-                                          (type == atCopy) ? LoadStr(IDS_ERRORCOPY) : LoadStr(IDS_ERRORMOVE),
-                                          MB_OK | MB_ICONEXCLAMATION);
-                            if (hasPath)
-                                *secondPart = '\\'; // restore the path - we'll edit it in the Copy/Move dialog
-                            if (backslashAtEnd || mustBePath)
-                                SalPathAddBackslash(path, 2 * MAX_PATH + 200);
-                            continue; // back to the copy/move dialog
+                            continue; // back to the Copy/Move dialog
                         }
-
-                        if (indexes != NULL)
-                            delete[] (indexes);
-                        //---  if a Salamander window is active, suspend mode ends
-                        EndStopRefresh();
-                        EndSuspendMode();
-                        FilesActionInProgress = FALSE;
-                        return;
                     }
                     else
                     {
-                        if (pathType == PATH_TYPE_FS) // file-system path
+                        if (pathType == PATH_TYPE_ARCHIVE) // path into an archive
                         {
-                            if (strlen(secondPart) >= MAX_PATH) // is the user part of the FS path too long?
+                            if (strlen(secondPart) >= MAX_PATH) // isn't the path inside the archive too long?
                             {
                                 SalMessageBox(HWindow, LoadStr(IDS_TOOLONGPATH),
                                               (type == atCopy) ? LoadStr(IDS_ERRORCOPY) : LoadStr(IDS_ERRORMOVE),
@@ -710,7 +541,7 @@ void CFilesWindow::FilesAction(CActionType type, CFilesWindow* target, int count
                                 continue;
                             }
 
-                            if (criteriaPtr != NULL && Configuration.CnfrmCopyMoveOptionsNS) // file systems don't support options from the Copy/Move dialog
+                            if (criteriaPtr != NULL && Configuration.CnfrmCopyMoveOptionsNS) // archives don't support options from the Copy/Move dialog
                             {
                                 MSGBOXEX_PARAMS params;
                                 memset(&params, 0, sizeof(params));
@@ -725,25 +556,16 @@ void CFilesWindow::FilesAction(CActionType type, CFilesWindow* target, int count
                                 Configuration.CnfrmCopyMoveOptionsNS = !dontShow;
                             }
 
-                            // prepare data to enumerate files and directories from the panel
                             CPanelTmpEnumData data;
                             int oneIndex = -1;
-                            int selFiles = 0;
-                            int selDirs = 0;
                             if (count > 0) // some files are selected
                             {
-                                selFiles = files;
-                                selDirs = count - files;
                                 data.IndexesCount = count;
                                 data.Indexes = indexes; // deallocated via 'indexes'
                             }
                             else // take the focused item
                             {
                                 oneIndex = GetCaretIndex();
-                                if (oneIndex >= Dirs->Count)
-                                    selFiles = 1;
-                                else
-                                    selDirs = 1;
                                 data.IndexesCount = 1;
                                 data.Indexes = &oneIndex; // not deallocated
                             }
@@ -756,417 +578,596 @@ void CFilesWindow::FilesAction(CActionType type, CFilesWindow* target, int count
                             data.EnumLastDir = NULL;
                             data.EnumLastIndex = -1;
 
-                            // obtain the file-system name
-                            char fsName[MAX_PATH];
-                            memcpy(fsName, path, (secondPart - path) - 1);
-                            fsName[(secondPart - path) - 1] = 0;
-
-                            // lower the thread priority to "normal" so the operation doesn't overload the machine
-                            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
-
-                            // choose the FS that will perform the operation (order: active, detached, new)
-                            BOOL invalidPath = FALSE;
-                            BOOL unselect = FALSE;
-                            char targetPath[2 * MAX_PATH];
-                            CDetachedFSList* list = MainWindow->DetachedFSList;
-                            int i;
-                            for (i = -1; i < list->Count; i++)
+                            //---  check if it's a zero-size file
+                            BOOL nullFile;
+                            BOOL hasPath = *secondPart != 0;
+                            if (hasPath && !backslashAtEnd && !mustBePath) // check whether they used an operational mask -> we can't handle that
                             {
-                                CPluginFSInterfaceEncapsulation* fs = NULL;
-                                if (i == -1) // first try the active FS in the target panel
-                                {
-                                    if (target->Is(ptPluginFS))
-                                        fs = target->GetPluginFS();
-                                }
-                                else
-                                    fs = list->At(i); // then detached FS
-
-                                int fsNameIndex;
-                                if (fs != NULL && fs->NotEmpty() &&                          // interface is valid
-                                    fs->IsFSNameFromSamePluginAsThisFS(fsName, fsNameIndex)) // the FS name comes from the same plugin (otherwise there's no point trying)
-                                {
-                                    BOOL invalidPathOrCancel;
-                                    lstrcpyn(targetPath, path, 2 * MAX_PATH); // may even exceed 2 * MAX_PATH
-                                    // convert the path to internal format
-                                    fs->GetPluginInterfaceForFS()->ConvertPathToInternal(fsName, fsNameIndex,
-                                                                                         targetPath + strlen(fsName) + 1);
-                                    if (fs->CopyOrMoveFromDiskToFS(type == atCopy, 2, fs->GetPluginFSName(),
-                                                                   HWindow, GetPath(), PanelEnumDiskSelection, &data,
-                                                                   selFiles, selDirs, targetPath, &invalidPathOrCancel))
-                                    {
-                                        unselect = !invalidPathOrCancel;
-                                        break; // done
-                                    }
-                                    else // error
-                                    {
-                                        // before the next use we must reset it (so it enumerates from the beginning again)
-                                        data.Reset();
-
-                                        if (invalidPathOrCancel)
-                                        {
-                                            // convert the path to external format (before showing it in the dialog)
-                                            PluginFSConvertPathToExternal(targetPath);
-                                            strcpy(path, targetPath);
-                                            invalidPath = TRUE;
-                                            break; // we must go back to the copy/move dialog
-                                        }
-                                        // trying another FS
-                                    }
-                                }
-                            }
-                            if (i == list->Count) // active and detached FS couldn't handle it, we will create a new FS
-                            {
-                                int index;
-                                int fsNameIndex;
-                                if (Plugins.IsPluginFS(fsName, index, fsNameIndex)) // determine the plugin index
-                                {
-                                    // obtain the plugin with the FS
-                                    CPluginData* plugin = Plugins.Get(index);
-                                    if (plugin != NULL)
-                                    {
-                                        // open a new FS
-                                        // load the plugin before obtaining DLLName, Version and plugin interfaces
-                                        CPluginFSInterfaceAbstract* auxFS = plugin->OpenFS(fsName, fsNameIndex);
-                                        CPluginFSInterfaceEncapsulation pluginFS(auxFS, plugin->DLLName, plugin->Version,
-                                                                                 plugin->GetPluginInterfaceForFS()->GetInterface(),
-                                                                                 plugin->GetPluginInterface()->GetInterface(),
-                                                                                 fsName, fsNameIndex, -1, 0, plugin->BuiltForVersion);
-                                        if (pluginFS.NotEmpty())
-                                        {
-                                            Plugins.SetWorkingPluginFS(&pluginFS);
-                                            BOOL invalidPathOrCancel;
-                                            lstrcpyn(targetPath, path, 2 * MAX_PATH); // may even exceed 2 * MAX_PATH
-                                            // convert the path to internal format
-                                            pluginFS.GetPluginInterfaceForFS()->ConvertPathToInternal(fsName, fsNameIndex,
-                                                                                                      targetPath + strlen(fsName) + 1);
-                                            if (pluginFS.CopyOrMoveFromDiskToFS(type == atCopy, 2,
-                                                                                pluginFS.GetPluginFSName(),
-                                                                                HWindow, GetPath(),
-                                                                                PanelEnumDiskSelection, &data,
-                                                                                selFiles, selDirs, targetPath,
-                                                                                &invalidPathOrCancel))
-                                            { // done/cancel
-                                                unselect = !invalidPathOrCancel;
-                                            }
-                                            else // syntax error/plugin error
-                                            {
-                                                if (invalidPathOrCancel)
-                                                {
-                                                    // convert the path to external format (before showing it in the dialog)
-                                                    PluginFSConvertPathToExternal(targetPath);
-                                                    strcpy(path, targetPath);
-                                                    invalidPath = TRUE; // we must go back to the Copy/Move dialog
-                                                }
-                                                else // plugin error (new FS but returns error 'the requested operation cannot be done in this FS')
-                                                {
-                                                    TRACE_E("CopyOrMoveFromDiskToFS on new (empty) FS may not return error 'unable to process operation'.");
-                                                }
-                                            }
-
-                                            pluginFS.ReleaseObject(HWindow);
-                                            plugin->GetPluginInterfaceForFS()->CloseFS(pluginFS.GetInterface());
-                                            Plugins.SetWorkingPluginFS(NULL);
-                                        }
-                                        else
-                                            TRACE_E("Plugin has refused to open FS (maybe it even does not start).");
-                                    }
-                                    else
-                                        TRACE_E("Unexpected situation in CFilesWindow::FilesAction() - unable to work with plugin.");
-                                }
-                                else
-                                {
-                                    TRACE_E("Unexpected situation in CFilesWindow::FilesAction() - file-system " << fsName << " was not found.");
-                                }
-                            }
-
-                            // raise the thread priority again, the operation has finished
-                            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
-                            SetCurrentDirectoryToSystem(); // in any case restore the current directory as well
-
-                            if (invalidPath)
+                                SalMessageBox(HWindow, LoadStr(IDS_MOVECOPY_OPMASKSNOTSUP),
+                                              (type == atCopy) ? LoadStr(IDS_ERRORCOPY) : LoadStr(IDS_ERRORMOVE),
+                                              MB_OK | MB_ICONEXCLAMATION);
                                 continue; // back to the copy/move dialog
+                            }
 
-                            if (unselect) // unselect files/directories in the panel
+                            *secondPart = 0; // 'path' holds the archive file name
+                            BOOL haveSize = FALSE;
+                            CQuadWord size;
+                            DWORD err;
+                            HANDLE hFile = HANDLES_Q(CreateFile(path, GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL));
+                            if (hFile != INVALID_HANDLE_VALUE)
                             {
-                                SetSel(FALSE, -1, TRUE);                        // explicit redraw
-                                PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
+                                haveSize = SalGetFileSize(hFile, size, err);
+                                HANDLES(CloseHandle(hFile));
+                            }
+                            else
+                                err = GetLastError();
+                            if (haveSize)
+                            {
+                                nullFile = (size == CQuadWord(0, 0));
+
+                                //---  if it's a zero-size file we must delete it; archivers can't handle them
+                                DWORD nullFileAttrs;
+                                if (nullFile)
+                                {
+                                    nullFileAttrs = SalGetFileAttributes(path);
+                                    ClearReadOnlyAttr(path, nullFileAttrs); // so it can be deleted even if read-only
+                                    DeleteFile(path);
+                                }
+                                //---  actual compression
+                                SetCurrentDirectory(GetPath());
+                                SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
+                                if (PackCompress(HWindow, this, path, hasPath ? secondPart + 1 : "",
+                                                 type == atMove, GetPath(), PanelEnumDiskSelection, &data))
+                                {                   // compression succeeded
+                                    if (nullFile && // a zero-size file might have a different compressed attribute; set the archive to the same
+                                        nullFileAttrs != INVALID_FILE_ATTRIBUTES)
+                                    {
+                                        HANDLE hFile2 = HANDLES_Q(CreateFile(path, GENERIC_READ | GENERIC_WRITE,
+                                                                             0, NULL, OPEN_EXISTING,
+                                                                             0, NULL));
+                                        if (hFile2 != INVALID_HANDLE_VALUE)
+                                        {
+                                            // restore the 'compressed' flag; it simply doesn't work on FAT or FAT32
+                                            USHORT state = (nullFileAttrs & FILE_ATTRIBUTE_COMPRESSED) ? COMPRESSION_FORMAT_DEFAULT : COMPRESSION_FORMAT_NONE;
+                                            ULONG length;
+                                            DeviceIoControl(hFile2, FSCTL_SET_COMPRESSION, &state,
+                                                            sizeof(USHORT), NULL, 0, &length, FALSE);
+                                            HANDLES(CloseHandle(hFile2));
+                                            SetFileAttributes(path, nullFileAttrs);
+                                        }
+                                    }
+                                    SetSel(FALSE, -1, TRUE);                        // explicit redraw
+                                    PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
+                                }
+                                else
+                                {
+                                    if (nullFile) // it failed, we have to create it again
+                                    {
+                                        HANDLE hFile2 = HANDLES_Q(CreateFile(path, GENERIC_READ | GENERIC_WRITE,
+                                                                             0, NULL, OPEN_ALWAYS,
+                                                                             0, NULL));
+                                        if (hFile2 != INVALID_HANDLE_VALUE)
+                                        {
+                                            if (nullFileAttrs != INVALID_FILE_ATTRIBUTES)
+                                            {
+                                                // restore the "compressed" flag; on FAT and FAT32 it simply doesn't work
+                                                USHORT state = (nullFileAttrs & FILE_ATTRIBUTE_COMPRESSED) ? COMPRESSION_FORMAT_DEFAULT : COMPRESSION_FORMAT_NONE;
+                                                ULONG length;
+                                                DeviceIoControl(hFile2, FSCTL_SET_COMPRESSION, &state,
+                                                                sizeof(USHORT), NULL, 0, &length, FALSE);
+                                            }
+                                            HANDLES(CloseHandle(hFile2));
+                                            if (nullFileAttrs != INVALID_FILE_ATTRIBUTES)
+                                                SetFileAttributes(path, nullFileAttrs);
+                                        }
+                                    }
+                                }
+                                SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+                                SetCurrentDirectoryToSystem();
+
+                                UpdateWindow(MainWindow->HWindow);
+
+                                //---  refresh of non-auto-refreshed directories
+                                // change in the directory with the target archive (the archive file changes)
+                                CutDirectory(path); // 'path' is the archive name -> must always succeed
+                                MainWindow->PostChangeOnPathNotification(path, FALSE);
+                                if (type == atMove)
+                                {
+                                    // changes on the source path (moving files to the archive should have done
+                                    // deleting files/directories)
+                                    MainWindow->PostChangeOnPathNotification(GetPath(), TRUE);
+                                }
+                            }
+                            else
+                            {
+                                sprintf(textBuf, LoadStr(IDS_FILEERRORFORMAT), path, GetErrorText(err));
+                                SalMessageBox(HWindow, textBuf,
+                                              (type == atCopy) ? LoadStr(IDS_ERRORCOPY) : LoadStr(IDS_ERRORMOVE),
+                                              MB_OK | MB_ICONEXCLAMATION);
+                                if (hasPath)
+                                    *secondPart = '\\'; // restore the path - we'll edit it in the Copy/Move dialog
+                                if (backslashAtEnd || mustBePath)
+                                    SalPathAddBackslash(path, 2 * MAX_PATH + 200);
+                                continue; // back to the copy/move dialog
                             }
 
                             if (indexes != NULL)
                                 delete[] (indexes);
-                            //---  if any Salamander window is active, suspend mode ends
+                            //---  if a Salamander window is active, suspend mode ends
                             EndStopRefresh();
                             EndSuspendMode();
                             FilesActionInProgress = FALSE;
                             return;
                         }
-                    }
-                }
-            }
-        }
-        break;
-        }
-
-    case atDelete:
-    {
-        if (Configuration.CnfrmFileDirDel && recycle != 1)
-        {                                                                                                           // ask only if requested and if we don't use the SHFileOperation API for deletion
-            HICON hIcon = (HICON)HANDLES(LoadImage(Shell32DLL, MAKEINTRESOURCE(WindowsVistaAndLater ? 16777 : 161), // delete icon
-                                                   IMAGE_ICON, 32, 32, IconLRFlags));
-            int myRes = CMessageBox(HWindow, MSGBOXEX_YESNO | MSGBOXEX_ESCAPEENABLED | MSGBOXEX_SILENT,
-                                    LoadStr(IDS_CONFIRM_DELETE_TITLE), &str, NULL,
-                                    NULL, hIcon, 0, NULL, NULL, NULL, NULL)
-                            .Execute();
-            HANDLES(DestroyIcon(hIcon));
-            res = (myRes == IDYES ? IDOK : IDCANCEL);
-            UpdateWindow(MainWindow->HWindow);
-        }
-        else
-            res = IDOK;
-        break;
-    }
-
-    case atCountSize:
-        res = IDOK;
-        break;
-
-    case atChangeCase:
-    {
-        CChangeCaseDlg dlg(HWindow, SelectionContainsDirectory());
-        res = (int)dlg.Execute();
-        UpdateWindow(MainWindow->HWindow);
-        changeCaseData.FileNameFormat = dlg.FileNameFormat;
-        changeCaseData.Change = dlg.Change;
-        changeCaseData.SubDirs = dlg.SubDirs;
-        break;
-    }
-    }
-    if (res == IDOK && // disk operation starts
-        CheckPath(TRUE) == ERROR_SUCCESS)
-    {
-        if (type == atDelete && recycle == 1)
-        {
-            if (DeleteThroughRecycleBin(indexes, count, f))
-            {
-                SetSel(FALSE, -1, TRUE);                        // explicit redraw
-                PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
-                UpdateWindow(MainWindow->HWindow);
-            }
-
-            //---  refresh of directories that aren't auto-refreshed
-            // change in the directory displayed in the panel and its subdirectories
-            MainWindow->PostChangeOnPathNotification(GetPath(), TRUE);
-        }
-        else
-        {
-            COperations* script;
-            if (type == atCopy || type == atMove)
-            {
-                if (count <= 1)
-                {
-                    char format[300];
-                    sprintf(format, LoadStr(type == atCopy ? IDS_COPYDLGTITLE : IDS_MOVEDLGTITLE), expanded);
-                    sprintf(subject, format, formatedFileName);
-                }
-                else
-                    sprintf(subject, LoadStr(type == atCopy ? IDS_COPYDLGTITLE : IDS_MOVEDLGTITLE), expanded);
-                script = new COperations(1000, 500, DupStr(subject), DupStr(GetPath()), DupStr(path));
-            }
-            else
-                script = new COperations(1000, 500, NULL, NULL, NULL);
-            if (script == NULL)
-                TRACE_E(LOW_MEMORY);
-            else
-            {
-                const char* caption;
-                switch (type)
-                {
-                case atCopy:
-                {
-                    caption = LoadStr(IDS_COPY);
-                    script->ShowStatus = TRUE;
-                    script->IsCopyOperation = TRUE;
-                    script->IsCopyOrMoveOperation = TRUE;
-                    break;
-                }
-
-                case atMove:
-                {
-                    BOOL sameRootPath = HasTheSameRootPath(GetPath(), path);
-                    script->SameRootButDiffVolume = sameRootPath && !HasTheSameRootPathAndVolume(GetPath(), path);
-                    script->ShowStatus = !sameRootPath || script->SameRootButDiffVolume;
-                    script->IsCopyOperation = FALSE;
-                    script->IsCopyOrMoveOperation = TRUE;
-                    caption = LoadStr(IDS_MOVE);
-                    break;
-                }
-
-                case atDelete:
-                    caption = LoadStr(IDS_DELETE);
-                    break;
-                case atChangeCase:
-                    caption = LoadStr(IDS_CHANGECASE);
-                    break;
-                default:
-                    caption = "";
-                }
-                if (criteriaPtr != NULL && criteriaPtr->UseSpeedLimit)
-                    script->SetSpeedLimit(TRUE, criteriaPtr->SpeedLimit);
-                char captionBuf[50];
-                lstrcpyn(captionBuf, caption, 50); // otherwise the LoadStr buffer gets overwritten before being copied to the dialog's local buffer
-                caption = captionBuf;
-                HWND hFocusedWnd = GetFocus();
-                CreateSafeWaitWindow(LoadStr(IDS_ANALYSINGDIRTREEESC), NULL, 1000, TRUE, MainWindow->HWindow);
-                MainWindow->StartAnimate(); // example usage
-                EnableWindow(MainWindow->HWindow, FALSE);
-
-                HCURSOR oldCur = SetCursor(LoadCursor(NULL, IDC_WAIT));
-
-                script->InvertRecycleBin = invertRecycleBin;
-                script->CanUseRecycleBin = canUseRecycleBin;
-
-                char* auxTargetPath = NULL;
-                if (type == atCopy || type == atMove)
-                    auxTargetPath = path;
-                BOOL res2 = BuildScriptMain(script, type, auxTargetPath, mask, count, indexes,
-                                            f, NULL, &changeCaseData, countSizeMode != 0,
-                                            criteriaPtr);
-                // if there's nothing to do, don't show the progress dialog
-                BOOL emptyScript = script->Count == 0 && type != atCountSize;
-
-                // swapped to allow activation of the main window (must not be disabled), otherwise it switches to another app
-                EnableWindow(MainWindow->HWindow, TRUE);
-                DestroySafeWaitWindow();
-                if (type == atCountSize) // additional directory sizes have been calculated
-                {
-                    // resort if we counted more than one selected directory or all directories
-                    if (((countSizeMode == 0 && dirs > 1) || countSizeMode == 2) && SortType == stSize)
-                    {
-                        ChangeSortType(stSize, FALSE, TRUE);
-                    }
-
-                    //            DirectorySizesHolder.Store(this); // store directory names and sizes
-
-                    RefreshListBox(-1, -1, FocusedIndex, FALSE, FALSE); // recalculate column widths
-                }
-
-                // if Salamander is active, call SetFocus on the remembered window (SetFocus doesn't work
-                // when the main window is disabled - after deactivating/activating the disabled main window the active panel
-                // doesn't have focus)
-                HWND hwnd = GetForegroundWindow();
-                while (hwnd != NULL && hwnd != MainWindow->HWindow)
-                    hwnd = GetParent(hwnd);
-                if (hwnd == MainWindow->HWindow)
-                    SetFocus(hFocusedWnd);
-
-                SetCursor(oldCur);
-
-                BOOL cancel = FALSE;
-                if (!emptyScript && res2 && (type == atCopy || type == atMove))
-                {
-                    BOOL occupiedSpTooBig = script->OccupiedSpace != CQuadWord(0, 0) &&
-                                            script->BytesPerCluster != 0 && // we have disk information
-                                            script->OccupiedSpace > script->FreeSpace &&
-                                            !IsSambaDrivePath(path); // Samba returns bogus cluster size, so we can only rely on TotalFileSize
-
-                    if (occupiedSpTooBig ||
-                        script->BytesPerCluster != 0 && // we have disk information
-                            script->TotalFileSize > script->FreeSpace)
-                    {
-                        char buf1[50];
-                        char buf2[50];
-                        char buf3[200];
-                        sprintf(buf3, LoadStr(IDS_NOTENOUGHSPACE),
-                                NumberToStr(buf1, occupiedSpTooBig ? script->OccupiedSpace : script->TotalFileSize),
-                                NumberToStr(buf2, script->FreeSpace));
-                        cancel = SalMessageBox(HWindow, buf3,
-                                               caption, MB_YESNO | MB_ICONQUESTION | MSGBOXEX_ESCAPEENABLED) != IDYES;
-                    }
-                }
-
-                if (!cancel)
-                {
-                    // prepare refresh of directories that aren't auto-refreshed
-                    if (!emptyScript && type != atCountSize)
-                    {
-                        if (type == atDelete || type == atChangeCase || type == atMove)
-                        {
-                            // change in the directory displayed in the panel and its subdirectories
-                            script->SetWorkPath1(GetPath(), TRUE);
-                        }
-                        if (type == atCopy)
-                        {
-                            // change in the target directory and its subdirectories
-                            script->SetWorkPath1(path, TRUE);
-                        }
-                        if (type == atMove)
-                        {
-                            // change in the target directory and its subdirectories
-                            script->SetWorkPath2(path, TRUE);
-                        }
-                    }
-
-                    if (!emptyScript &&
-                        (!res2 || type == atCountSize ||
-                         !StartProgressDialog(script, caption, NULL, NULL)))
-                    {
-                        if (res2 && type == atCountSize && countSizeMode == 0)
-                        {
-                            CSizeResultsDlg result(MainWindow->HWindow, script->TotalSize,
-                                                   script->CompressedSize, script->OccupiedSpace,
-                                                   script->FilesCount, script->DirsCount,
-                                                   &script->Sizes);
-                            result.Execute();
-                        }
                         else
-                            UpdateWindow(MainWindow->HWindow);
-                        if (!script->IsGood())
-                            script->ResetState();
-                        FreeScript(script);
-                    }
-                    else // removing selected index
-                    {
-                        if (res2)
                         {
-                            SetSel(FALSE, -1, TRUE);                        // explicit redraw
-                            PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
-                        }
-                        if (!emptyScript && nextFocus[0] != 0)
-                        {
-                            strcpy(NextFocusName, nextFocus);
-                            DontClearNextFocusName = TRUE;
-                            if (type == atCopy && copyToExistingDir)
-                            { // when copying to a directory, it's necessary (RefreshDirectory might not happen)
-                                PostMessage(HWindow, WM_USER_DONEXTFOCUS, 0, 0);
+                            if (pathType == PATH_TYPE_FS) // file-system path
+                            {
+                                if (strlen(secondPart) >= MAX_PATH) // is the user part of the FS path too long?
+                                {
+                                    SalMessageBox(HWindow, LoadStr(IDS_TOOLONGPATH),
+                                                  (type == atCopy) ? LoadStr(IDS_ERRORCOPY) : LoadStr(IDS_ERRORMOVE),
+                                                  MB_OK | MB_ICONEXCLAMATION);
+                                    continue;
+                                }
+
+                                if (criteriaPtr != NULL && Configuration.CnfrmCopyMoveOptionsNS) // file systems don't support options from the Copy/Move dialog
+                                {
+                                    MSGBOXEX_PARAMS params;
+                                    memset(&params, 0, sizeof(params));
+                                    params.HParent = HWindow;
+                                    params.Flags = MB_OK | MB_ICONINFORMATION | MSGBOXEX_HINT;
+                                    params.Caption = LoadStr(IDS_INFOTITLE);
+                                    params.Text = LoadStr(IDS_MOVECOPY_OPTIONS_NOTSUPPORTED);
+                                    params.CheckBoxText = LoadStr(IDS_MOVECOPY_OPTIONS_NOTSUPPORTED_AGAIN);
+                                    int dontShow = !Configuration.CnfrmCopyMoveOptionsNS;
+                                    params.CheckBoxValue = &dontShow;
+                                    SalMessageBoxEx(&params);
+                                    Configuration.CnfrmCopyMoveOptionsNS = !dontShow;
+                                }
+
+                                // prepare data to enumerate files and directories from the panel
+                                CPanelTmpEnumData data;
+                                int oneIndex = -1;
+                                int selFiles = 0;
+                                int selDirs = 0;
+                                if (count > 0) // some files are selected
+                                {
+                                    selFiles = files;
+                                    selDirs = count - files;
+                                    data.IndexesCount = count;
+                                    data.Indexes = indexes; // deallocated via 'indexes'
+                                }
+                                else // take the focused item
+                                {
+                                    oneIndex = GetCaretIndex();
+                                    if (oneIndex >= Dirs->Count)
+                                        selFiles = 1;
+                                    else
+                                        selDirs = 1;
+                                    data.IndexesCount = 1;
+                                    data.Indexes = &oneIndex; // not deallocated
+                                }
+                                data.CurrentIndex = 0;
+                                data.ZIPPath = GetZIPPath();
+                                data.Dirs = Dirs;
+                                data.Files = Files;
+                                data.ArchiveDir = GetArchiveDir();
+                                lstrcpyn(data.WorkPath, GetPath(), MAX_PATH);
+                                data.EnumLastDir = NULL;
+                                data.EnumLastIndex = -1;
+
+                                // obtain the file-system name
+                                char fsName[MAX_PATH];
+                                memcpy(fsName, path, (secondPart - path) - 1);
+                                fsName[(secondPart - path) - 1] = 0;
+
+                                // lower the thread priority to "normal" so the operation doesn't overload the machine
+                                SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
+
+                                // choose the FS that will perform the operation (order: active, detached, new)
+                                BOOL invalidPath = FALSE;
+                                BOOL unselect = FALSE;
+                                char targetPath[2 * MAX_PATH];
+                                CDetachedFSList* list = MainWindow->DetachedFSList;
+                                int i;
+                                for (i = -1; i < list->Count; i++)
+                                {
+                                    CPluginFSInterfaceEncapsulation* fs = NULL;
+                                    if (i == -1) // first try the active FS in the target panel
+                                    {
+                                        if (target->Is(ptPluginFS))
+                                            fs = target->GetPluginFS();
+                                    }
+                                    else
+                                        fs = list->At(i); // then detached FS
+
+                                    int fsNameIndex;
+                                    if (fs != NULL && fs->NotEmpty() &&                          // interface is valid
+                                        fs->IsFSNameFromSamePluginAsThisFS(fsName, fsNameIndex)) // the FS name comes from the same plugin (otherwise there's no point trying)
+                                    {
+                                        BOOL invalidPathOrCancel;
+                                        lstrcpyn(targetPath, path, 2 * MAX_PATH); // may even exceed 2 * MAX_PATH
+                                        // convert the path to internal format
+                                        fs->GetPluginInterfaceForFS()->ConvertPathToInternal(fsName, fsNameIndex,
+                                                                                             targetPath + strlen(fsName) + 1);
+                                        if (fs->CopyOrMoveFromDiskToFS(type == atCopy, 2, fs->GetPluginFSName(),
+                                                                       HWindow, GetPath(), PanelEnumDiskSelection, &data,
+                                                                       selFiles, selDirs, targetPath, &invalidPathOrCancel))
+                                        {
+                                            unselect = !invalidPathOrCancel;
+                                            break; // done
+                                        }
+                                        else // error
+                                        {
+                                            // before the next use we must reset it (so it enumerates from the beginning again)
+                                            data.Reset();
+
+                                            if (invalidPathOrCancel)
+                                            {
+                                                // convert the path to external format (before showing it in the dialog)
+                                                PluginFSConvertPathToExternal(targetPath);
+                                                strcpy(path, targetPath);
+                                                invalidPath = TRUE;
+                                                break; // we must go back to the copy/move dialog
+                                            }
+                                            // trying another FS
+                                        }
+                                    }
+                                }
+                                if (i == list->Count) // active and detached FS couldn't handle it, we will create a new FS
+                                {
+                                    int index;
+                                    int fsNameIndex;
+                                    if (Plugins.IsPluginFS(fsName, index, fsNameIndex)) // determine the plugin index
+                                    {
+                                        // obtain the plugin with the FS
+                                        CPluginData* plugin = Plugins.Get(index);
+                                        if (plugin != NULL)
+                                        {
+                                            // open a new FS
+                                            // load the plugin before obtaining DLLName, Version and plugin interfaces
+                                            CPluginFSInterfaceAbstract* auxFS = plugin->OpenFS(fsName, fsNameIndex);
+                                            CPluginFSInterfaceEncapsulation pluginFS(auxFS, plugin->DLLName, plugin->Version,
+                                                                                     plugin->GetPluginInterfaceForFS()->GetInterface(),
+                                                                                     plugin->GetPluginInterface()->GetInterface(),
+                                                                                     fsName, fsNameIndex, -1, 0, plugin->BuiltForVersion);
+                                            if (pluginFS.NotEmpty())
+                                            {
+                                                Plugins.SetWorkingPluginFS(&pluginFS);
+                                                BOOL invalidPathOrCancel;
+                                                lstrcpyn(targetPath, path, 2 * MAX_PATH); // may even exceed 2 * MAX_PATH
+                                                // convert the path to internal format
+                                                pluginFS.GetPluginInterfaceForFS()->ConvertPathToInternal(fsName, fsNameIndex,
+                                                                                                          targetPath + strlen(fsName) + 1);
+                                                if (pluginFS.CopyOrMoveFromDiskToFS(type == atCopy, 2,
+                                                                                    pluginFS.GetPluginFSName(),
+                                                                                    HWindow, GetPath(),
+                                                                                    PanelEnumDiskSelection, &data,
+                                                                                    selFiles, selDirs, targetPath,
+                                                                                    &invalidPathOrCancel))
+                                                { // done/cancel
+                                                    unselect = !invalidPathOrCancel;
+                                                }
+                                                else // syntax error/plugin error
+                                                {
+                                                    if (invalidPathOrCancel)
+                                                    {
+                                                        // convert the path to external format (before showing it in the dialog)
+                                                        PluginFSConvertPathToExternal(targetPath);
+                                                        strcpy(path, targetPath);
+                                                        invalidPath = TRUE; // we must go back to the Copy/Move dialog
+                                                    }
+                                                    else // plugin error (new FS but returns error 'the requested operation cannot be done in this FS')
+                                                    {
+                                                        TRACE_E("CopyOrMoveFromDiskToFS on new (empty) FS may not return error 'unable to process operation'.");
+                                                    }
+                                                }
+
+                                                pluginFS.ReleaseObject(HWindow);
+                                                plugin->GetPluginInterfaceForFS()->CloseFS(pluginFS.GetInterface());
+                                                Plugins.SetWorkingPluginFS(NULL);
+                                            }
+                                            else
+                                                TRACE_E("Plugin has refused to open FS (maybe it even does not start).");
+                                        }
+                                        else
+                                            TRACE_E("Unexpected situation in CFilesWindow::FilesAction() - unable to work with plugin.");
+                                    }
+                                    else
+                                    {
+                                        TRACE_E("Unexpected situation in CFilesWindow::FilesAction() - file-system " << fsName << " was not found.");
+                                    }
+                                }
+
+                                // raise the thread priority again, the operation has finished
+                                SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+                                SetCurrentDirectoryToSystem(); // in any case restore the current directory as well
+
+                                if (invalidPath)
+                                    continue; // back to the copy/move dialog
+
+                                if (unselect) // unselect files/directories in the panel
+                                {
+                                    SetSel(FALSE, -1, TRUE);                        // explicit redraw
+                                    PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
+                                }
+
+                                if (indexes != NULL)
+                                    delete[] (indexes);
+                                //---  if any Salamander window is active, suspend mode ends
+                                EndStopRefresh();
+                                EndSuspendMode();
+                                FilesActionInProgress = FALSE;
+                                return;
                             }
                         }
-                        if (emptyScript) // if the script is empty we must deallocate it
+                    }
+                }
+            }
+            break;
+        }
+
+        case atDelete:
+        {
+            if (Configuration.CnfrmFileDirDel && recycle != 1)
+            {                                                                                                           // ask only if requested and if we don't use the SHFileOperation API for deletion
+                HICON hIcon = (HICON)HANDLES(LoadImage(Shell32DLL, MAKEINTRESOURCE(WindowsVistaAndLater ? 16777 : 161), // delete icon
+                                                       IMAGE_ICON, 32, 32, IconLRFlags));
+                int myRes = CMessageBox(HWindow, MSGBOXEX_YESNO | MSGBOXEX_ESCAPEENABLED | MSGBOXEX_SILENT,
+                                        LoadStr(IDS_CONFIRM_DELETE_TITLE), &str, NULL,
+                                        NULL, hIcon, 0, NULL, NULL, NULL, NULL)
+                                .Execute();
+                HANDLES(DestroyIcon(hIcon));
+                res = (myRes == IDYES ? IDOK : IDCANCEL);
+                UpdateWindow(MainWindow->HWindow);
+            }
+            else
+                res = IDOK;
+            break;
+        }
+
+        case atCountSize:
+            res = IDOK;
+            break;
+
+        case atChangeCase:
+        {
+            CChangeCaseDlg dlg(HWindow, SelectionContainsDirectory());
+            res = (int)dlg.Execute();
+            UpdateWindow(MainWindow->HWindow);
+            changeCaseData.FileNameFormat = dlg.FileNameFormat;
+            changeCaseData.Change = dlg.Change;
+            changeCaseData.SubDirs = dlg.SubDirs;
+            break;
+        }
+        }
+        if (res == IDOK && // disk operation starts
+            CheckPath(TRUE) == ERROR_SUCCESS)
+        {
+            if (type == atDelete && recycle == 1)
+            {
+                if (DeleteThroughRecycleBin(indexes, count, f))
+                {
+                    SetSel(FALSE, -1, TRUE);                        // explicit redraw
+                    PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
+                    UpdateWindow(MainWindow->HWindow);
+                }
+
+                //---  refresh of directories that aren't auto-refreshed
+                // change in the directory displayed in the panel and its subdirectories
+                MainWindow->PostChangeOnPathNotification(GetPath(), TRUE);
+            }
+            else
+            {
+                COperations* script;
+                if (type == atCopy || type == atMove)
+                {
+                    if (count <= 1)
+                    {
+                        char format[300];
+                        sprintf(format, LoadStr(type == atCopy ? IDS_COPYDLGTITLE : IDS_MOVEDLGTITLE), expanded);
+                        sprintf(subject, format, formatedFileName);
+                    }
+                    else
+                        sprintf(subject, LoadStr(type == atCopy ? IDS_COPYDLGTITLE : IDS_MOVEDLGTITLE), expanded);
+                    script = new COperations(1000, 500, DupStr(subject), DupStr(GetPath()), DupStr(path));
+                }
+                else
+                    script = new COperations(1000, 500, NULL, NULL, NULL);
+                if (script == NULL)
+                    TRACE_E(LOW_MEMORY);
+                else
+                {
+                    const char* caption;
+                    switch (type)
+                    {
+                    case atCopy:
+                    {
+                        caption = LoadStr(IDS_COPY);
+                        script->ShowStatus = TRUE;
+                        script->IsCopyOperation = TRUE;
+                        script->IsCopyOrMoveOperation = TRUE;
+                        break;
+                    }
+
+                    case atMove:
+                    {
+                        BOOL sameRootPath = HasTheSameRootPath(GetPath(), path);
+                        script->SameRootButDiffVolume = sameRootPath && !HasTheSameRootPathAndVolume(GetPath(), path);
+                        script->ShowStatus = !sameRootPath || script->SameRootButDiffVolume;
+                        script->IsCopyOperation = FALSE;
+                        script->IsCopyOrMoveOperation = TRUE;
+                        caption = LoadStr(IDS_MOVE);
+                        break;
+                    }
+
+                    case atDelete:
+                        caption = LoadStr(IDS_DELETE);
+                        break;
+                    case atChangeCase:
+                        caption = LoadStr(IDS_CHANGECASE);
+                        break;
+                    default:
+                        caption = "";
+                    }
+                    if (criteriaPtr != NULL && criteriaPtr->UseSpeedLimit)
+                        script->SetSpeedLimit(TRUE, criteriaPtr->SpeedLimit);
+                    char captionBuf[50];
+                    lstrcpyn(captionBuf, caption, 50); // otherwise the LoadStr buffer gets overwritten before being copied to the dialog's local buffer
+                    caption = captionBuf;
+                    HWND hFocusedWnd = GetFocus();
+                    CreateSafeWaitWindow(LoadStr(IDS_ANALYSINGDIRTREEESC), NULL, 1000, TRUE, MainWindow->HWindow);
+                    MainWindow->StartAnimate(); // example usage
+                    EnableWindow(MainWindow->HWindow, FALSE);
+
+                    HCURSOR oldCur = SetCursor(LoadCursor(NULL, IDC_WAIT));
+
+                    script->InvertRecycleBin = invertRecycleBin;
+                    script->CanUseRecycleBin = canUseRecycleBin;
+
+                    char* auxTargetPath = NULL;
+                    if (type == atCopy || type == atMove)
+                        auxTargetPath = path;
+                    BOOL res2 = BuildScriptMain(script, type, auxTargetPath, mask, count, indexes,
+                                                f, NULL, &changeCaseData, countSizeMode != 0,
+                                                criteriaPtr);
+                    // if there's nothing to do, don't show the progress dialog
+                    BOOL emptyScript = script->Count == 0 && type != atCountSize;
+
+                    // swapped to allow activation of the main window (must not be disabled), otherwise it switches to another app
+                    EnableWindow(MainWindow->HWindow, TRUE);
+                    DestroySafeWaitWindow();
+                    if (type == atCountSize) // additional directory sizes have been calculated
+                    {
+                        // resort if we counted more than one selected directory or all directories
+                        if (((countSizeMode == 0 && dirs > 1) || countSizeMode == 2) && SortType == stSize)
                         {
+                            ChangeSortType(stSize, FALSE, TRUE);
+                        }
+
+                        //            DirectorySizesHolder.Store(this); // store directory names and sizes
+
+                        RefreshListBox(-1, -1, FocusedIndex, FALSE, FALSE); // recalculate column widths
+                    }
+
+                    // if Salamander is active, call SetFocus on the remembered window (SetFocus doesn't work
+                    // when the main window is disabled - after deactivating/activating the disabled main window the active panel
+                    // doesn't have focus)
+                    HWND hwnd = GetForegroundWindow();
+                    while (hwnd != NULL && hwnd != MainWindow->HWindow)
+                        hwnd = GetParent(hwnd);
+                    if (hwnd == MainWindow->HWindow)
+                        SetFocus(hFocusedWnd);
+
+                    SetCursor(oldCur);
+
+                    BOOL cancel = FALSE;
+                    if (!emptyScript && res2 && (type == atCopy || type == atMove))
+                    {
+                        BOOL occupiedSpTooBig = script->OccupiedSpace != CQuadWord(0, 0) &&
+                                                script->BytesPerCluster != 0 && // we have disk information
+                                                script->OccupiedSpace > script->FreeSpace &&
+                                                !IsSambaDrivePath(path); // Samba returns bogus cluster size, so we can only rely on TotalFileSize
+
+                        if (occupiedSpTooBig ||
+                            script->BytesPerCluster != 0 && // we have disk information
+                                script->TotalFileSize > script->FreeSpace)
+                        {
+                            char buf1[50];
+                            char buf2[50];
+                            char buf3[200];
+                            sprintf(buf3, LoadStr(IDS_NOTENOUGHSPACE),
+                                    NumberToStr(buf1, occupiedSpTooBig ? script->OccupiedSpace : script->TotalFileSize),
+                                    NumberToStr(buf2, script->FreeSpace));
+                            cancel = SalMessageBox(HWindow, buf3,
+                                                   caption, MB_YESNO | MB_ICONQUESTION | MSGBOXEX_ESCAPEENABLED) != IDYES;
+                        }
+                    }
+
+                    if (!cancel)
+                    {
+                        // prepare refresh of directories that aren't auto-refreshed
+                        if (!emptyScript && type != atCountSize)
+                        {
+                            if (type == atDelete || type == atChangeCase || type == atMove)
+                            {
+                                // change in the directory displayed in the panel and its subdirectories
+                                script->SetWorkPath1(GetPath(), TRUE);
+                            }
+                            if (type == atCopy)
+                            {
+                                // change in the target directory and its subdirectories
+                                script->SetWorkPath1(path, TRUE);
+                            }
+                            if (type == atMove)
+                            {
+                                // change in the target directory and its subdirectories
+                                script->SetWorkPath2(path, TRUE);
+                            }
+                        }
+
+                        if (!emptyScript &&
+                            (!res2 || type == atCountSize ||
+                             !StartProgressDialog(script, caption, NULL, NULL)))
+                        {
+                            if (res2 && type == atCountSize && countSizeMode == 0)
+                            {
+                                CSizeResultsDlg result(MainWindow->HWindow, script->TotalSize,
+                                                       script->CompressedSize, script->OccupiedSpace,
+                                                       script->FilesCount, script->DirsCount,
+                                                       &script->Sizes);
+                                result.Execute();
+                            }
+                            else
+                                UpdateWindow(MainWindow->HWindow);
                             if (!script->IsGood())
                                 script->ResetState();
                             FreeScript(script);
                         }
-                        UpdateWindow(MainWindow->HWindow);
+                        else // removing selected index
+                        {
+                            if (res2)
+                            {
+                                SetSel(FALSE, -1, TRUE);                        // explicit redraw
+                                PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
+                            }
+                            if (!emptyScript && nextFocus[0] != 0)
+                            {
+                                strcpy(NextFocusName, nextFocus);
+                                DontClearNextFocusName = TRUE;
+                                if (type == atCopy && copyToExistingDir)
+                                { // when copying to a directory, it's necessary (RefreshDirectory might not happen)
+                                    PostMessage(HWindow, WM_USER_DONEXTFOCUS, 0, 0);
+                                }
+                            }
+                            if (emptyScript) // if the script is empty we must deallocate it
+                            {
+                                if (!script->IsGood())
+                                    script->ResetState();
+                                FreeScript(script);
+                            }
+                            UpdateWindow(MainWindow->HWindow);
+                        }
                     }
+                    else
+                    {
+                        if (!script->IsGood())
+                            script->ResetState();
+                        FreeScript(script);
+                    }
+                    MainWindow->StopAnimate(); // example usage
                 }
-                else
-                {
-                    if (!script->IsGood())
-                        script->ResetState();
-                    FreeScript(script);
-                }
-                MainWindow->StopAnimate(); // example usage
             }
         }
+        //---
+        if (indexes != NULL)
+            delete[] (indexes);
+        //---  if any Salamander window is active, suspend mode ends
+        EndStopRefresh();
+        EndSuspendMode();
+        FilesActionInProgress = FALSE;
     }
-    //---
-    if (indexes != NULL)
-        delete[] (indexes);
-    //---  if any Salamander window is active, suspend mode ends
-    EndStopRefresh();
-    EndSuspendMode();
-    FilesActionInProgress = FALSE;
-}
 }
 
 // extracts all subdirectories from 'path' and calls itself recursively

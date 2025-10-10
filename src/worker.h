@@ -183,6 +183,7 @@ public:
 
     // called after a portion of data has been transferred; 'count' is the number of bytes and 'time'
     // is the transfer time; 'maxPacketSize' is the largest expected block size for upcoming BytesReceived() calls
+    void BytesReceived(DWORD count, DWORD time, DWORD maxPacketSize);
 };
 
 enum COperationCode

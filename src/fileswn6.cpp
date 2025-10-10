@@ -1863,6 +1863,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                         (adsWinError != ERROR_INVALID_PARAMETER && adsWinError != ERROR_NO_MORE_ITEMS ||
                          !sourcePathIsNet)) // mounted FAT/FAT32 disk cannot be detected on a network drive (e.g. \petr\f\drive_c) plus a Novell NetWare volume browsed via NDS - we think it is NTFS and thus try to read ADS, which reports this error
                     {
+                        if ((sourceDirAttr & FILE_ATTRIBUTE_REPARSE_POINT) == 0) // it's not a link (for a link, the content does not have to be copied)
                         {
                             // first we try whether an error occurs even when listing the directory - such an error
                             // the user understands it more easily, so we show it first (before the ADS read error)
@@ -2380,37 +2381,38 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                     return FALSE;
             }
             if (!skipTooLongSrcNameErr)
+            {
                 op.TargetName = NULL;
+                script->Add(op);
+                if (!script->IsGood())
+                {
+                    script->ResetState();
+                    free(op.SourceName);
+                    return FALSE;
+                }
+            }
+        }
+
+        // if necessary, store a label to skip directory creation
+        if (type == atCopy || type == atMove)
+        {
+            op.Opcode = ocLabelForSkipOfCreateDir;
+            op.OpFlags = 0;
+            op.Size.SetUI64(0);
+            CQuadWord dirSize = script->TotalFileSize - dirStartTotalFileSize;
+            op.SourceName = (char*)(DWORD_PTR)dirSize.LoDWord;
+            op.TargetName = (char*)(DWORD_PTR)dirSize.HiDWord;
+            op.Attr = createDirIndex;
+
             script->Add(op);
             if (!script->IsGood())
             {
                 script->ResetState();
-                free(op.SourceName);
                 return FALSE;
             }
         }
     }
-
-    // if necessary, store a label to skip directory creation
-    if (type == atCopy || type == atMove)
-    {
-        op.Opcode = ocLabelForSkipOfCreateDir;
-        op.OpFlags = 0;
-        op.Size.SetUI64(0);
-        CQuadWord dirSize = script->TotalFileSize - dirStartTotalFileSize;
-        op.SourceName = (char*)(DWORD_PTR)dirSize.LoDWord;
-        op.TargetName = (char*)(DWORD_PTR)dirSize.HiDWord;
-        op.Attr = createDirIndex;
-
-        script->Add(op);
-        if (!script->IsGood())
-        {
-            script->ResetState();
-            return FALSE;
-        }
-    }
-}
-return TRUE;
+    return TRUE;
 }
 
 BOOL GetLinkTgtFileSize(HWND parent, const char* fileName, COperation* op, CQuadWord* size,
@@ -2610,8 +2612,10 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                         HANDLES(FindClose(find));
 
                         const char* tgtName = SalPathFindFileName(op.TargetName);
-                        // if it is not just a DOS-name match (that would change the DOS-name instead of overwriting)
+                        if (StrICmp(tgtName, dataOut.cFileName) == 0 &&                 // if it is not just a DOS-name match (that would change the DOS-name instead of overwriting)
                             (dataOut.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) // if it is not a directory (overwrite older cannot handle directories)
+                        {
+                            // truncate timestamps to seconds (different FSs store timestamps with different precision, so there were "differences" even between "identical" times)
                             FILETIME roundedInTime;
                             *(unsigned __int64*)&roundedInTime = *(unsigned __int64*)fileLastWriteTime - (*(unsigned __int64*)fileLastWriteTime % 10000000);
                             *(unsigned __int64*)&dataOut.ftLastWriteTime = *(unsigned __int64*)&dataOut.ftLastWriteTime - (*(unsigned __int64*)&dataOut.ftLastWriteTime % 10000000);
@@ -2623,178 +2627,91 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                                 return TRUE;
                             }
                             op.OpFlags |= OPFL_OVERWROLDERALRTESTED;
+                        }
                     }
                 }
             }
-        }
 
-        // links: fileSizeLoc == 0, the file size must be obtained later via GetLinkTgtFileSize()
-        if ((sourceFileAttr & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
-        {
-            BOOL cancel;
-            CQuadWord size;
-            if (GetLinkTgtFileSize(HWindow, NULL, &op, &size, &cancel, &ErrGetFileSizeOfLnkTgtIgnAll))
+            // links: fileSizeLoc == 0, the file size must be obtained later via GetLinkTgtFileSize()
+            if ((sourceFileAttr & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
             {
-                fileSizeLoc = size;
-                op.FileSize = fileSizeLoc;
-
-                // we have a new file size, we must address this again:
-                // file too big for FAT32 (warn the user the operation will likely fail)
-                if (targetPathIsFAT32 && fileSizeLoc > CQuadWord(0xFFFFFFFF /* 4GB minus 1 Byte */, 0))
+                BOOL cancel;
+                CQuadWord size;
+                if (GetLinkTgtFileSize(HWindow, NULL, &op, &size, &cancel, &ErrGetFileSizeOfLnkTgtIgnAll))
                 {
-                    free(op.TargetName);
-                    op.TargetName = NULL;
+                    fileSizeLoc = size;
+                    op.FileSize = fileSizeLoc;
 
-                    goto FAT_TOO_BIG_FILE;
-                }
-            }
-            if (cancel)
-                return FALSE;
-        }
-
-        if (fileSizeLoc >= COPY_MIN_FILE_SIZE)
-            op.Size = fileSizeLoc;
-        else
-            op.Size = COPY_MIN_FILE_SIZE; // zero/small files take at least as long as files of size COPY_MIN_FILE_SIZE
-
-        if (sourcePathSupADS &&                       // if we may find ADS and
-            (targetPathSupADS || !ConfirmADSLossAll)) // if ADS should not be ignored
-        {
-            CQuadWord adsSize;
-            CQuadWord adsOccupiedSpace;
-            DWORD adsWinError;
-            BOOL onlyDiscardableStreams;
-
-        READFILEADS_AGAIN:
-
-            if (!invalidSrcName &&
-                CheckFileOrDirADS(op.SourceName, FALSE, &adsSize, NULL, NULL, NULL, &adsWinError,
-                                  script->BytesPerCluster, &adsOccupiedSpace,
-                                  &onlyDiscardableStreams))
-            { // the source file has ADS, they must be copied to the target file
-                if (targetPathSupADS)
-                {
-                    op.OpFlags |= OPFL_COPY_ADS;
-                    op.Size += adsSize;
-                    script->OccupiedSpace += adsOccupiedSpace;
-                    script->TotalFileSize += adsSize;
-                }
-                else // copying to a non-NTFS filesystem (prompt about discarding ADS)
-                {
-                    int res;
-                    if (ConfirmADSLossAll || onlyDiscardableStreams)
-                        res = IDYES;
-                    else
+                    // we have a new file size, we must address this again:
+                    // file too big for FAT32 (warn the user the operation will likely fail)
+                    if (targetPathIsFAT32 && fileSizeLoc > CQuadWord(0xFFFFFFFF /* 4GB minus 1 Byte */, 0))
                     {
-                        if (ConfirmADSLossSkipAll)
-                            res = IDB_SKIP;
+                        free(op.TargetName);
+                        op.TargetName = NULL;
+
+                        goto FAT_TOO_BIG_FILE;
+                    }
+                }
+                if (cancel)
+                    return FALSE;
+            }
+
+            if (fileSizeLoc >= COPY_MIN_FILE_SIZE)
+                op.Size = fileSizeLoc;
+            else
+                op.Size = COPY_MIN_FILE_SIZE; // zero/small files take at least as long as files of size COPY_MIN_FILE_SIZE
+
+            if (sourcePathSupADS &&                       // if we may find ADS and
+                (targetPathSupADS || !ConfirmADSLossAll)) // if ADS should not be ignored
+            {
+                CQuadWord adsSize;
+                CQuadWord adsOccupiedSpace;
+                DWORD adsWinError;
+                BOOL onlyDiscardableStreams;
+
+            READFILEADS_AGAIN:
+
+                if (!invalidSrcName &&
+                    CheckFileOrDirADS(op.SourceName, FALSE, &adsSize, NULL, NULL, NULL, &adsWinError,
+                                      script->BytesPerCluster, &adsOccupiedSpace,
+                                      &onlyDiscardableStreams))
+                { // the source file has ADS, they must be copied to the target file
+                    if (targetPathSupADS)
+                    {
+                        op.OpFlags |= OPFL_COPY_ADS;
+                        op.Size += adsSize;
+                        script->OccupiedSpace += adsOccupiedSpace;
+                        script->TotalFileSize += adsSize;
+                    }
+                    else // copying to a non-NTFS filesystem (prompt about discarding ADS)
+                    {
+                        int res;
+                        if (ConfirmADSLossAll || onlyDiscardableStreams)
+                            res = IDYES;
                         else
                         {
-                            GetADSStreamsNames(ADSStreamsGlobalBuf, 5000, op.SourceName, FALSE);
-                            if (ADSStreamsGlobalBuf[0] == 0)
-                                res = IDYES;
+                            if (ConfirmADSLossSkipAll)
+                                res = IDB_SKIP;
                             else
                             {
-                                res = (int)CConfirmADSLossDlg(HWindow, TRUE, op.SourceName, ADSStreamsGlobalBuf, type == atMove).Execute();
+                                GetADSStreamsNames(ADSStreamsGlobalBuf, 5000, op.SourceName, FALSE);
+                                if (ADSStreamsGlobalBuf[0] == 0)
+                                    res = IDYES;
+                                else
+                                {
+                                    res = (int)CConfirmADSLossDlg(HWindow, TRUE, op.SourceName, ADSStreamsGlobalBuf, type == atMove).Execute();
+                                }
                             }
                         }
-                    }
-                    switch (res)
-                    {
-                    case IDB_ALL:
-                        ConfirmADSLossAll = TRUE; // intentional fallthrough
-                    case IDYES:
-                        break; // we will ignore ADS, so they won't be copied/moved (they will be completely lost)
-
-                    case IDB_SKIPALL:
-                        ConfirmADSLossSkipAll = TRUE; // intentional fallthrough
-                    case IDB_SKIP:
-                    {
-                        free(op.SourceName);
-                        free(op.TargetName);
-                        return TRUE;
-                    }
-
-                    case IDCANCEL:
-                    {
-                        free(op.SourceName);
-                        free(op.TargetName);
-                        return FALSE;
-                    }
-                    }
-                }
-            }
-            else // an error occurred or no ADS
-            {
-                if (invalidSrcName ||
-                    adsWinError != NO_ERROR &&                                                                           // an error occurred
-                        (adsWinError != ERROR_INVALID_FUNCTION || StrNICmp(op.SourceName, "\\\\tsclient\\", 11) != 0) && // paths to local disks in Terminal Server do not support listing ADS (even though ADS is otherwise supported)
-                        (adsWinError != ERROR_INVALID_PARAMETER && adsWinError != ERROR_NO_MORE_ITEMS ||
-                         (srcAndTgtPathsFlags & OPFL_SRCPATH_IS_NET) == 0)) // mounted FAT/FAT32 disk cannot be detected on a network drive (e.g. \petr\f\drive_c) plus a Novell NetWare volume browsed via NDS - we think it is NTFS and thus try to read ADS, which reports this error
-                {
-                    // first we try whether an error occurs when opening the file - such an error
-                    // the user understands it more easily, so we show it first (before the ADS read error)
-                    HANDLE in;
-                    if (!invalidSrcName)
-                    {
-                        in = HANDLES_Q(CreateFile(op.SourceName, GENERIC_READ,
-                                                  FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
-                                                  OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL));
-                    }
-                    else
-                    {
-                        in = INVALID_HANDLE_VALUE;
-                    }
-                    if (!invalidSrcName && in != INVALID_HANDLE_VALUE) // opening the file succeeded, report an ADS error
-                    {
-                        HANDLES(CloseHandle(in));
-
-                        int res;
-                        if (ErrReadingADSIgnoreAll)
-                            res = IDB_IGNORE;
-                        else
-                        {
-                            res = (int)CErrorReadingADSDlg(HWindow, op.SourceName, GetErrorText(adsWinError)).Execute();
-                        }
                         switch (res)
                         {
-                        case IDRETRY:
-                            goto READFILEADS_AGAIN;
-
-                        case IDB_IGNOREALL:
-                            ErrReadingADSIgnoreAll = TRUE; // intentional fallthrough
-                        case IDB_IGNORE:
-                            break;
-
-                        case IDCANCEL:
-                        {
-                            free(op.SourceName);
-                            free(op.TargetName);
-                            return FALSE;
-                        }
-                        }
-                    }
-                    else // report a file open error
-                    {
-                        DWORD err = GetLastError();
-                        if (invalidSrcName)
-                            err = ERROR_INVALID_NAME;
-                        int res;
-                        if (ErrFileSkipAll)
-                            res = IDB_SKIP;
-                        else
-                        {
-                            res = (int)CFileErrorDlg(HWindow, LoadStr(IDS_ERROROPENINGFILE), op.SourceName,
-                                                     GetErrorText(err))
-                                      .Execute();
-                        }
-                        switch (res)
-                        {
-                        case IDRETRY:
-                            goto READFILEADS_AGAIN;
+                        case IDB_ALL:
+                            ConfirmADSLossAll = TRUE; // intentional fallthrough
+                        case IDYES:
+                            break; // we will ignore ADS, so they won't be copied/moved (they will be completely lost)
 
                         case IDB_SKIPALL:
-                            ErrFileSkipAll = TRUE; // intentional fallthrough
+                            ConfirmADSLossSkipAll = TRUE; // intentional fallthrough
                         case IDB_SKIP:
                         {
                             free(op.SourceName);
@@ -2811,18 +2728,105 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                         }
                     }
                 }
-            }
-        }
+                else // an error occurred or no ADS
+                {
+                    if (invalidSrcName ||
+                        adsWinError != NO_ERROR &&                                                                           // an error occurred
+                            (adsWinError != ERROR_INVALID_FUNCTION || StrNICmp(op.SourceName, "\\\\tsclient\\", 11) != 0) && // paths to local disks in Terminal Server do not support listing ADS (even though ADS is otherwise supported)
+                            (adsWinError != ERROR_INVALID_PARAMETER && adsWinError != ERROR_NO_MORE_ITEMS ||
+                             (srcAndTgtPathsFlags & OPFL_SRCPATH_IS_NET) == 0)) // mounted FAT/FAT32 disk cannot be detected on a network drive (e.g. \petr\f\drive_c) plus a Novell NetWare volume browsed via NDS - we think it is NTFS and thus try to read ADS, which reports this error
+                    {
+                        // first we try whether an error occurs when opening the file - such an error
+                        // the user understands it more easily, so we show it first (before the ADS read error)
+                        HANDLE in;
+                        if (!invalidSrcName)
+                        {
+                            in = HANDLES_Q(CreateFile(op.SourceName, GENERIC_READ,
+                                                      FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                                                      OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL));
+                        }
+                        else
+                        {
+                            in = INVALID_HANDLE_VALUE;
+                        }
+                        if (!invalidSrcName && in != INVALID_HANDLE_VALUE) // opening the file succeeded, report an ADS error
+                        {
+                            HANDLES(CloseHandle(in));
 
-        if (script->BytesPerCluster == 0)
-            TRACE_E("How is it possible that script->BytesPerCluster is not yet set???");
-        else
-        {
-            script->OccupiedSpace += fileSizeLoc - ((fileSizeLoc - CQuadWord(1, 0)) % CQuadWord(script->BytesPerCluster, 0)) +
-                                     CQuadWord(script->BytesPerCluster - 1, 0);
+                            int res;
+                            if (ErrReadingADSIgnoreAll)
+                                res = IDB_IGNORE;
+                            else
+                            {
+                                res = (int)CErrorReadingADSDlg(HWindow, op.SourceName, GetErrorText(adsWinError)).Execute();
+                            }
+                            switch (res)
+                            {
+                            case IDRETRY:
+                                goto READFILEADS_AGAIN;
+
+                            case IDB_IGNOREALL:
+                                ErrReadingADSIgnoreAll = TRUE; // intentional fallthrough
+                            case IDB_IGNORE:
+                                break;
+
+                            case IDCANCEL:
+                            {
+                                free(op.SourceName);
+                                free(op.TargetName);
+                                return FALSE;
+                            }
+                            }
+                        }
+                        else // report a file open error
+                        {
+                            DWORD err = GetLastError();
+                            if (invalidSrcName)
+                                err = ERROR_INVALID_NAME;
+                            int res;
+                            if (ErrFileSkipAll)
+                                res = IDB_SKIP;
+                            else
+                            {
+                                res = (int)CFileErrorDlg(HWindow, LoadStr(IDS_ERROROPENINGFILE), op.SourceName,
+                                                         GetErrorText(err))
+                                          .Execute();
+                            }
+                            switch (res)
+                            {
+                            case IDRETRY:
+                                goto READFILEADS_AGAIN;
+
+                            case IDB_SKIPALL:
+                                ErrFileSkipAll = TRUE; // intentional fallthrough
+                            case IDB_SKIP:
+                            {
+                                free(op.SourceName);
+                                free(op.TargetName);
+                                return TRUE;
+                            }
+
+                            case IDCANCEL:
+                            {
+                                free(op.SourceName);
+                                free(op.TargetName);
+                                return FALSE;
+                            }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (script->BytesPerCluster == 0)
+                TRACE_E("How is it possible that script->BytesPerCluster is not yet set???");
+            else
+            {
+                script->OccupiedSpace += fileSizeLoc - ((fileSizeLoc - CQuadWord(1, 0)) % CQuadWord(script->BytesPerCluster, 0)) +
+                                         CQuadWord(script->BytesPerCluster - 1, 0);
+            }
+            script->TotalFileSize += fileSizeLoc;
         }
-        script->TotalFileSize += fileSizeLoc;
-    }
         else
         {
             op.Size = MOVE_FILE_SIZE;
@@ -2842,196 +2846,196 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
             return TRUE;
     }
 
-case atDelete:
-{
-    op.Opcode = ocDeleteFile;
-    op.OpFlags = 0;
-    op.Size = DELETE_FILE_SIZE;
-    op.Attr = sourceFileAttr;
-    BOOL skip;
-    if ((op.SourceName = BuildName(sourcePath, fileName, fileDOSName, &skip,
-                                   &ErrTooLongNameSkipAll, sourcePath)) == NULL)
+    case atDelete:
     {
-        return skip;
-    }
-    op.TargetName = NULL;
-    script->Add(op);
-    if (!script->IsGood())
-    {
-        script->ResetState();
-        free(op.SourceName);
-        return FALSE;
-    }
-    else
-        return TRUE;
-}
-
-case atCountSize:
-{
-    if (script->BytesPerCluster == 0) // no space-estimate risk
-    {
-        DWORD d1, d2, d3, d4;
-        if (MyGetDiskFreeSpace(sourcePath, &d1, &d2, &d3, &d4))
-            script->BytesPerCluster = d1 * d2;
+        op.Opcode = ocDeleteFile;
+        op.OpFlags = 0;
+        op.Size = DELETE_FILE_SIZE;
+        op.Attr = sourceFileAttr;
+        BOOL skip;
+        if ((op.SourceName = BuildName(sourcePath, fileName, fileDOSName, &skip,
+                                       &ErrTooLongNameSkipAll, sourcePath)) == NULL)
+        {
+            return skip;
+        }
+        op.TargetName = NULL;
+        script->Add(op);
+        if (!script->IsGood())
+        {
+            script->ResetState();
+            free(op.SourceName);
+            return FALSE;
+        }
+        else
+            return TRUE;
     }
 
-    char name[2 * MAX_PATH]; // + MAX_PATH reserve (Windows make paths longer than MAX_PATH)
-    int l = (int)strlen(sourcePath);
-    memmove(name, sourcePath, l);
-    if (name[l - 1] != '\\')
-        name[l++] = '\\';
-    memmove(name + l, fileName, 1 + strlen(fileName)); // name is always < MAX_PATH
-    CQuadWord s;
-    DWORD err = NO_ERROR;
-    if (FileBasedCompression && !onlySize &&                                         // if compression is possible at all
-        (sourceFileAttr & (FILE_ATTRIBUTE_COMPRESSED | FILE_ATTRIBUTE_SPARSE_FILE))) // if the file is compressed or sparse (sparse file)
+    case atCountSize:
     {
-        s.LoDWord = GetCompressedFileSize(name, &s.HiDWord);
-        err = GetLastError();
-        if (err == ERROR_FILE_NOT_FOUND && fileDOSName != NULL && strcmp(fileName, fileDOSName) != 0)
-        {                                                            // workaround for computing the size of a file that must be accessed via DOS-name when we can't handle the UNICODE name (the multibyte version converted back to UNICODE doesn't match the original file name)
-            memmove(name + l, fileDOSName, 1 + strlen(fileDOSName)); // name is always < MAX_PATH
+        if (script->BytesPerCluster == 0) // no space-estimate risk
+        {
+            DWORD d1, d2, d3, d4;
+            if (MyGetDiskFreeSpace(sourcePath, &d1, &d2, &d3, &d4))
+                script->BytesPerCluster = d1 * d2;
+        }
+
+        char name[2 * MAX_PATH]; // + MAX_PATH reserve (Windows make paths longer than MAX_PATH)
+        int l = (int)strlen(sourcePath);
+        memmove(name, sourcePath, l);
+        if (name[l - 1] != '\\')
+            name[l++] = '\\';
+        memmove(name + l, fileName, 1 + strlen(fileName)); // name is always < MAX_PATH
+        CQuadWord s;
+        DWORD err = NO_ERROR;
+        if (FileBasedCompression && !onlySize &&                                         // if compression is possible at all
+            (sourceFileAttr & (FILE_ATTRIBUTE_COMPRESSED | FILE_ATTRIBUTE_SPARSE_FILE))) // if the file is compressed or sparse (sparse file)
+        {
             s.LoDWord = GetCompressedFileSize(name, &s.HiDWord);
             err = GetLastError();
-            if (s.LoDWord == 0xFFFFFFFF && err != NO_ERROR)
-                memmove(name + l, fileName, 1 + strlen(fileName)); // (name is always < MAX_PATH - in case of error, the report will use the full name instead of the DOS name
+            if (err == ERROR_FILE_NOT_FOUND && fileDOSName != NULL && strcmp(fileName, fileDOSName) != 0)
+            {                                                            // workaround for computing the size of a file that must be accessed via DOS-name when we can't handle the UNICODE name (the multibyte version converted back to UNICODE doesn't match the original file name)
+                memmove(name + l, fileDOSName, 1 + strlen(fileDOSName)); // name is always < MAX_PATH
+                s.LoDWord = GetCompressedFileSize(name, &s.HiDWord);
+                err = GetLastError();
+                if (s.LoDWord == 0xFFFFFFFF && err != NO_ERROR)
+                    memmove(name + l, fileName, 1 + strlen(fileName)); // (name is always < MAX_PATH - in case of error, the report will use the full name instead of the DOS name
+            }
         }
-    }
-    else
-    {
-        s = fileSizeLoc;
-    }
-    if (s.LoDWord == 0xFFFFFFFF && err != NO_ERROR)
-    {
-        if (!script->SkipAllCountSizeErrors)
+        else
         {
-            sprintf(message, LoadStr(IDS_GETCOMPRFILESIZEERROR), name, GetErrorText(err));
-            script->SkipAllCountSizeErrors = SalMessageBox(HWindow, message, LoadStr(IDS_ERRORTITLE),
-                                                           MB_YESNO | MB_ICONEXCLAMATION) == IDYES;
-            UpdateWindow(MainWindow->HWindow);
+            s = fileSizeLoc;
         }
-        s = fileSizeLoc; // compressed size unavailable; fall back to the normal size
-    }
+        if (s.LoDWord == 0xFFFFFFFF && err != NO_ERROR)
+        {
+            if (!script->SkipAllCountSizeErrors)
+            {
+                sprintf(message, LoadStr(IDS_GETCOMPRFILESIZEERROR), name, GetErrorText(err));
+                script->SkipAllCountSizeErrors = SalMessageBox(HWindow, message, LoadStr(IDS_ERRORTITLE),
+                                                               MB_YESNO | MB_ICONEXCLAMATION) == IDYES;
+                UpdateWindow(MainWindow->HWindow);
+            }
+            s = fileSizeLoc; // compressed size unavailable; fall back to the normal size
+        }
 
-    script->Sizes.Add(fileSizeLoc); // the output dialog is prepared for the case when this array is in an error state
-    script->TotalSize += fileSizeLoc;
-    if (script->BytesPerCluster != 0)
-    {
-        script->OccupiedSpace += s - ((s - CQuadWord(1, 0)) % CQuadWord(script->BytesPerCluster, 0)) +
-                                 CQuadWord(script->BytesPerCluster - 1, 0);
-    }
-    else
-    {
-        script->OccupiedSpace += s;
-    }
-    script->TotalFileSize += s;
-    script->CompressedSize += s;
+        script->Sizes.Add(fileSizeLoc); // the output dialog is prepared for the case when this array is in an error state
+        script->TotalSize += fileSizeLoc;
+        if (script->BytesPerCluster != 0)
+        {
+            script->OccupiedSpace += s - ((s - CQuadWord(1, 0)) % CQuadWord(script->BytesPerCluster, 0)) +
+                                     CQuadWord(script->BytesPerCluster - 1, 0);
+        }
+        else
+        {
+            script->OccupiedSpace += s;
+        }
+        script->TotalFileSize += s;
+        script->CompressedSize += s;
 
-    return TRUE;
-}
-
-case atRecursiveConvert:
-case atConvert:
-{
-    op.Opcode = ocConvert;
-    op.OpFlags = 0;
-    op.Attr = sourceFileAttr;
-    BOOL skip;
-    if ((op.SourceName = BuildName(sourcePath, fileName, NULL, &skip,
-                                   &ErrTooLongNameSkipAll, sourcePath)) == NULL)
-    {
-        return skip;
-    }
-    op.TargetName = NULL;
-
-    // links: fileSizeLoc == 0, the file size must be obtained later via GetLinkTgtFileSize()
-    if ((sourceFileAttr & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
-    {
-        BOOL cancel;
-        CQuadWord size;
-        if (GetLinkTgtFileSize(HWindow, NULL, &op, &size, &cancel, &ErrGetFileSizeOfLnkTgtIgnAll))
-            fileSizeLoc = size;
-        if (cancel)
-            return FALSE;
-    }
-
-    if (fileSizeLoc >= CONVERT_MIN_FILE_SIZE)
-        op.Size = fileSizeLoc;
-    else
-        op.Size = CONVERT_MIN_FILE_SIZE; // zero/small files take at least as long as files of size CONVERT_MIN_FILE_SIZE
-    script->Add(op);
-    if (!script->IsGood())
-    {
-        script->ResetState();
-        free(op.SourceName);
-        return FALSE;
-    }
-    else
         return TRUE;
-}
+    }
 
-case atChangeAttrs:
-{
-    op.Opcode = ocChangeAttrs;
-    op.OpFlags = 0;
-    op.Attr = sourceFileAttr;
-    // compression: zero/small files take at least as long as files of size COMPRESS_ENCRYPT_MIN_FILE_SIZE
-    op.Size = (attrsData->ChangeCompression || attrsData->ChangeEncryption) ? max(fileSizeLoc, COMPRESS_ENCRYPT_MIN_FILE_SIZE) : CHATTRS_FILE_SIZE;
-    BOOL skip;
-    if ((op.SourceName = BuildName(sourcePath, fileName, NULL, &skip,
-                                   &ErrTooLongNameSkipAll, sourcePath)) == NULL)
+    case atRecursiveConvert:
+    case atConvert:
     {
-        return skip;
-    }
-    op.TargetName = (char*)(DWORD_PTR)((SalGetFileAttributes(op.SourceName) & attrsData->AttrAnd) | attrsData->AttrOr);
-    script->Add(op);
-    if (!script->IsGood())
-    {
-        script->ResetState();
-        free(op.SourceName);
-        return FALSE;
-    }
-    else
-        return TRUE;
-}
+        op.Opcode = ocConvert;
+        op.OpFlags = 0;
+        op.Attr = sourceFileAttr;
+        BOOL skip;
+        if ((op.SourceName = BuildName(sourcePath, fileName, NULL, &skip,
+                                       &ErrTooLongNameSkipAll, sourcePath)) == NULL)
+        {
+            return skip;
+        }
+        op.TargetName = NULL;
 
-case atChangeCase:
-{
-    op.Opcode = ocMoveFile;
-    op.FileSize = fileSizeLoc;
-    op.OpFlags = 0;
-    op.Size = MOVE_FILE_SIZE;
-    op.Attr = sourceFileAttr;
-    BOOL skip;
-    if ((op.SourceName = BuildName(sourcePath, fileName, NULL, &skip,
-                                   &ErrTooLongNameSkipAll, sourcePath)) == NULL)
-    {
-        return skip;
-    }
-    if ((op.TargetName = BuildName(sourcePath, fileName)) == NULL) // if the name is too long, it already failed one check earlier
-    {
-        free(op.SourceName);
-        return FALSE;
-    }
-    int offset = (int)strlen(op.SourceName) - (int)strlen(fileName);
-    AlterFileName(op.TargetName + offset, op.SourceName + offset, -1,
-                  chCaseData->FileNameFormat, chCaseData->Change, FALSE);
-    BOOL sameName = strcmp(op.SourceName + offset, op.TargetName + offset) == 0;
-    if (!sameName)
+        // links: fileSizeLoc == 0, the file size must be obtained later via GetLinkTgtFileSize()
+        if ((sourceFileAttr & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+        {
+            BOOL cancel;
+            CQuadWord size;
+            if (GetLinkTgtFileSize(HWindow, NULL, &op, &size, &cancel, &ErrGetFileSizeOfLnkTgtIgnAll))
+                fileSizeLoc = size;
+            if (cancel)
+                return FALSE;
+        }
+
+        if (fileSizeLoc >= CONVERT_MIN_FILE_SIZE)
+            op.Size = fileSizeLoc;
+        else
+            op.Size = CONVERT_MIN_FILE_SIZE; // zero/small files take at least as long as files of size CONVERT_MIN_FILE_SIZE
         script->Add(op);
-    if (sameName || !script->IsGood())
-    {
-        free(op.SourceName);
-        free(op.TargetName);
         if (!script->IsGood())
+        {
             script->ResetState();
-        return sameName;
+            free(op.SourceName);
+            return FALSE;
+        }
+        else
+            return TRUE;
     }
-    else
-        return TRUE;
-}
-}
-return FALSE; // doesn't do anything else
+
+    case atChangeAttrs:
+    {
+        op.Opcode = ocChangeAttrs;
+        op.OpFlags = 0;
+        op.Attr = sourceFileAttr;
+        // compression: zero/small files take at least as long as files of size COMPRESS_ENCRYPT_MIN_FILE_SIZE
+        op.Size = (attrsData->ChangeCompression || attrsData->ChangeEncryption) ? max(fileSizeLoc, COMPRESS_ENCRYPT_MIN_FILE_SIZE) : CHATTRS_FILE_SIZE;
+        BOOL skip;
+        if ((op.SourceName = BuildName(sourcePath, fileName, NULL, &skip,
+                                       &ErrTooLongNameSkipAll, sourcePath)) == NULL)
+        {
+            return skip;
+        }
+        op.TargetName = (char*)(DWORD_PTR)((SalGetFileAttributes(op.SourceName) & attrsData->AttrAnd) | attrsData->AttrOr);
+        script->Add(op);
+        if (!script->IsGood())
+        {
+            script->ResetState();
+            free(op.SourceName);
+            return FALSE;
+        }
+        else
+            return TRUE;
+    }
+
+    case atChangeCase:
+    {
+        op.Opcode = ocMoveFile;
+        op.FileSize = fileSizeLoc;
+        op.OpFlags = 0;
+        op.Size = MOVE_FILE_SIZE;
+        op.Attr = sourceFileAttr;
+        BOOL skip;
+        if ((op.SourceName = BuildName(sourcePath, fileName, NULL, &skip,
+                                       &ErrTooLongNameSkipAll, sourcePath)) == NULL)
+        {
+            return skip;
+        }
+        if ((op.TargetName = BuildName(sourcePath, fileName)) == NULL) // if the name is too long, it already failed one check earlier
+        {
+            free(op.SourceName);
+            return FALSE;
+        }
+        int offset = (int)strlen(op.SourceName) - (int)strlen(fileName);
+        AlterFileName(op.TargetName + offset, op.SourceName + offset, -1,
+                      chCaseData->FileNameFormat, chCaseData->Change, FALSE);
+        BOOL sameName = strcmp(op.SourceName + offset, op.TargetName + offset) == 0;
+        if (!sameName)
+            script->Add(op);
+        if (sameName || !script->IsGood())
+        {
+            free(op.SourceName);
+            free(op.TargetName);
+            if (!script->IsGood())
+                script->ResetState();
+            return sameName;
+        }
+        else
+            return TRUE;
+    }
+    }
+    return FALSE; // doesn't do anything else
 }
 
 void CFilesWindow::CalculateDirSizes()

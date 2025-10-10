@@ -2571,837 +2571,300 @@ BOOL CFilesWindow::ChangeAndListPathOnFS(const char* fsName, int fsNameIndex, co
                     // If WM_USER_UPDATEPANEL is delivered the panel content and scrollbars will repaint.
                     // The message loop may deliver it while a message box is shown; otherwise the panel
                     // remains unchanged and the message is removed from the queue.
+                    PostMessage(HWindow, WM_USER_UPDATEPANEL, 0, 0);
                 }
-
-                // attempt to list files and directories from the current path
-                if (pluginFS.ListCurrentPath(workDir, pluginData, pluginIconsType, forceUpdate)) // succeeded ...
-                {
-                    if (keepOldListing != NULL && *keepOldListing) // we already have the new listing; discard the old one
-                    {
-                        // release listing data in the panel
-                        if (UseSystemIcons || UseThumbnails)
-                            SleepIconCacheThread();
-
-                        ReleaseListing();       // assuming 'dir' is PluginFSDir
-                        dir = GetPluginFSDir(); // ReleaseListing() may only detach (see OnlyDetachFSListing)
-
-                        // protect the listbox from paint errors caused by the redraw request (we just cut the data)
-                        ListBox->SetItemsCount(0, 0, 0, TRUE);
-                        SelectedCount = 0;
-                        // If WM_USER_UPDATEPANEL is delivered the panel content and scrollbars will repaint.
-                        // The message loop may deliver it while a message box is shown; otherwise the panel remains unchanged and the message is removed from the queue.
-                        delete dir;
-                        dir = workDir;
-                    }
-
-                    if (pluginIconsType != pitSimple &&
-                        pluginIconsType != pitFromRegistry &&
-                        pluginIconsType != pitFromPlugin) // verify it matches an allowed value
-                    {
-                        TRACE_E("Invalid plugin-icons-type!");
-                        pluginIconsType = pitSimple;
-                    }
-                    if (pluginIconsType == pitFromPlugin && pluginData == NULL) // not allowed, degrade the type
-                    {
-                        TRACE_E("Plugin-icons-type is pitFromPlugin and plugin-data is NULL!");
-                        pluginIconsType = pitSimple;
-                    }
-                    shorterPath = !pluginFS.IsCurrentPath(pluginFS.GetPluginFSNameIndex(), origFSNameIndex, origUserPart);
-                    ok = TRUE;
-                    break;
-                }
-                // prepare dir for further use (release leftovers if the plugin left any)
-                workDir->Clear(NULL);
-                // path isn't valid; we'll try shortening it in the next cycle pass
-                if (!pluginFS.GetCurrentPath(user))
-                {
-                    TRACE_E("Unexpected situation in CFilesWindow::ChangeAndListPathOnFS()");
-                    break;
-                }
+                firstCall = FALSE;
             }
-            else // fatal error, abort
-            {
-                TRACE_I("Unable to open FS path " << fsName << ":" << origUserPart);
 
-                if (firstCall && (keepOldListing == NULL || !*keepOldListing)) // not dead code (used when allocating workDir fails)
+            // attempt to list files and directories from the current path
+            if (pluginFS.ListCurrentPath(workDir, pluginData, pluginIconsType, forceUpdate)) // succeeded ...
+            {
+                if (keepOldListing != NULL && *keepOldListing) // we already have the new listing; discard the old one
                 {
                     // release listing data in the panel
                     if (UseSystemIcons || UseThumbnails)
                         SleepIconCacheThread();
 
-                    ReleaseListing();                 // assuming 'dir' is PluginFSDir
-                    workDir = dir = GetPluginFSDir(); // ReleaseListing() may only detach (see OnlyDetachFSListing)
+                    ReleaseListing();       // assuming 'dir' is PluginFSDir
+                    dir = GetPluginFSDir(); // ReleaseListing() may only detach (see OnlyDetachFSListing)
 
                     // protect the listbox from paint errors caused by the redraw request (we just cut the data)
                     ListBox->SetItemsCount(0, 0, 0, TRUE);
                     SelectedCount = 0;
                     // If WM_USER_UPDATEPANEL is delivered the panel content and scrollbars will repaint.
                     // The message loop may deliver it while a message box is shown; otherwise the panel remains unchanged and the message is removed from the queue.
+                    PostMessage(HWindow, WM_USER_UPDATEPANEL, 0, 0);
+
+                    SetPluginFSDir(workDir); // we set the new listing
+                    delete dir;
+                    dir = workDir;
                 }
-                useCutFileName = FALSE;
+
+                if (pluginIconsType != pitSimple &&
+                    pluginIconsType != pitFromRegistry &&
+                    pluginIconsType != pitFromPlugin) // verify it matches an allowed value
+                {
+                    TRACE_E("Invalid plugin-icons-type!");
+                    pluginIconsType = pitSimple;
+                }
+                if (pluginIconsType == pitFromPlugin && pluginData == NULL) // not allowed, degrade the type
+                {
+                    TRACE_E("Plugin-icons-type is pitFromPlugin and plugin-data is NULL!");
+                    pluginIconsType = pitSimple;
+                }
+                shorterPath = !pluginFS.IsCurrentPath(pluginFS.GetPluginFSNameIndex(), origFSNameIndex, origUserPart);
+                ok = TRUE;
+                break;
+            }
+            // prepare dir for further use (release leftovers if the plugin left any)
+            workDir->Clear(NULL);
+            // path isn't valid; we'll try shortening it in the next cycle pass
+            if (!pluginFS.GetCurrentPath(user))
+            {
+                TRACE_E("Unexpected situation in CFilesWindow::ChangeAndListPathOnFS()");
                 break;
             }
         }
-
-        if (dir != workDir)
-            delete workDir; // 'workDir' wasn't used, free it
-
-        // try to find a file to focus in the FS listing - not perfect when the file is hidden
-        // from the panel listing (e.g., "don't show hidden files" or filters) because it cannot
-        // be focused and the user won't know about this "error" - but it's probably
-        // not really an error if the file does exist, so we ignore it (same as with
-        // disk paths)...
-        if (ok && useCutFileName && cutFileName != NULL && *cutFileName != 0)
+        else // fatal error, abort
         {
-            CFilesArray* files = dir->GetFiles("");
-            unsigned cutFileNameLen = (int)strlen(cutFileName);
-            int count = files->Count;
-            int i;
-            for (i = 0; i < count; i++)
-            {
-                CFileData* f = &(files->At(i));
-                if (cutFileNameLen == f->NameLen &&
-                    StrICmpEx(f->Name, cutFileNameLen, cutFileName, cutFileNameLen) == 0)
-                    break;
-            }
-            if (i == count) // report error (the file to focus was not found)
-            {
-                char errText[MAX_PATH + 200];
-                sprintf(errText, LoadStr(IDS_UNABLETOFOCUSFILEONFS), cutFileName);
-                SalMessageBox(HWindow, errText, LoadStr(IDS_ERRORTITLE), MB_OK | MB_ICONEXCLAMATION);
-                *cutFileName = 0;
-            }
-        }
+            TRACE_I("Unable to open FS path " << fsName << ":" << origUserPart);
 
-        if (!useCutFileName && cutFileName != NULL)
-            *cutFileName = 0; // we do not want to use it -> reset the value
-        return ok;
+            if (firstCall && (keepOldListing == NULL || !*keepOldListing)) // not dead code (used when allocating workDir fails)
+            {
+                // release listing data in the panel
+                if (UseSystemIcons || UseThumbnails)
+                    SleepIconCacheThread();
+
+                ReleaseListing();                 // assuming 'dir' is PluginFSDir
+                workDir = dir = GetPluginFSDir(); // ReleaseListing() may only detach (see OnlyDetachFSListing)
+
+                // protect the listbox from paint errors caused by the redraw request (we just cut the data)
+                ListBox->SetItemsCount(0, 0, 0, TRUE);
+                SelectedCount = 0;
+                // If WM_USER_UPDATEPANEL is delivered the panel content and scrollbars will repaint.
+                // The message loop may deliver it while a message box is shown; otherwise the panel remains unchanged and the message is removed from the queue.
+                PostMessageA(HWindow, 0x8000 + 159, 0, 0);
+            }
+            useCutFileName = FALSE;
+            break;
+        }
     }
 
-    BOOL CFilesWindow::ChangePathToPluginFS(const char* fsName, const char* fsUserPart, int suggestedTopIndex,
-                                            const char* suggestedFocusName, BOOL forceUpdate, int mode,
-                                            BOOL* noChange, BOOL refreshListBox, int* failReason, BOOL isRefresh,
-                                            BOOL canFocusFileName, BOOL convertPathToInternal)
+    if (dir != workDir)
+        delete workDir; // 'workDir' wasn't used, free it
+
+    // try to find a file to focus in the FS listing - not perfect when the file is hidden
+    // from the panel listing (e.g., "don't show hidden files" or filters) because it cannot
+    // be focused and the user won't know about this "error" - but it's probably
+    // not really an error if the file does exist, so we ignore it (same as with
+    // disk paths)...
+    if (ok && useCutFileName && cutFileName != NULL && *cutFileName != 0)
     {
-        CALL_STACK_MESSAGE11("CFilesWindow::ChangePathToPluginFS(%s, %s, %d, %s, %d, %d, , %d, , %d, %d, %d)",
-                             fsName, fsUserPart, suggestedTopIndex, suggestedFocusName, forceUpdate,
-                             mode, refreshListBox, isRefresh, canFocusFileName, convertPathToInternal);
-        //TRACE_I("change-to-fs: begin");
-
-        // as a precaution if fsName points to a changed string (GetPluginFS()->PluginFSName()), create a backup copy
-        char backup[MAX_PATH];
-        lstrcpyn(backup, fsName, MAX_PATH);
-        fsName = backup;
-
-        if (noChange != NULL)
-            *noChange = TRUE;
-        if (mode != 3 && canFocusFileName)
+        CFilesArray* files = dir->GetFiles("");
+        unsigned cutFileNameLen = (int)strlen(cutFileName);
+        int count = files->Count;
+        int i;
+        for (i = 0; i < count; i++)
         {
-            TRACE_E("CFilesWindow::ChangePathToPluginFS() - incorrect use of 'mode' or 'canFocusFileName'.");
-            canFocusFileName = FALSE;
+            CFileData* f = &(files->At(i));
+            if (cutFileNameLen == f->NameLen &&
+                StrICmpEx(f->Name, cutFileNameLen, cutFileName, cutFileNameLen) == 0)
+                break;
         }
-
-        if (strlen(fsUserPart) >= MAX_PATH)
+        if (i == count) // report error (the file to focus was not found)
         {
+            char errText[MAX_PATH + 200];
+            sprintf(errText, LoadStr(IDS_UNABLETOFOCUSFILEONFS), cutFileName);
+            SalMessageBox(HWindow, errText, LoadStr(IDS_ERRORTITLE), MB_OK | MB_ICONEXCLAMATION);
+            *cutFileName = 0;
+        }
+    }
+
+    if (!useCutFileName && cutFileName != NULL)
+        *cutFileName = 0; // we do not want to use it -> reset the value
+    return ok;
+}
+
+BOOL CFilesWindow::ChangePathToPluginFS(const char* fsName, const char* fsUserPart, int suggestedTopIndex,
+                                        const char* suggestedFocusName, BOOL forceUpdate, int mode,
+                                        BOOL* noChange, BOOL refreshListBox, int* failReason, BOOL isRefresh,
+                                        BOOL canFocusFileName, BOOL convertPathToInternal)
+{
+    CALL_STACK_MESSAGE11("CFilesWindow::ChangePathToPluginFS(%s, %s, %d, %s, %d, %d, , %d, , %d, %d, %d)",
+                         fsName, fsUserPart, suggestedTopIndex, suggestedFocusName, forceUpdate,
+                         mode, refreshListBox, isRefresh, canFocusFileName, convertPathToInternal);
+    //TRACE_I("change-to-fs: begin");
+
+    // as a precaution if fsName points to a changed string (GetPluginFS()->PluginFSName()), create a backup copy
+    char backup[MAX_PATH];
+    lstrcpyn(backup, fsName, MAX_PATH);
+    fsName = backup;
+
+    if (noChange != NULL)
+        *noChange = TRUE;
+    if (mode != 3 && canFocusFileName)
+    {
+        TRACE_E("CFilesWindow::ChangePathToPluginFS() - incorrect use of 'mode' or 'canFocusFileName'.");
+        canFocusFileName = FALSE;
+    }
+
+    if (strlen(fsUserPart) >= MAX_PATH)
+    {
+        if (failReason != NULL)
+            *failReason = CHPPFR_INVALIDPATH;
+        MessageBox(HWindow, LoadStr(IDS_TOOLONGPATH), LoadStr(IDS_ERRORTITLE), MB_OK | MB_ICONEXCLAMATION);
+        return FALSE;
+    }
+    // make backup copies
+    char backup2[MAX_PATH];
+    lstrcpyn(backup2, fsUserPart, MAX_PATH);
+    fsUserPart = backup2;
+    char* fsUserPart2 = backup2;
+    char backup3[MAX_PATH];
+    if (suggestedFocusName != NULL)
+    {
+        lstrcpyn(backup3, suggestedFocusName, MAX_PATH);
+        suggestedFocusName = backup3;
+    }
+
+    // restore panel state (top-index + focused-name) before closing this path if needed
+    RefreshPathHistoryData();
+
+    if (!isRefresh)
+        MainWindow->CancelPanelsUI(); // cancel QuickSearch and QuickEdit
+
+    //---  start the hourglass cursor
+    BOOL setWait = (GetCursor() != LoadCursor(NULL, IDC_WAIT)); // already waiting?
+    HCURSOR oldCur;
+    if (setWait)
+        oldCur = SetCursor(LoadCursor(NULL, IDC_WAIT));
+    BeginStopRefresh(); // no refreshes, please
+
+    BOOL ok = FALSE;
+    BOOL shorterPath;
+    char cutFileNameBuf[MAX_PATH];
+    int fsNameIndex;
+    if (!Is(ptPluginFS) || !IsPathFromActiveFS(fsName, fsUserPart2, fsNameIndex, convertPathToInternal))
+    { // no FS or the path is from a different FS (even within a single plugin-one FS name)
+        BOOL detachFS;
+        if (PrepareCloseCurrentPath(HWindow, FALSE, TRUE, detachFS, FSTRYCLOSE_CHANGEPATH))
+        { // the current path can be closed, attempt to open the new path
+            int index;
             if (failReason != NULL)
                 *failReason = CHPPFR_INVALIDPATH;
-            MessageBox(HWindow, LoadStr(IDS_TOOLONGPATH), LoadStr(IDS_ERRORTITLE), MB_OK | MB_ICONEXCLAMATION);
-            return FALSE;
-        }
-        // make backup copies
-        char backup2[MAX_PATH];
-        lstrcpyn(backup2, fsUserPart, MAX_PATH);
-        fsUserPart = backup2;
-        char* fsUserPart2 = backup2;
-        char backup3[MAX_PATH];
-        if (suggestedFocusName != NULL)
-        {
-            lstrcpyn(backup3, suggestedFocusName, MAX_PATH);
-            suggestedFocusName = backup3;
-        }
-
-        // restore panel state (top-index + focused-name) before closing this path if needed
-        RefreshPathHistoryData();
-
-        if (!isRefresh)
-            MainWindow->CancelPanelsUI(); // cancel QuickSearch and QuickEdit
-
-        //---  start the hourglass cursor
-        BOOL setWait = (GetCursor() != LoadCursor(NULL, IDC_WAIT)); // already waiting?
-        HCURSOR oldCur;
-        if (setWait)
-            oldCur = SetCursor(LoadCursor(NULL, IDC_WAIT));
-        BeginStopRefresh(); // no refreshes, please
-
-        BOOL ok = FALSE;
-        BOOL shorterPath;
-        char cutFileNameBuf[MAX_PATH];
-        int fsNameIndex;
-        if (!Is(ptPluginFS) || !IsPathFromActiveFS(fsName, fsUserPart2, fsNameIndex, convertPathToInternal))
-        { // no FS or the path is from a different FS (even within a single plugin-one FS name)
-            BOOL detachFS;
-            if (PrepareCloseCurrentPath(HWindow, FALSE, TRUE, detachFS, FSTRYCLOSE_CHANGEPATH))
-            { // the current path can be closed, attempt to open the new path
-                int index;
-                if (failReason != NULL)
-                    *failReason = CHPPFR_INVALIDPATH;
-                if (Plugins.IsPluginFS(fsName, index, fsNameIndex)) // find the plugin index
+            if (Plugins.IsPluginFS(fsName, index, fsNameIndex)) // find the plugin index
+            {
+                // obtain the plugin containing the FS
+                CPluginData* plugin = Plugins.Get(index);
+                if (plugin != NULL)
                 {
-                    // obtain the plugin containing the FS
-                    CPluginData* plugin = Plugins.Get(index);
-                    if (plugin != NULL)
+                    // open the new FS
+                    // load the plugin before obtaining DLLName, Version, and plugin interfaces
+                    CPluginFSInterfaceAbstract* auxFS = plugin->OpenFS(fsName, fsNameIndex);
+                    CPluginFSInterfaceEncapsulation pluginFS(auxFS, plugin->DLLName, plugin->Version,
+                                                             plugin->GetPluginInterfaceForFS()->GetInterface(),
+                                                             plugin->GetPluginInterface()->GetInterface(),
+                                                             fsName, fsNameIndex, -1, 0, plugin->BuiltForVersion);
+                    if (pluginFS.NotEmpty())
                     {
-                        // open the new FS
-                        // load the plugin before obtaining DLLName, Version, and plugin interfaces
-                        CPluginFSInterfaceAbstract* auxFS = plugin->OpenFS(fsName, fsNameIndex);
-                        CPluginFSInterfaceEncapsulation pluginFS(auxFS, plugin->DLLName, plugin->Version,
-                                                                 plugin->GetPluginInterfaceForFS()->GetInterface(),
-                                                                 plugin->GetPluginInterface()->GetInterface(),
-                                                                 fsName, fsNameIndex, -1, 0, plugin->BuiltForVersion);
-                        if (pluginFS.NotEmpty())
-                        {
-                            Plugins.SetWorkingPluginFS(&pluginFS);
-                            if (convertPathToInternal) // convert the path to internal format
-                                pluginFS.GetPluginInterfaceForFS()->ConvertPathToInternal(fsName, fsNameIndex, fsUserPart2);
-                            // create a new object for the file system contents of the current path
-                            CSalamanderDirectory* newFSDir = new CSalamanderDirectory(TRUE);
-                            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
-                            CPluginDataInterfaceAbstract* pluginData;
-                            int pluginIconsType;
-                            char* cutFileName = canFocusFileName && suggestedFocusName == NULL ? cutFileNameBuf : NULL; // focus the file only if no other focus is proposed
-                            if (ChangeAndListPathOnFS(fsName, fsNameIndex, fsUserPart2, pluginFS, newFSDir, pluginData,
-                                                      shorterPath, pluginIconsType, mode, FALSE, NULL, NULL, -1,
-                                                      FALSE, cutFileName, NULL))
-                            {                    // success, the path (or subpath) was listed
-                                if (shorterPath) // subpath?
-                                {
-                                    // invalidate proposed listbox settings (we'll list a different path)
-                                    suggestedTopIndex = -1;
-                                    if (cutFileName != NULL && *cutFileName != 0)
-                                        suggestedFocusName = cutFileName; // focus the file
-                                    else
-                                        suggestedFocusName = NULL;
-                                    if (failReason != NULL)
-                                    {
-                                        *failReason = cutFileName != NULL && *cutFileName != 0 ? CHPPFR_FILENAMEFOCUSED : CHPPFR_SHORTERPATH;
-                                    }
-                                }
-                                else
-                                {
-                                    if (failReason != NULL)
-                                        *failReason = CHPPFR_SUCCESS;
-                                }
-
-                                if (UseSystemIcons || UseThumbnails)
-                                    SleepIconCacheThread();
-
-                                CloseCurrentPath(HWindow, FALSE, detachFS, FALSE, isRefresh, TRUE); // success, switch to the new path
-
-                                // we just received a new listing; cancel any pending panel-change reports
-                                InvalidateChangesInPanelWeHaveNewListing();
-
-                                // hide the throbber and security icon; if the new filesystem wants them it must re-enable them (e.g., in FSE_OPENED or FSE_PATHCHANGED)
-                                if (DirectoryLine != NULL)
-                                    DirectoryLine->HideThrobberAndSecurityIcon();
-
-                                SetPanelType(ptPluginFS);
-                                SetPath(GetPath()); // detach the path from Snooper (stop monitoring changes on Path)
-                                SetPluginFS(pluginFS.GetInterface(), plugin->DLLName, plugin->Version,
-                                            plugin->GetPluginInterfaceForFS()->GetInterface(),
-                                            plugin->GetPluginInterface()->GetInterface(),
-                                            pluginFS.GetPluginFSName(), pluginFS.GetPluginFSNameIndex(),
-                                            pluginFS.GetPluginFSCreateTime(), pluginFS.GetChngDrvDuplicateItemIndex(),
-                                            plugin->BuiltForVersion);
-                                SetPluginIface(plugin->GetPluginInterface()->GetInterface());
-                                SetPluginFSDir(newFSDir);
-                                PluginData.Init(pluginData, plugin->DLLName, plugin->Version,
-                                                plugin->GetPluginInterface()->GetInterface(), plugin->BuiltForVersion);
-                                SetPluginIconsType(pluginIconsType);
-                                SetValidFileData(GetPluginFSDir()->GetValidData());
-
-                                if (noChange != NULL)
-                                    *noChange = FALSE;
-
-                                // refresh the panel
-                                UpdateDriveIcon(FALSE); // get the icon for the current path from the plugin
-                                CommonRefresh(HWindow, suggestedTopIndex, suggestedFocusName, refreshListBox, TRUE, isRefresh);
-
-                                // notify the FS that it is finally opened
-                                GetPluginFS()->Event(FSE_OPENED, GetPanelCode());
-                                GetPluginFS()->Event(FSE_PATHCHANGED, GetPanelCode());
-
-                                ok = TRUE;
-                            }
-                            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
-                            if (!ok)
+                        Plugins.SetWorkingPluginFS(&pluginFS);
+                        if (convertPathToInternal) // convert the path to internal format
+                            pluginFS.GetPluginInterfaceForFS()->ConvertPathToInternal(fsName, fsNameIndex, fsUserPart2);
+                        // create a new object for the file system contents of the current path
+                        CSalamanderDirectory* newFSDir = new CSalamanderDirectory(TRUE);
+                        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
+                        CPluginDataInterfaceAbstract* pluginData;
+                        int pluginIconsType;
+                        char* cutFileName = canFocusFileName && suggestedFocusName == NULL ? cutFileNameBuf : NULL; // focus the file only if no other focus is proposed
+                        if (ChangeAndListPathOnFS(fsName, fsNameIndex, fsUserPart2, pluginFS, newFSDir, pluginData,
+                                                  shorterPath, pluginIconsType, mode, FALSE, NULL, NULL, -1,
+                                                  FALSE, cutFileName, NULL))
+                        {                    // success, the path (or subpath) was listed
+                            if (shorterPath) // subpath?
                             {
-                                delete newFSDir;
-                                pluginFS.ReleaseObject(HWindow);
-                                plugin->GetPluginInterfaceForFS()->CloseFS(pluginFS.GetInterface());
+                                // invalidate proposed listbox settings (we'll list a different path)
+                                suggestedTopIndex = -1;
+                                if (cutFileName != NULL && *cutFileName != 0)
+                                    suggestedFocusName = cutFileName; // focus the file
+                                else
+                                    suggestedFocusName = NULL;
+                                if (failReason != NULL)
+                                {
+                                    *failReason = cutFileName != NULL && *cutFileName != 0 ? CHPPFR_FILENAMEFOCUSED : CHPPFR_SHORTERPATH;
+                                }
                             }
-                            Plugins.SetWorkingPluginFS(NULL);
+                            else
+                            {
+                                if (failReason != NULL)
+                                    *failReason = CHPPFR_SUCCESS;
+                            }
+
+                            if (UseSystemIcons || UseThumbnails)
+                                SleepIconCacheThread();
+
+                            CloseCurrentPath(HWindow, FALSE, detachFS, FALSE, isRefresh, TRUE); // success, switch to the new path
+
+                            // we just received a new listing; cancel any pending panel-change reports
+                            InvalidateChangesInPanelWeHaveNewListing();
+
+                            // hide the throbber and security icon; if the new filesystem wants them it must re-enable them (e.g., in FSE_OPENED or FSE_PATHCHANGED)
+                            if (DirectoryLine != NULL)
+                                DirectoryLine->HideThrobberAndSecurityIcon();
+
+                            SetPanelType(ptPluginFS);
+                            SetPath(GetPath()); // detach the path from Snooper (stop monitoring changes on Path)
+                            SetPluginFS(pluginFS.GetInterface(), plugin->DLLName, plugin->Version,
+                                        plugin->GetPluginInterfaceForFS()->GetInterface(),
+                                        plugin->GetPluginInterface()->GetInterface(),
+                                        pluginFS.GetPluginFSName(), pluginFS.GetPluginFSNameIndex(),
+                                        pluginFS.GetPluginFSCreateTime(), pluginFS.GetChngDrvDuplicateItemIndex(),
+                                        plugin->BuiltForVersion);
+                            SetPluginIface(plugin->GetPluginInterface()->GetInterface());
+                            SetPluginFSDir(newFSDir);
+                            PluginData.Init(pluginData, plugin->DLLName, plugin->Version,
+                                            plugin->GetPluginInterface()->GetInterface(), plugin->BuiltForVersion);
+                            SetPluginIconsType(pluginIconsType);
+                            SetValidFileData(GetPluginFSDir()->GetValidData());
+
+                            if (noChange != NULL)
+                                *noChange = FALSE;
+
+                            // refresh the panel
+                            UpdateDriveIcon(FALSE); // get the icon for the current path from the plugin
+                            CommonRefresh(HWindow, suggestedTopIndex, suggestedFocusName, refreshListBox, TRUE, isRefresh);
+
+                            // notify the FS that it is finally opened
+                            GetPluginFS()->Event(FSE_OPENED, GetPanelCode());
+                            GetPluginFS()->Event(FSE_PATHCHANGED, GetPanelCode());
+
+                            ok = TRUE;
                         }
-                        else
-                            TRACE_I("Plugin has refused to open FS (maybe it even does not start).");
+                        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+                        if (!ok)
+                        {
+                            delete newFSDir;
+                            pluginFS.ReleaseObject(HWindow);
+                            plugin->GetPluginInterfaceForFS()->CloseFS(pluginFS.GetInterface());
+                        }
+                        Plugins.SetWorkingPluginFS(NULL);
                     }
                     else
-                        TRACE_E("Unexpected situation in CFilesWindow::ChangePathToPluginFS()");
+                        TRACE_I("Plugin has refused to open FS (maybe it even does not start).");
                 }
                 else
-                    TRACE_I("Plugin containing file-system name " << fsName << " is no longer available.");
-
-                if (!ok)
-                    CloseCurrentPath(HWindow, TRUE, detachFS, FALSE, isRefresh, FALSE); // failure, stay on the original path
-
-                EndStopRefresh();
-                if (setWait)
-                    SetCursor(oldCur);
-
-                //TRACE_I("change-to-fs: end");
-                return ok ? !shorterPath : FALSE;
+                    TRACE_E("Unexpected situation in CFilesWindow::ChangePathToPluginFS()");
             }
-            else // the current path cannot be closed
-            {
-                EndStopRefresh();
-                if (setWait)
-                    SetCursor(oldCur);
+            else
+                TRACE_I("Plugin containing file-system name " << fsName << " is no longer available.");
 
-                if (failReason != NULL)
-                    *failReason = CHPPFR_CANNOTCLOSEPATH;
-                return FALSE;
-            }
-        }
-        else
-        {
-            // note: convertPathToInternal must already be FALSE (the path was converted in IsPathFromActiveFS())
-
-            // PluginFS matches fsName and the path fsUserPart2 can be verified on it
-            BOOL samePath = GetPluginFS()->IsCurrentPath(GetPluginFS()->GetPluginFSNameIndex(), fsNameIndex, fsUserPart2);
-            if (!forceUpdate && samePath) // the path is identical to the current path
-            {
-                // call CommonRefresh so 'suggestedTopIndex' and 'suggestedFocusName' aren't ignored
-                CommonRefresh(HWindow, suggestedTopIndex, suggestedFocusName, refreshListBox, FALSE, isRefresh);
-
-                EndStopRefresh();
-                if (setWait)
-                    SetCursor(oldCur);
-
-                if (failReason != NULL)
-                    *failReason = CHPPFR_SUCCESS;
-                //TRACE_I("change-to-fs: end");
-                return TRUE; // nothing to do
-            }
-
-            // back up the current FS path (we'll try to select it again if an error occurs)
-            BOOL currentPathOK = TRUE;
-            char currentPath[MAX_PATH];
-            if (!GetPluginFS()->GetCurrentPath(currentPath))
-                currentPathOK = FALSE;
-            char currentPathFSName[MAX_PATH];
-            strcpy(currentPathFSName, GetPluginFS()->GetPluginFSName());
-            int currentPathFSNameIndex = GetPluginFS()->GetPluginFSNameIndex();
-
-            int originalTopIndex = ListBox->GetTopIndex();
-            char originalFocusName[MAX_PATH];
-            originalFocusName[0] = 0;
-            if (FocusedIndex >= 0)
-            {
-                CFileData* file = NULL;
-                if (FocusedIndex < Dirs->Count)
-                    file = &Dirs->At(FocusedIndex);
-                else
-                {
-                    if (FocusedIndex < Files->Count + Dirs->Count)
-                        file = &Files->At(FocusedIndex - Dirs->Count);
-                }
-                if (file != NULL)
-                    lstrcpyn(originalFocusName, file->Name, MAX_PATH);
-            }
-
-            // attempt to change the path on the current FS
-            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
-
-            CPluginDataInterfaceAbstract* pluginData;
-            int pluginIconsType;
-            BOOL cancel;
-            BOOL keepOldListing = TRUE;
-            char* cutFileName = canFocusFileName && suggestedFocusName == NULL ? cutFileNameBuf : NULL; // focus the file only if no other focus is proposed
-            if (ChangeAndListPathOnFS(fsName, fsNameIndex, fsUserPart2, *GetPluginFS(), GetPluginFSDir(),
-                                      pluginData, shorterPath, pluginIconsType, mode, TRUE, &cancel,
-                                      currentPathOK ? currentPath : NULL, currentPathFSNameIndex, forceUpdate,
-                                      cutFileName, &keepOldListing))
-            { // success, the path (or subpath) was listed
-                if (failReason != NULL)
-                {
-                    *failReason = shorterPath ? (cutFileName != NULL && *cutFileName != 0 ? CHPPFR_FILENAMEFOCUSED : CHPPFR_SHORTERPATH) : CHPPFR_SUCCESS;
-                }
-
-                if (!cancel) // only if new content was loaded (original content wasn't kept)
-                {
-                    // we just received a new listing; cancel any pending panel-change reports
-                    InvalidateChangesInPanelWeHaveNewListing();
-
-                    // hide the throbber and security icon; if the FS still wants them it must enable them again (e.g., in FSE_PATHCHANGED)
-                    if (DirectoryLine != NULL)
-                        DirectoryLine->HideThrobberAndSecurityIcon();
-
-                    // add the path we just left (paths inside the FS remain open,
-                    // so DirHistoryAddPathUnique hasn't been called yet)
-                    if (currentPathOK && (!samePath || samePath && shorterPath)) // the path has changed
-                    {
-                        if (UserWorkedOnThisPath)
-                        {
-                            MainWindow->DirHistoryAddPathUnique(2, currentPathFSName, currentPath, NULL,
-                                                                GetPluginFS()->GetInterface(), GetPluginFS());
-                            UserWorkedOnThisPath = FALSE;
-                        }
-                        // leaving the path
-                        HiddenNames.Clear();  // release hidden names
-                        OldSelection.Clear(); // and old selection
-                    }
-
-                    if (shorterPath) // subpath?
-                    {
-                        // invalidate proposed listbox settings (we'll list a different path)
-                        suggestedTopIndex = -1;
-                        if (cutFileName != NULL && *cutFileName != 0)
-                            suggestedFocusName = cutFileName; // focus the file
-                        else
-                        {
-                            suggestedFocusName = NULL;
-
-                            // the new path shortened back to the original ("unlistable subdirectory"), keep
-                            // keep topIndex and focusName from before the operation starts (so the user doesn't lose focus)
-                            if (currentPathOK &&
-                                GetPluginFS()->IsCurrentPath(GetPluginFS()->GetPluginFSNameIndex(),
-                                                             currentPathFSNameIndex, currentPath))
-                            {
-                                suggestedTopIndex = originalTopIndex;
-                                suggestedFocusName = originalFocusName[0] == 0 ? NULL : originalFocusName;
-                            }
-                        }
-                    }
-
-                    //        if (UseSystemIcons || UseThumbnails) SleepIconCacheThread();   // vola se v ChangeAndListPathOnFS
-
-                    // add new pluginData to the current (newly filled) PluginFSDir
-                    PluginData.Init(pluginData, GetPluginFS()->GetDLLName(),
-                                    GetPluginFS()->GetVersion(), GetPluginFS()->GetPluginInterface(),
-                                    GetPluginFS()->GetBuiltForVersion());
-                    SetPluginIconsType(pluginIconsType);
-                    if (SimplePluginIcons != NULL)
-                    {
-                        delete SimplePluginIcons;
-                        SimplePluginIcons = NULL;
-                    }
-                    SetValidFileData(GetPluginFSDir()->GetValidData());
-
-                    if (noChange != NULL)
-                        *noChange = FALSE;
-
-                    // clean the message queue of buffered WM_USER_UPDATEPANEL
-                    MSG msg2;
-                    PeekMessage(&msg2, HWindow, WM_USER_UPDATEPANEL, WM_USER_UPDATEPANEL, PM_REMOVE);
-
-                    // refresh the panel
-                    UpdateDriveIcon(FALSE); // get the icon for the current path from the plugin
-                    CommonRefresh(HWindow, suggestedTopIndex, suggestedFocusName, refreshListBox, TRUE, isRefresh);
-
-                    // notify the FS that the path changed
-                    GetPluginFS()->Event(FSE_PATHCHANGED, GetPanelCode());
-                }
-                else
-                {
-                    if (shorterPath && cutFileName != NULL && *cutFileName != 0 && refreshListBox) // the file needs to be focused
-                    {
-                        int focusIndexCase = -1;
-                        int focusIndexIgnCase = -1;
-                        int i;
-                        for (i = 0; i < Dirs->Count; i++)
-                        { // for consistency with CommonRefresh we search directories first,
-                            // then files (so it behaves the same in both cases)
-                            if (StrICmp(Dirs->At(i).Name, cutFileName) == 0)
-                            {
-                                if (focusIndexIgnCase == -1)
-                                    focusIndexIgnCase = i;
-                                if (strcmp(Dirs->At(i).Name, cutFileName) == 0)
-                                {
-                                    focusIndexCase = i;
-                                    break;
-                                }
-                            }
-                        }
-                        if (i == Dirs->Count)
-                        {
-                            for (i = 0; i < Files->Count; i++)
-                            {
-                                if (StrICmp(Files->At(i).Name, cutFileName) == 0)
-                                {
-                                    if (focusIndexIgnCase == -1)
-                                        focusIndexIgnCase = i + Dirs->Count;
-                                    if (strcmp(Files->At(i).Name, cutFileName) == 0)
-                                    {
-                                        focusIndexCase = i + Dirs->Count;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-
-                        if (focusIndexIgnCase != -1) // at least one file found differing only in case
-                        {
-                            SetCaretIndex(focusIndexCase != -1 ? focusIndexCase : focusIndexIgnCase, FALSE);
-                        }
-                    }
-                }
-
-                ok = TRUE;
-            }
-            else // requested path is not accessible, try returning to the original path
-            {
-                if (noChange != NULL)
-                    *noChange = FALSE; // the listing will be cleared or changed
-                if (!samePath &&       // if this isn't a refresh (changing to the same path)
-                    currentPathOK &&   // if the original path was retrieved successfully
-                    ChangeAndListPathOnFS(currentPathFSName, currentPathFSNameIndex, currentPath,
-                                          *GetPluginFS(), GetPluginFSDir(),
-                                          pluginData, shorterPath, pluginIconsType, mode,
-                                          FALSE, NULL, NULL, -1, FALSE, NULL, &keepOldListing))
-                { // success, the original path (or its subpath) was listed
-                    // invalidate proposed listbox settings (we'll list a different path)
-                    suggestedTopIndex = -1;
-                    suggestedFocusName = NULL;
-
-                    // the original path is accessible (no shortening was needed); keep the topIndex
-                    // and focusName from before the operation so the user doesn't lose focus
-                    if (!shorterPath)
-                    {
-                        suggestedTopIndex = originalTopIndex;
-                        suggestedFocusName = originalFocusName[0] == 0 ? NULL : originalFocusName;
-                    }
-
-                    // add the path we just left (paths inside the FS remain open,
-                    // so DirHistoryAddPathUnique hasn't been called yet)
-                    if (currentPathOK && shorterPath) // if shorterPath is FALSE, the path didn't change...
-                    {
-                        if (UserWorkedOnThisPath)
-                        {
-                            MainWindow->DirHistoryAddPathUnique(2, currentPathFSName, currentPath, NULL,
-                                                                GetPluginFS()->GetInterface(), GetPluginFS());
-                            UserWorkedOnThisPath = FALSE;
-                        }
-                        // leaving the path
-                        HiddenNames.Clear();  // release hidden names
-                        OldSelection.Clear(); // and old selection
-                    }
-
-                    // we just received a new listing; cancel any pending panel-change reports
-                    InvalidateChangesInPanelWeHaveNewListing();
-
-                    // hide the throbber and security icon; if the FS still wants them it must enable them again (e.g., in FSE_PATHCHANGED)
-                    if (DirectoryLine != NULL)
-                        DirectoryLine->HideThrobberAndSecurityIcon();
-
-                    if (UseSystemIcons || UseThumbnails)
-                        SleepIconCacheThread();
-
-                    // add new pluginData to the current (newly filled) PluginFSDir
-                    PluginData.Init(pluginData, GetPluginFS()->GetDLLName(),
-                                    GetPluginFS()->GetVersion(), GetPluginFS()->GetPluginInterface(),
-                                    GetPluginFS()->GetBuiltForVersion());
-                    SetPluginIconsType(pluginIconsType);
-                    if (SimplePluginIcons != NULL)
-                    {
-                        delete SimplePluginIcons;
-                        SimplePluginIcons = NULL;
-                    }
-                    SetValidFileData(GetPluginFSDir()->GetValidData());
-
-                    // clean the message queue of buffered WM_USER_UPDATEPANEL
-                    MSG msg2;
-                    PeekMessage(&msg2, HWindow, WM_USER_UPDATEPANEL, WM_USER_UPDATEPANEL, PM_REMOVE);
-
-                    // refresh the panel
-                    UpdateDriveIcon(FALSE); // get the icon for the current path from the plugin
-                    CommonRefresh(HWindow, suggestedTopIndex, suggestedFocusName, refreshListBox, TRUE, isRefresh);
-                    if (failReason != NULL)
-                        *failReason = mode == 3 ? CHPPFR_INVALIDPATH : CHPPFR_SHORTERPATH; // previously CHPPFR_SHORTERPATH only; Shift+F7 from dfs:x:\zumpa to dfs:x:\zumpa\aaa just reported a path error and didn't return to the Shift+F7 dialog
-
-                    // notify the FS that the path changed
-                    GetPluginFS()->Event(FSE_PATHCHANGED, GetPanelCode());
-                }
-                else // show an empty panel, nothing can be read from the FS, switch to the fixed drive
-                {
-                    if (keepOldListing)
-                    {
-                        // release the old listing
-                        if (UseSystemIcons || UseThumbnails)
-                            SleepIconCacheThread();
-                        ReleaseListing();
-                        // protect the listbox from paint errors caused by the redraw request (we just cut the data)
-                        ListBox->SetItemsCount(0, 0, 0, TRUE);
-                        SelectedCount = 0;
-                    }
-                    else // not dead-code, see 'workDir' allocation error in ChangeAndListPathOnFS()
-                    {
-                        // clean the message queue of buffered WM_USER_UPDATEPANEL
-                        MSG msg2;
-                        PeekMessage(&msg2, HWindow, WM_USER_UPDATEPANEL, WM_USER_UPDATEPANEL, PM_REMOVE);
-                    }
-
-                    // hide the throbber and security icon because we're leaving the FS
-                    if (DirectoryLine != NULL)
-                        DirectoryLine->HideThrobberAndSecurityIcon();
-
-                    // necessary, cannot use "refreshListBox" - the panel would remain empty longer (message boxes may appear)
-                    SetPluginIconsType(pitSimple); // PluginData == NULL, pitFromPlugin isn't allowed even with an empty panel
-                    if (SimplePluginIcons != NULL)
-                    {
-                        delete SimplePluginIcons;
-                        SimplePluginIcons = NULL;
-                    }
-                    // SetValidFileData(VALID_DATA_ALL_FS_ARC);   // keep the current value, no reason to change it
-                    CommonRefresh(HWindow, -1, NULL, TRUE, TRUE, isRefresh);
-
-                    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
-
-                    ChangeToRescuePathOrFixedDrive(HWindow, NULL, refreshListBox, FALSE, FSTRYCLOSE_CHANGEPATHFAILURE);
-
-                    EndStopRefresh();
-                    if (setWait)
-                        SetCursor(oldCur);
-                    if (failReason != NULL)
-                        *failReason = CHPPFR_INVALIDPATH;
-                    return FALSE;
-                }
-            }
-
-            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+            if (!ok)
+                CloseCurrentPath(HWindow, TRUE, detachFS, FALSE, isRefresh, FALSE); // failure, stay on the original path
 
             EndStopRefresh();
             if (setWait)
                 SetCursor(oldCur);
 
             //TRACE_I("change-to-fs: end");
-            return ok ? !shorterPath : FALSE;
-        }
-    }
-
-    BOOL CFilesWindow::ChangePathToDetachedFS(int fsIndex, int suggestedTopIndex,
-                                              const char* suggestedFocusName, BOOL refreshListBox,
-                                              int* failReason, const char* newFSName,
-                                              const char* newUserPart, int mode, BOOL canFocusFileName)
-    {
-        CALL_STACK_MESSAGE9("CFilesWindow::ChangePathToDetachedFS(%d, %d, %s, %d, , %s, %s, %d, %d)", fsIndex,
-                            suggestedTopIndex, suggestedFocusName, refreshListBox, newFSName, newUserPart,
-                            mode, canFocusFileName);
-
-        char backup[MAX_PATH];
-        if (suggestedFocusName != NULL)
-        {
-            lstrcpyn(backup, suggestedFocusName, MAX_PATH);
-            suggestedFocusName = backup;
-        }
-        if (newUserPart == NULL || newFSName == NULL)
-        {
-            newUserPart = NULL;
-            newFSName = NULL;
-        }
-        char backup2[MAX_PATH];
-        if (newUserPart != NULL)
-        {
-            lstrcpyn(backup2, newUserPart, MAX_PATH);
-            newUserPart = backup2;
-        }
-        char backup3[MAX_PATH];
-        if (newFSName != NULL)
-        {
-            lstrcpyn(backup3, newFSName, MAX_PATH);
-            newFSName = backup3;
-        }
-
-        // restore panel state (top-index + focused-name) before closing this path if needed
-        RefreshPathHistoryData();
-
-        MainWindow->CancelPanelsUI(); // cancel QuickSearch and QuickEdit
-
-        // obtain FS interface encapsulation from DetachedFSList
-        if (!MainWindow->DetachedFSList->IsGood())
-        { // the array must be valid so the later Delete call succeeds
-            TRACE_E("DetachedFSList array returns error, unable to finish operation.");
-            if (failReason != NULL)
-                *failReason = CHPPFR_INVALIDPATH;
-            return FALSE;
-        }
-        if (fsIndex < 0 || fsIndex >= MainWindow->DetachedFSList->Count)
-        {
-            TRACE_E("Invalid index of detached FS: fsIndex=" << fsIndex);
-            if (failReason != NULL)
-                *failReason = CHPPFR_INVALIDPATH;
-            return FALSE;
-        }
-        CPluginFSInterfaceEncapsulation* pluginFS = MainWindow->DetachedFSList->At(fsIndex);
-
-        // retrieve fs-name of the detached FS
-        char fsName[MAX_PATH];
-        int fsNameIndex;
-        if (newFSName != NULL) // if we must switch to a new fs-name, find out whether it exists and obtain its fs-name index
-        {
-            strcpy(fsName, newFSName);
-            int i;
-            if (!Plugins.IsPluginFS(fsName, i, fsNameIndex)) // "always false" (the plugin was not unloaded; fs-name could not disappear)
-            {
-                TRACE_E("CFilesWindow::ChangePathToDetachedFS(): unexpected situation: requested FS was not found! fs-name=" << newFSName);
-                newUserPart = NULL;
-                newFSName = NULL;
-            }
-        }
-        if (newFSName == NULL)
-        {
-            strcpy(fsName, pluginFS->GetPluginFSName());
-            fsNameIndex = pluginFS->GetPluginFSNameIndex();
-        }
-        if (mode == -1)
-            mode = newUserPart == NULL ? 1 : 2 /* refresh nebo history */;
-
-        if (mode != 3 && canFocusFileName)
-        {
-            TRACE_E("CFilesWindow::ChangePathToDetachedFS() - incorrect use of 'mode' or 'canFocusFileName'.");
-            canFocusFileName = FALSE;
-        }
-
-        CPluginData* plugin = Plugins.GetPluginData(pluginFS->GetPluginInterfaceForFS()->GetInterface());
-        if (plugin == NULL)
-        {
-            TRACE_E("Unexpected situation in CFilesWindow::ChangePathToDetachedFS.");
-            if (failReason != NULL)
-                *failReason = CHPPFR_INVALIDPATH;
-            return FALSE;
-        }
-
-        //---  start the hourglass cursor
-        BOOL setWait = (GetCursor() != LoadCursor(NULL, IDC_WAIT)); // already waiting?
-        HCURSOR oldCur;
-        if (setWait)
-            oldCur = SetCursor(LoadCursor(NULL, IDC_WAIT));
-        BeginStopRefresh(); // no refreshes, please
-
-        BOOL ok = FALSE;
-        BOOL shorterPath;
-        char cutFileNameBuf[MAX_PATH];
-
-        // not a FS path or the path is from another FS (even within the same plugin)
-        BOOL detachFS;
-        if (PrepareCloseCurrentPath(HWindow, FALSE, TRUE, detachFS, FSTRYCLOSE_CHANGEPATH))
-        { // the current path can be closed, attempt to open the new path
-            // create a new object for the file system contents of the current path
-            CSalamanderDirectory* newFSDir = new CSalamanderDirectory(TRUE);
-            BOOL closeDetachedFS = FALSE;
-            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
-            CPluginDataInterfaceAbstract* pluginData;
-            int pluginIconsType;
-            char* cutFileName = canFocusFileName && suggestedFocusName == NULL ? cutFileNameBuf : NULL; // focus the file only if no other focus is proposed
-            if (ChangeAndListPathOnFS(fsName, fsNameIndex, newUserPart, *pluginFS, newFSDir, pluginData,
-                                      shorterPath, pluginIconsType, mode,
-                                      FALSE, NULL, NULL, -1, FALSE, cutFileName, NULL))
-            {                    // success, the path (or subpath) was listed
-                if (shorterPath) // subpath?
-                {
-                    // invalidate proposed listbox settings (we'll list a different path)
-                    suggestedTopIndex = -1;
-                    if (cutFileName != NULL && *cutFileName != 0)
-                        suggestedFocusName = cutFileName; // focus the file
-                    else
-                        suggestedFocusName = NULL;
-                    if (failReason != NULL)
-                    {
-                        *failReason = cutFileName != NULL && *cutFileName != 0 ? CHPPFR_FILENAMEFOCUSED : CHPPFR_SHORTERPATH;
-                    }
-                }
-                else
-                {
-                    if (failReason != NULL)
-                        *failReason = CHPPFR_SUCCESS;
-                }
-
-                if (UseSystemIcons || UseThumbnails)
-                    SleepIconCacheThread();
-
-                CloseCurrentPath(HWindow, FALSE, detachFS, FALSE, FALSE, TRUE); // success, switch to the new path
-
-                // we just received a new listing; cancel any pending panel-change reports
-                InvalidateChangesInPanelWeHaveNewListing();
-
-                // hide the throbber and security icon; if the detached FS wants them it must enable them (e.g., in FSE_ATTACHED or FSE_PATHCHANGED)
-                if (DirectoryLine != NULL)
-                    DirectoryLine->HideThrobberAndSecurityIcon();
-
-                SetPanelType(ptPluginFS);
-                SetPath(GetPath()); // detach the path from Snooper (stop monitoring changes on Path)
-                SetPluginFS(pluginFS->GetInterface(), plugin->DLLName, plugin->Version,
-                            plugin->GetPluginInterfaceForFS()->GetInterface(),
-                            plugin->GetPluginInterface()->GetInterface(),
-                            pluginFS->GetPluginFSName(), pluginFS->GetPluginFSNameIndex(),
-                            pluginFS->GetPluginFSCreateTime(), pluginFS->GetChngDrvDuplicateItemIndex(),
-                            plugin->BuiltForVersion);
-                SetPluginIface(plugin->GetPluginInterface()->GetInterface());
-                SetPluginFSDir(newFSDir);
-                PluginData.Init(pluginData, plugin->DLLName, plugin->Version,
-                                plugin->GetPluginInterface()->GetInterface(), plugin->BuiltForVersion);
-                SetPluginIconsType(pluginIconsType);
-                SetValidFileData(GetPluginFSDir()->GetValidData());
-
-                // refresh the panel
-                UpdateDriveIcon(FALSE); // get the icon for the current path from the plugin
-                CommonRefresh(HWindow, suggestedTopIndex, suggestedFocusName, refreshListBox);
-
-                // notify the FS that it is attached again
-                GetPluginFS()->Event(FSE_ATTACHED, GetPanelCode());
-                GetPluginFS()->Event(FSE_PATHCHANGED, GetPanelCode());
-
-                ok = TRUE;
-            }
-            else
-            {
-                if (failReason != NULL)
-                    *failReason = CHPPFR_INVALIDPATH;
-                closeDetachedFS = TRUE;
-            }
-            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
-            if (!ok)
-            {
-                delete newFSDir;
-                CloseCurrentPath(HWindow, TRUE, detachFS, FALSE, FALSE, FALSE); // failure, stay on the original path
-            }
-
-            EndStopRefresh();
-            if (setWait)
-                SetCursor(oldCur);
-
-            if (ok)
-            {
-                // successful attachment, remove the FS from the detached list (Delete cannot fail)
-                MainWindow->DetachedFSList->Delete(fsIndex);
-                if (!MainWindow->DetachedFSList->IsGood())
-                    MainWindow->DetachedFSList->ResetState();
-            }
-            else
-            {
-                if (closeDetachedFS) // no path can be opened on the FS anymore, close it
-                {
-                    BOOL dummy;
-                    if (pluginFS->TryCloseOrDetach(FALSE, FALSE, dummy, FSTRYCLOSE_ATTACHFAILURE))
-                    { // ask the user whether to close it or keep it (after a fatal ChangePath() error)
-                        pluginFS->ReleaseObject(HWindow);
-                        plugin->GetPluginInterfaceForFS()->CloseFS(pluginFS->GetInterface());
-                        // remove the FS from the detached list (Delete cannot fail)
-                        MainWindow->DetachedFSList->Delete(fsIndex);
-                        if (!MainWindow->DetachedFSList->IsGood())
-                            MainWindow->DetachedFSList->ResetState();
-                    }
-                }
-            }
-
             return ok ? !shorterPath : FALSE;
         }
         else // the current path cannot be closed
@@ -3415,765 +2878,1309 @@ BOOL CFilesWindow::ChangeAndListPathOnFS(const char* fsName, int fsNameIndex, co
             return FALSE;
         }
     }
-
-    void CFilesWindow::RefreshDiskFreeSpace(BOOL check, BOOL doNotRefreshOtherPanel)
+    else
     {
-        CALL_STACK_MESSAGE3("CFilesWindow::RefreshDiskFreeSpace(%d, %d)", check, doNotRefreshOtherPanel);
-        if (Is(ptDisk))
-        {
-            if (!check || CheckPath(FALSE) == ERROR_SUCCESS)
-            { // only if the path is accessible
-                CQuadWord r = MyGetDiskFreeSpace(GetPath());
-                DirectoryLine->SetSize(r);
+        // note: convertPathToInternal must already be FALSE (the path was converted in IsPathFromActiveFS())
 
-                if (!doNotRefreshOtherPanel)
-                {
-                    // if the other panel uses the same root path, refresh disk-free-space there as well
-                    // not perfect - ideally we would test whether both paths are on the same volume,
-                    // but that would be too slow; this simplification should be good enough for normal use
-                    // this simplification should be more than enough for normal use)
-                    CFilesWindow* otherPanel = (MainWindow->LeftPanel == this) ? MainWindow->RightPanel : MainWindow->LeftPanel;
-                    if (otherPanel->Is(ptDisk) && HasTheSameRootPath(GetPath(), otherPanel->GetPath()))
-                        otherPanel->RefreshDiskFreeSpace(TRUE, TRUE /* otherwise we'd recurse endlessly */);
-                }
-            }
-        }
-        else
+        // PluginFS matches fsName and the path fsUserPart2 can be verified on it
+        BOOL samePath = GetPluginFS()->IsCurrentPath(GetPluginFS()->GetPluginFSNameIndex(), fsNameIndex, fsUserPart2);
+        if (!forceUpdate && samePath) // the path is identical to the current path
         {
-            if (Is(ptZIPArchive))
-            {
-                DirectoryLine->SetSize(CQuadWord(-1, -1)); // for archives free space is meaningless, hide the value
-            }
+            // call CommonRefresh so 'suggestedTopIndex' and 'suggestedFocusName' aren't ignored
+            CommonRefresh(HWindow, suggestedTopIndex, suggestedFocusName, refreshListBox, FALSE, isRefresh);
+
+            EndStopRefresh();
+            if (setWait)
+                SetCursor(oldCur);
+
+            if (failReason != NULL)
+                *failReason = CHPPFR_SUCCESS;
+            //TRACE_I("change-to-fs: end");
+            return TRUE; // nothing to do
+        }
+
+        // back up the current FS path (we'll try to select it again if an error occurs)
+        BOOL currentPathOK = TRUE;
+        char currentPath[MAX_PATH];
+        if (!GetPluginFS()->GetCurrentPath(currentPath))
+            currentPathOK = FALSE;
+        char currentPathFSName[MAX_PATH];
+        strcpy(currentPathFSName, GetPluginFS()->GetPluginFSName());
+        int currentPathFSNameIndex = GetPluginFS()->GetPluginFSNameIndex();
+
+        int originalTopIndex = ListBox->GetTopIndex();
+        char originalFocusName[MAX_PATH];
+        originalFocusName[0] = 0;
+        if (FocusedIndex >= 0)
+        {
+            CFileData* file = NULL;
+            if (FocusedIndex < Dirs->Count)
+                file = &Dirs->At(FocusedIndex);
             else
             {
-                if (Is(ptPluginFS))
+                if (FocusedIndex < Files->Count + Dirs->Count)
+                    file = &Files->At(FocusedIndex - Dirs->Count);
+            }
+            if (file != NULL)
+                lstrcpyn(originalFocusName, file->Name, MAX_PATH);
+        }
+
+        // attempt to change the path on the current FS
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
+
+        CPluginDataInterfaceAbstract* pluginData;
+        int pluginIconsType;
+        BOOL cancel;
+        BOOL keepOldListing = TRUE;
+        char* cutFileName = canFocusFileName && suggestedFocusName == NULL ? cutFileNameBuf : NULL; // focus the file only if no other focus is proposed
+        if (ChangeAndListPathOnFS(fsName, fsNameIndex, fsUserPart2, *GetPluginFS(), GetPluginFSDir(),
+                                  pluginData, shorterPath, pluginIconsType, mode, TRUE, &cancel,
+                                  currentPathOK ? currentPath : NULL, currentPathFSNameIndex, forceUpdate,
+                                  cutFileName, &keepOldListing))
+        { // success, the path (or subpath) was listed
+            if (failReason != NULL)
+            {
+                *failReason = shorterPath ? (cutFileName != NULL && *cutFileName != 0 ? CHPPFR_FILENAMEFOCUSED : CHPPFR_SHORTERPATH) : CHPPFR_SUCCESS;
+            }
+
+            if (!cancel) // only if new content was loaded (original content wasn't kept)
+            {
+                // we just received a new listing; cancel any pending panel-change reports
+                InvalidateChangesInPanelWeHaveNewListing();
+
+                // hide the throbber and security icon; if the FS still wants them it must enable them again (e.g., in FSE_PATHCHANGED)
+                if (DirectoryLine != NULL)
+                    DirectoryLine->HideThrobberAndSecurityIcon();
+
+                // add the path we just left (paths inside the FS remain open,
+                // so DirHistoryAddPathUnique hasn't been called yet)
+                if (currentPathOK && (!samePath || samePath && shorterPath)) // the path has changed
                 {
-                    CQuadWord r;
-                    GetPluginFS()->GetFSFreeSpace(&r); // get free space information from the plugin
-                    DirectoryLine->SetSize(r);
-                }
-            }
-        }
-    }
-
-    void CFilesWindow::GetContextMenuPos(POINT * p)
-    {
-        CALL_STACK_MESSAGE_NONE
-        RECT r;
-        if (!ListBox->GetItemRect(FocusedIndex, &r))
-        {
-            GetWindowRect(GetListBoxHWND(), &r);
-            p->x = r.left;
-            p->y = r.top;
-            return;
-        }
-        p->x = r.left + 18;
-        p->y = r.bottom;
-        ClientToScreen(GetListBoxHWND(), p);
-    }
-
-    void GetCommonFileTypeStr(char* buf, int* resLen, const char* ext)
-    {
-        char uppercaseExt[MAX_PATH];
-        char* d = uppercaseExt;
-        char* end = uppercaseExt + MAX_PATH - 1;
-        while (d < end && *ext != 0 && *ext != ' ')
-            *d++ = UpperCase[*ext++];
-        *d = 0;
-        if (*ext == 0 && uppercaseExt[0] != 0)
-        { // we have the entire extension in uppercase (no spaces and shorter than MAX_PATH) and it is not empty
-            *resLen = _snprintf_s(buf, TRANSFER_BUFFER_MAX, _TRUNCATE, CommonFileTypeName2, uppercaseExt);
-            if (*resLen < 0)
-                *resLen = TRANSFER_BUFFER_MAX - 1; // _snprintf_s reports truncation to the buffer size
-        }
-        else
-        {
-            memcpy(buf, CommonFileTypeName, CommonFileTypeNameLen + 1);
-            *resLen = CommonFileTypeNameLen;
-        }
-    }
-
-    void CFilesWindow::RefreshListBox(int suggestedXOffset,
-                                      int suggestedTopIndex, int suggestedFocusIndex,
-                                      BOOL ensureFocusIndexVisible, BOOL wholeItemVisible)
-    {
-        CALL_STACK_MESSAGE6("CFilesWindow::RefreshListBox(%d, %d, %d, %d, %d)", suggestedXOffset,
-                            suggestedTopIndex, suggestedFocusIndex, ensureFocusIndexVisible, wholeItemVisible);
-
-        //TRACE_I("refreshlist: begin");
-
-        KillQuickRenameTimer(); // prevent a potential QuickRenameWindow from opening
-
-        NarrowedNameColumn = FALSE;
-        FullWidthOfNameCol = 0;
-        WidthOfMostOfNames = 0;
-
-        HDC dc = HANDLES(GetDC(GetListBoxHWND()));
-        HFONT of = (HFONT)SelectObject(dc, Font);
-        SIZE act;
-
-        char formatedFileName[MAX_PATH];
-        switch (GetViewMode())
-        {
-        case vmBrief:
-        {
-            SIZE max;
-            max.cx = 0;
-            act.cy = 0;
-            int i;
-            for (i = 0; i < Dirs->Count; i++)
-            {
-                CFileData* f = &Dirs->At(i);
-                AlterFileName(formatedFileName, f->Name, f->NameLen,
-                              Configuration.FileNameFormat, 0, TRUE);
-                GetTextExtentPoint32(dc, formatedFileName, f->NameLen, &act);
-                if (max.cx < act.cx)
-                    max.cx = act.cx;
-            }
-            for (i = 0; i < Files->Count; i++)
-            {
-                CFileData* f = &Files->At(i);
-                AlterFileName(formatedFileName, f->Name, f->NameLen,
-                              Configuration.FileNameFormat, 0, FALSE);
-                GetTextExtentPoint32(dc, formatedFileName, f->NameLen, &act);
-                if (max.cx < act.cx)
-                    max.cx = act.cx;
-            }
-            max.cy = act.cy;
-            CaretHeight = (short)act.cy;
-
-            max.cx += 2 * IconSizes[ICONSIZE_16];
-            // minimal width (e.g., for an empty panel) so the user can hit UpDir
-            if (max.cx < 4 * IconSizes[ICONSIZE_16])
-                max.cx = 4 * IconSizes[ICONSIZE_16];
-            Columns[0].Width = max.cx; // width of the 'Name' column
-            max.cy += 4;
-            if (max.cy < IconSizes[ICONSIZE_16] + 1)
-                max.cy = IconSizes[ICONSIZE_16] + 1;
-            ListBox->SetItemWidthHeight(max.cx, max.cy);
-            break;
-        }
-
-        case vmIcons:
-        {
-            int w = IconSizes[ICONSIZE_32];
-            int h = IconSizes[ICONSIZE_32];
-            w += Configuration.IconSpacingHorz;
-            h += Configuration.IconSpacingVert;
-            ListBox->SetItemWidthHeight(w, h);
-            break;
-        }
-
-        case vmThumbnails:
-        {
-            int w = ListBox->ThumbnailWidth + 2;
-            int h = ListBox->ThumbnailHeight + 2;
-            w += Configuration.ThumbnailSpacingHorz;
-            h += Configuration.IconSpacingVert;
-            ListBox->SetItemWidthHeight(w, h);
-            break;
-        }
-
-        case vmTiles:
-        {
-            int w = IconSizes[ICONSIZE_48];
-            int h = IconSizes[ICONSIZE_48];
-            if (w < 48)
-                w = 48; // for 32x32 the width was insufficient
-            w += (int)(2.5 * (double)w);
-            h += Configuration.TileSpacingVert;
-            int textH = 3 * FontCharHeight + 4;
-            ListBox->SetItemWidthHeight(w, max(textH, h));
-            break;
-        }
-
-        case vmDetailed:
-        {
-            // Detailed view
-            int columnWidthName = 0;
-            int columnWidthExt = 0;
-            int columnWidthDosName = 0;
-            int columnWidthSize = 0;
-            int columnWidthType = 0;
-            int columnWidthDate = 0;
-            int columnWidthTime = 0;
-            int columnWidthAttr = 0;
-            int columnWidthDesc = 0;
-
-            // determine which columns are really visible (the plugin may have modified them)
-            BOOL extColumnIsVisible = FALSE;
-            DWORD autoWidthColumns = 0;
-            int i;
-            for (i = 0; i < Columns.Count; i++)
-            {
-                CColumn* column = &Columns[i];
-
-                if (column->ID == COLUMN_ID_EXTENSION)
-                    extColumnIsVisible = TRUE;
-                if (column->FixedWidth == 0)
-                {
-                    switch (column->ID)
+                    if (UserWorkedOnThisPath)
                     {
-                    case COLUMN_ID_EXTENSION:
-                        autoWidthColumns |= VIEW_SHOW_EXTENSION;
-                        break;
-                    case COLUMN_ID_DOSNAME:
-                        autoWidthColumns |= VIEW_SHOW_DOSNAME;
-                        break;
-                    case COLUMN_ID_SIZE:
-                        autoWidthColumns |= VIEW_SHOW_SIZE;
-                        break;
-                    case COLUMN_ID_TYPE:
-                        autoWidthColumns |= VIEW_SHOW_TYPE;
-                        break;
-                    case COLUMN_ID_DATE:
-                        autoWidthColumns |= VIEW_SHOW_DATE;
-                        break;
-                    case COLUMN_ID_TIME:
-                        autoWidthColumns |= VIEW_SHOW_TIME;
-                        break;
-                    case COLUMN_ID_ATTRIBUTES:
-                        autoWidthColumns |= VIEW_SHOW_ATTRIBUTES;
-                        break;
-                    case COLUMN_ID_DESCRIPTION:
-                        autoWidthColumns |= VIEW_SHOW_DESCRIPTION;
-                        break;
+                        MainWindow->DirHistoryAddPathUnique(2, currentPathFSName, currentPath, NULL,
+                                                            GetPluginFS()->GetInterface(), GetPluginFS());
+                        UserWorkedOnThisPath = FALSE;
                     }
+                    // leaving the path
+                    HiddenNames.Clear();  // release hidden names
+                    OldSelection.Clear(); // and old selection
                 }
-            }
 
-            i = 0;
-
-            int dirsCount = Dirs->Count;
-            int totalCount = Files->Count + Dirs->Count;
-            if (dirsCount > 0)
-            {
-                GetTextExtentPoint32(dc, DirColumnStr, DirColumnStrLen, &act);
-                act.cx += SPACE_WIDTH;
-                if (columnWidthSize < act.cx)
-                    columnWidthSize = act.cx;
-            }
-            else
-                act.cx = act.cy = 0;
-
-            char text[50];
-
-            DWORD attrSkipCache[10]; // optimization of attribute-width measurement
-            int attrSkipCacheCount = 0;
-            ZeroMemory(&attrSkipCache, sizeof(attrSkipCache));
-
-            CQuadWord maxSize(0, 0);
-
-            BOOL computeDate = autoWidthColumns & VIEW_SHOW_DATE;
-            if (computeDate && (totalCount > 20))
-            {
-                // determine whether we can estimate the widths
-                if (GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_SSHORTDATE, text, 50) != 0)
+                if (shorterPath) // subpath?
                 {
-                    // check if the date format contains words (dddd or MMMM),
-                    // which would be rendered as text like "Monday" or "May"
-                    if (strstr(text, "dddd") == NULL && strstr(text, "MMMM") == NULL)
-                    {
-                        SYSTEMTIME st;
-                        st.wMilliseconds = 0;
-                        st.wMinute = 59;
-                        st.wSecond = 59;
-                        st.wHour = 10;
-                        st.wYear = 2000;
-                        st.wMonth = 12;
-                        st.wDay = 24;
-                        st.wDayOfWeek = 0; // Sunday
-                        if (GetDateFormat(LOCALE_USER_DEFAULT, DATE_SHORTDATE, &st, NULL, text, 50) == 0)
-                            sprintf(text, "%u.%u.%u", st.wDay, st.wMonth, st.wYear);
-                        GetTextExtentPoint32(dc, text, (int)strlen(text), &act);
-                        act.cx += SPACE_WIDTH;
-                        if (columnWidthDate < act.cx)
-                            columnWidthDate = act.cx;
-                        computeDate = FALSE;
-                    }
-                }
-            }
-
-            int* nameColWidths = NULL;
-            if (totalCount > 0)
-                nameColWidths = (int*)malloc(totalCount * sizeof(int));
-
-            BOOL dirTypeDone = FALSE;
-            int nameLen;
-            for (i = 0; i < totalCount; i++)
-            {
-                BOOL isDir = i < Dirs->Count;
-                CFileData* f = isDir ? &Dirs->At(i) : &Files->At(i - dirsCount);
-                //--- name
-                BOOL extIsInExtColumn = extColumnIsVisible && (!isDir || Configuration.SortDirsByExt) &&
-                                        f->Ext[0] != 0 && f->Ext > f->Name + 1; // exception for names like ".htaccess"; they appear in Name even though they are extensions
-                if (Columns[0].FixedWidth == 0 || (autoWidthColumns & VIEW_SHOW_EXTENSION) && extIsInExtColumn)
-                {
-                    AlterFileName(formatedFileName, f->Name, f->NameLen, // prepare the formatted name also to compute the width of the separate Ext column
-                                  Configuration.FileNameFormat, 0, isDir);
-                    if (Columns[0].FixedWidth == 0)
-                    {
-                        nameLen = extIsInExtColumn ? (int)(f->Ext - f->Name - 1) : f->NameLen;
-
-                        GetTextExtentPoint32(dc, formatedFileName, nameLen, &act);
-                        act.cx += 1 + IconSizes[ICONSIZE_16] + 1 + 2 + SPACE_WIDTH;
-                        if (columnWidthName < act.cx)
-                            columnWidthName = act.cx;
-                        if (nameColWidths != NULL)
-                            nameColWidths[i] = act.cx;
-                    }
-                }
-                //--- extension
-                if ((autoWidthColumns & VIEW_SHOW_EXTENSION) && extIsInExtColumn)
-                {
-                    GetTextExtentPoint32(dc, formatedFileName + (int)(f->Ext - f->Name), (int)(f->NameLen - (f->Ext - f->Name)), &act);
-                    act.cx += SPACE_WIDTH;
-                    if (columnWidthExt < act.cx)
-                        columnWidthExt = act.cx;
-                }
-                //--- dosname
-                if ((autoWidthColumns & VIEW_SHOW_DOSNAME) && f->DosName != NULL)
-                {
-                    GetTextExtentPoint32(dc, f->DosName, (int)strlen(f->DosName), &act);
-                    act.cx += SPACE_WIDTH;
-                    if (columnWidthDosName < act.cx)
-                        columnWidthDosName = act.cx;
-                }
-                //--- size
-                if ((autoWidthColumns & VIEW_SHOW_SIZE) &&
-                    (!isDir || f->SizeValid)) // files and directories with a valid calculated size
-                {
-                    if (f->Size > maxSize)
-                        maxSize = f->Size;
-                }
-                //--- date || time
-                if (computeDate)
-                {
-                    SYSTEMTIME st;
-                    FILETIME ft;
-                    int len;
-                    if (!FileTimeToLocalFileTime(&f->LastWrite, &ft) ||
-                        !FileTimeToSystemTime(&ft, &st))
-                    {
-                        len = sprintf(text, LoadStr(IDS_INVALID_DATEORTIME));
-                    }
+                    // invalidate proposed listbox settings (we'll list a different path)
+                    suggestedTopIndex = -1;
+                    if (cutFileName != NULL && *cutFileName != 0)
+                        suggestedFocusName = cutFileName; // focus the file
                     else
                     {
-                        len = GetDateFormat(LOCALE_USER_DEFAULT, DATE_SHORTDATE, &st, NULL, text, 50) - 1;
-                        if (len < 0)
-                            len = sprintf(text, "%u.%u.%u", st.wDay, st.wMonth, st.wYear);
-                    }
-                    GetTextExtentPoint32(dc, text, len, &act);
-                    act.cx += SPACE_WIDTH;
-                    if (columnWidthDate < act.cx)
-                        columnWidthDate = act.cx;
-                }
+                        suggestedFocusName = NULL;
 
-                if (autoWidthColumns & VIEW_SHOW_ATTRIBUTES)
-                {
-                    //--- attr
-                    // prepare data for the cache !!! additional measured attributes may need hooking here
-                    DWORD mask = f->Attr & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN |
-                                            FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_ARCHIVE |
-                                            FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_COMPRESSED |
-                                            FILE_ATTRIBUTE_ENCRYPTED);
-                    if (mask != 0)
-                    {
-                        if (mask != attrSkipCache[0] && mask != attrSkipCache[1] &&
-                            mask != attrSkipCache[2] && mask != attrSkipCache[3] &&
-                            mask != attrSkipCache[4] && mask != attrSkipCache[5] &&
-                            mask != attrSkipCache[6] && mask != attrSkipCache[7] &&
-                            mask != attrSkipCache[8] && mask != attrSkipCache[9])
+                        // the new path shortened back to the original ("unlistable subdirectory"), keep
+                        // keep topIndex and focusName from before the operation starts (so the user doesn't lose focus)
+                        if (currentPathOK &&
+                            GetPluginFS()->IsCurrentPath(GetPluginFS()->GetPluginFSNameIndex(),
+                                                         currentPathFSNameIndex, currentPath))
                         {
-                            GetAttrsString(text, f->Attr);
-                            // this combination has not been measured yet
-                            GetTextExtentPoint32(dc, text, (int)strlen(text), &act);
-                            act.cx += SPACE_WIDTH;
-                            if (columnWidthAttr < act.cx)
-                                columnWidthAttr = act.cx;
-                            if (attrSkipCacheCount < 10)
-                            {
-                                // still space left, add the item to the cache
-                                attrSkipCache[attrSkipCacheCount] = mask;
-                                attrSkipCacheCount++;
-                            }
-                            else
-                                attrSkipCache[0] = mask; // put it in the first position
+                            suggestedTopIndex = originalTopIndex;
+                            suggestedFocusName = originalFocusName[0] == 0 ? NULL : originalFocusName;
                         }
                     }
                 }
 
-                if (autoWidthColumns & VIEW_SHOW_TYPE)
+                //        if (UseSystemIcons || UseThumbnails) SleepIconCacheThread();   // vola se v ChangeAndListPathOnFS
+
+                // add new pluginData to the current (newly filled) PluginFSDir
+                PluginData.Init(pluginData, GetPluginFS()->GetDLLName(),
+                                GetPluginFS()->GetVersion(), GetPluginFS()->GetPluginInterface(),
+                                GetPluginFS()->GetBuiltForVersion());
+                SetPluginIconsType(pluginIconsType);
+                if (SimplePluginIcons != NULL)
                 {
-                    //--- file-type
-                    if (!isDir) // is a file
-                    {
-                        char buf[TRANSFER_BUFFER_MAX];
-                        BOOL commonFileType = TRUE;
-                        if (f->Ext[0] != 0) // extension exists
+                    delete SimplePluginIcons;
+                    SimplePluginIcons = NULL;
+                }
+                SetValidFileData(GetPluginFSDir()->GetValidData());
+
+                if (noChange != NULL)
+                    *noChange = FALSE;
+
+                // clean the message queue of buffered WM_USER_UPDATEPANEL
+                MSG msg2;
+                PeekMessage(&msg2, HWindow, WM_USER_UPDATEPANEL, WM_USER_UPDATEPANEL, PM_REMOVE);
+
+                // refresh the panel
+                UpdateDriveIcon(FALSE); // get the icon for the current path from the plugin
+                CommonRefresh(HWindow, suggestedTopIndex, suggestedFocusName, refreshListBox, TRUE, isRefresh);
+
+                // notify the FS that the path changed
+                GetPluginFS()->Event(FSE_PATHCHANGED, GetPanelCode());
+            }
+            else
+            {
+                if (shorterPath && cutFileName != NULL && *cutFileName != 0 && refreshListBox) // the file needs to be focused
+                {
+                    int focusIndexCase = -1;
+                    int focusIndexIgnCase = -1;
+                    int i;
+                    for (i = 0; i < Dirs->Count; i++)
+                    { // for consistency with CommonRefresh we search directories first,
+                        // then files (so it behaves the same in both cases)
+                        if (StrICmp(Dirs->At(i).Name, cutFileName) == 0)
                         {
-                            char* dst = buf;
-                            char* src = f->Ext;
-                            while (*src != 0)
-                                *dst++ = LowerCase[*src++];
-                            *((DWORD*)dst) = 0;
-                            int index;
-                            if (Associations.GetIndex(buf, index))
+                            if (focusIndexIgnCase == -1)
+                                focusIndexIgnCase = i;
+                            if (strcmp(Dirs->At(i).Name, cutFileName) == 0)
                             {
-                                src = Associations[index].Type;
-                                if (src != NULL) // if it is not an empty string
+                                focusIndexCase = i;
+                                break;
+                            }
+                        }
+                    }
+                    if (i == Dirs->Count)
+                    {
+                        for (i = 0; i < Files->Count; i++)
+                        {
+                            if (StrICmp(Files->At(i).Name, cutFileName) == 0)
+                            {
+                                if (focusIndexIgnCase == -1)
+                                    focusIndexIgnCase = i + Dirs->Count;
+                                if (strcmp(Files->At(i).Name, cutFileName) == 0)
                                 {
-                                    commonFileType = FALSE;
-                                    GetTextExtentPoint32(dc, src, (int)strlen(src), &act);
-                                    act.cx += SPACE_WIDTH;
-                                    if (columnWidthType < act.cx)
-                                        columnWidthType = act.cx;
+                                    focusIndexCase = i + Dirs->Count;
+                                    break;
                                 }
                             }
                         }
-                        if (commonFileType)
-                        {
-                            int resLen;
-                            GetCommonFileTypeStr(buf, &resLen, f->Ext);
-                            GetTextExtentPoint32(dc, buf, resLen, &act);
-                            act.cx += SPACE_WIDTH;
-                            if (columnWidthType < act.cx)
-                                columnWidthType = act.cx;
-                        }
                     }
-                    else // is a directory
+
+                    if (focusIndexIgnCase != -1) // at least one file found differing only in case
                     {
-                        if (!dirTypeDone) // only if we have not computed it yet
-                        {
-                            if (i == 0 && isDir && strcmp(f->Name, "..") == 0)
-                            {
-                                GetTextExtentPoint32(dc, UpDirTypeName, UpDirTypeNameLen, &act);
-                            }
-                            else
-                            {
-                                dirTypeDone = TRUE;
-                                GetTextExtentPoint32(dc, FolderTypeName, FolderTypeNameLen, &act);
-                            }
-                            act.cx += SPACE_WIDTH;
-                            if (columnWidthType < act.cx)
-                                columnWidthType = act.cx;
-                        }
+                        SetCaretIndex(focusIndexCase != -1 ? focusIndexCase : focusIndexIgnCase, FALSE);
                     }
                 }
             }
 
-            // size
-            if (autoWidthColumns & VIEW_SHOW_SIZE)
-            {
-                int numLen;
-                switch (Configuration.SizeFormat)
+            ok = TRUE;
+        }
+        else // requested path is not accessible, try returning to the original path
+        {
+            if (noChange != NULL)
+                *noChange = FALSE; // the listing will be cleared or changed
+            if (!samePath &&       // if this isn't a refresh (changing to the same path)
+                currentPathOK &&   // if the original path was retrieved successfully
+                ChangeAndListPathOnFS(currentPathFSName, currentPathFSNameIndex, currentPath,
+                                      *GetPluginFS(), GetPluginFSDir(),
+                                      pluginData, shorterPath, pluginIconsType, mode,
+                                      FALSE, NULL, NULL, -1, FALSE, NULL, &keepOldListing))
+            { // success, the original path (or its subpath) was listed
+                // invalidate proposed listbox settings (we'll list a different path)
+                suggestedTopIndex = -1;
+                suggestedFocusName = NULL;
+
+                // the original path is accessible (no shortening was needed); keep the topIndex
+                // and focusName from before the operation so the user doesn't lose focus
+                if (!shorterPath)
                 {
-                case SIZE_FORMAT_BYTES:
-                {
-                    numLen = NumberToStr2(text, maxSize);
-                    break;
+                    suggestedTopIndex = originalTopIndex;
+                    suggestedFocusName = originalFocusName[0] == 0 ? NULL : originalFocusName;
                 }
 
-                case SIZE_FORMAT_KB: // note: the same code appears elsewhere, search for this constant
+                // add the path we just left (paths inside the FS remain open,
+                // so DirHistoryAddPathUnique hasn't been called yet)
+                if (currentPathOK && shorterPath) // if shorterPath is FALSE, the path didn't change...
                 {
-                    PrintDiskSize(text, maxSize, 3);
-                    numLen = (int)strlen(text);
-                    break;
+                    if (UserWorkedOnThisPath)
+                    {
+                        MainWindow->DirHistoryAddPathUnique(2, currentPathFSName, currentPath, NULL,
+                                                            GetPluginFS()->GetInterface(), GetPluginFS());
+                        UserWorkedOnThisPath = FALSE;
+                    }
+                    // leaving the path
+                    HiddenNames.Clear();  // release hidden names
+                    OldSelection.Clear(); // and old selection
                 }
 
-                case SIZE_FORMAT_MIXED:
+                // we just received a new listing; cancel any pending panel-change reports
+                InvalidateChangesInPanelWeHaveNewListing();
+
+                // hide the throbber and security icon; if the FS still wants them it must enable them again (e.g., in FSE_PATHCHANGED)
+                if (DirectoryLine != NULL)
+                    DirectoryLine->HideThrobberAndSecurityIcon();
+
+                if (UseSystemIcons || UseThumbnails)
+                    SleepIconCacheThread();
+
+                // add new pluginData to the current (newly filled) PluginFSDir
+                PluginData.Init(pluginData, GetPluginFS()->GetDLLName(),
+                                GetPluginFS()->GetVersion(), GetPluginFS()->GetPluginInterface(),
+                                GetPluginFS()->GetBuiltForVersion());
+                SetPluginIconsType(pluginIconsType);
+                if (SimplePluginIcons != NULL)
                 {
-                    sprintf(text, "1023 GB"); // worst case scenario
-                    numLen = (int)strlen(text);
-                    break;
+                    delete SimplePluginIcons;
+                    SimplePluginIcons = NULL;
                 }
-                }
-                GetTextExtentPoint32(dc, text, numLen, &act);
-                act.cx += SPACE_WIDTH;
-                if (columnWidthSize < act.cx)
-                    columnWidthSize = act.cx;
+                SetValidFileData(GetPluginFSDir()->GetValidData());
+
+                // clean the message queue of buffered WM_USER_UPDATEPANEL
+                MSG msg2;
+                PeekMessage(&msg2, HWindow, WM_USER_UPDATEPANEL, WM_USER_UPDATEPANEL, PM_REMOVE);
+
+                // refresh the panel
+                UpdateDriveIcon(FALSE); // get the icon for the current path from the plugin
+                CommonRefresh(HWindow, suggestedTopIndex, suggestedFocusName, refreshListBox, TRUE, isRefresh);
+                if (failReason != NULL)
+                    *failReason = mode == 3 ? CHPPFR_INVALIDPATH : CHPPFR_SHORTERPATH; // previously CHPPFR_SHORTERPATH only; Shift+F7 from dfs:x:\zumpa to dfs:x:\zumpa\aaa just reported a path error and didn't return to the Shift+F7 dialog
+
+                // notify the FS that the path changed
+                GetPluginFS()->Event(FSE_PATHCHANGED, GetPanelCode());
             }
-            // time
-            if (autoWidthColumns & VIEW_SHOW_TIME)
+            else // show an empty panel, nothing can be read from the FS, switch to the fixed drive
+            {
+                if (keepOldListing)
+                {
+                    // release the old listing
+                    if (UseSystemIcons || UseThumbnails)
+                        SleepIconCacheThread();
+                    ReleaseListing();
+                    // protect the listbox from paint errors caused by the redraw request (we just cut the data)
+                    ListBox->SetItemsCount(0, 0, 0, TRUE);
+                    SelectedCount = 0;
+                }
+                else // not dead-code, see 'workDir' allocation error in ChangeAndListPathOnFS()
+                {
+                    // clean the message queue of buffered WM_USER_UPDATEPANEL
+                    MSG msg2;
+                    PeekMessage(&msg2, HWindow, WM_USER_UPDATEPANEL, WM_USER_UPDATEPANEL, PM_REMOVE);
+                }
+
+                // hide the throbber and security icon because we're leaving the FS
+                if (DirectoryLine != NULL)
+                    DirectoryLine->HideThrobberAndSecurityIcon();
+
+                // necessary, cannot use "refreshListBox" - the panel would remain empty longer (message boxes may appear)
+                SetPluginIconsType(pitSimple); // PluginData == NULL, pitFromPlugin isn't allowed even with an empty panel
+                if (SimplePluginIcons != NULL)
+                {
+                    delete SimplePluginIcons;
+                    SimplePluginIcons = NULL;
+                }
+                // SetValidFileData(VALID_DATA_ALL_FS_ARC);   // keep the current value, no reason to change it
+                CommonRefresh(HWindow, -1, NULL, TRUE, TRUE, isRefresh);
+
+                SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+
+                ChangeToRescuePathOrFixedDrive(HWindow, NULL, refreshListBox, FALSE, FSTRYCLOSE_CHANGEPATHFAILURE);
+
+                EndStopRefresh();
+                if (setWait)
+                    SetCursor(oldCur);
+                if (failReason != NULL)
+                    *failReason = CHPPFR_INVALIDPATH;
+                return FALSE;
+            }
+        }
+
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+
+        EndStopRefresh();
+        if (setWait)
+            SetCursor(oldCur);
+
+        //TRACE_I("change-to-fs: end");
+        return ok ? !shorterPath : FALSE;
+    }
+}
+
+BOOL CFilesWindow::ChangePathToDetachedFS(int fsIndex, int suggestedTopIndex,
+                                          const char* suggestedFocusName, BOOL refreshListBox,
+                                          int* failReason, const char* newFSName,
+                                          const char* newUserPart, int mode, BOOL canFocusFileName)
+{
+    CALL_STACK_MESSAGE9("CFilesWindow::ChangePathToDetachedFS(%d, %d, %s, %d, , %s, %s, %d, %d)", fsIndex,
+                        suggestedTopIndex, suggestedFocusName, refreshListBox, newFSName, newUserPart,
+                        mode, canFocusFileName);
+
+    char backup[MAX_PATH];
+    if (suggestedFocusName != NULL)
+    {
+        lstrcpyn(backup, suggestedFocusName, MAX_PATH);
+        suggestedFocusName = backup;
+    }
+    if (newUserPart == NULL || newFSName == NULL)
+    {
+        newUserPart = NULL;
+        newFSName = NULL;
+    }
+    char backup2[MAX_PATH];
+    if (newUserPart != NULL)
+    {
+        lstrcpyn(backup2, newUserPart, MAX_PATH);
+        newUserPart = backup2;
+    }
+    char backup3[MAX_PATH];
+    if (newFSName != NULL)
+    {
+        lstrcpyn(backup3, newFSName, MAX_PATH);
+        newFSName = backup3;
+    }
+
+    // restore panel state (top-index + focused-name) before closing this path if needed
+    RefreshPathHistoryData();
+
+    MainWindow->CancelPanelsUI(); // cancel QuickSearch and QuickEdit
+
+    // obtain FS interface encapsulation from DetachedFSList
+    if (!MainWindow->DetachedFSList->IsGood())
+    { // the array must be valid so the later Delete call succeeds
+        TRACE_E("DetachedFSList array returns error, unable to finish operation.");
+        if (failReason != NULL)
+            *failReason = CHPPFR_INVALIDPATH;
+        return FALSE;
+    }
+    if (fsIndex < 0 || fsIndex >= MainWindow->DetachedFSList->Count)
+    {
+        TRACE_E("Invalid index of detached FS: fsIndex=" << fsIndex);
+        if (failReason != NULL)
+            *failReason = CHPPFR_INVALIDPATH;
+        return FALSE;
+    }
+    CPluginFSInterfaceEncapsulation* pluginFS = MainWindow->DetachedFSList->At(fsIndex);
+
+    // retrieve fs-name of the detached FS
+    char fsName[MAX_PATH];
+    int fsNameIndex;
+    if (newFSName != NULL) // if we must switch to a new fs-name, find out whether it exists and obtain its fs-name index
+    {
+        strcpy(fsName, newFSName);
+        int i;
+        if (!Plugins.IsPluginFS(fsName, i, fsNameIndex)) // "always false" (the plugin was not unloaded; fs-name could not disappear)
+        {
+            TRACE_E("CFilesWindow::ChangePathToDetachedFS(): unexpected situation: requested FS was not found! fs-name=" << newFSName);
+            newUserPart = NULL;
+            newFSName = NULL;
+        }
+    }
+    if (newFSName == NULL)
+    {
+        strcpy(fsName, pluginFS->GetPluginFSName());
+        fsNameIndex = pluginFS->GetPluginFSNameIndex();
+    }
+    if (mode == -1)
+        mode = newUserPart == NULL ? 1 : 2 /* refresh nebo history */;
+
+    if (mode != 3 && canFocusFileName)
+    {
+        TRACE_E("CFilesWindow::ChangePathToDetachedFS() - incorrect use of 'mode' or 'canFocusFileName'.");
+        canFocusFileName = FALSE;
+    }
+
+    CPluginData* plugin = Plugins.GetPluginData(pluginFS->GetPluginInterfaceForFS()->GetInterface());
+    if (plugin == NULL)
+    {
+        TRACE_E("Unexpected situation in CFilesWindow::ChangePathToDetachedFS.");
+        if (failReason != NULL)
+            *failReason = CHPPFR_INVALIDPATH;
+        return FALSE;
+    }
+
+    //---  start the hourglass cursor
+    BOOL setWait = (GetCursor() != LoadCursor(NULL, IDC_WAIT)); // already waiting?
+    HCURSOR oldCur;
+    if (setWait)
+        oldCur = SetCursor(LoadCursor(NULL, IDC_WAIT));
+    BeginStopRefresh(); // no refreshes, please
+
+    BOOL ok = FALSE;
+    BOOL shorterPath;
+    char cutFileNameBuf[MAX_PATH];
+
+    // not a FS path or the path is from another FS (even within the same plugin)
+    BOOL detachFS;
+    if (PrepareCloseCurrentPath(HWindow, FALSE, TRUE, detachFS, FSTRYCLOSE_CHANGEPATH))
+    { // the current path can be closed, attempt to open the new path
+        // create a new object for the file system contents of the current path
+        CSalamanderDirectory* newFSDir = new CSalamanderDirectory(TRUE);
+        BOOL closeDetachedFS = FALSE;
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
+        CPluginDataInterfaceAbstract* pluginData;
+        int pluginIconsType;
+        char* cutFileName = canFocusFileName && suggestedFocusName == NULL ? cutFileNameBuf : NULL; // focus the file only if no other focus is proposed
+        if (ChangeAndListPathOnFS(fsName, fsNameIndex, newUserPart, *pluginFS, newFSDir, pluginData,
+                                  shorterPath, pluginIconsType, mode,
+                                  FALSE, NULL, NULL, -1, FALSE, cutFileName, NULL))
+        {                    // success, the path (or subpath) was listed
+            if (shorterPath) // subpath?
+            {
+                // invalidate proposed listbox settings (we'll list a different path)
+                suggestedTopIndex = -1;
+                if (cutFileName != NULL && *cutFileName != 0)
+                    suggestedFocusName = cutFileName; // focus the file
+                else
+                    suggestedFocusName = NULL;
+                if (failReason != NULL)
+                {
+                    *failReason = cutFileName != NULL && *cutFileName != 0 ? CHPPFR_FILENAMEFOCUSED : CHPPFR_SHORTERPATH;
+                }
+            }
+            else
+            {
+                if (failReason != NULL)
+                    *failReason = CHPPFR_SUCCESS;
+            }
+
+            if (UseSystemIcons || UseThumbnails)
+                SleepIconCacheThread();
+
+            CloseCurrentPath(HWindow, FALSE, detachFS, FALSE, FALSE, TRUE); // success, switch to the new path
+
+            // we just received a new listing; cancel any pending panel-change reports
+            InvalidateChangesInPanelWeHaveNewListing();
+
+            // hide the throbber and security icon; if the detached FS wants them it must enable them (e.g., in FSE_ATTACHED or FSE_PATHCHANGED)
+            if (DirectoryLine != NULL)
+                DirectoryLine->HideThrobberAndSecurityIcon();
+
+            SetPanelType(ptPluginFS);
+            SetPath(GetPath()); // detach the path from Snooper (stop monitoring changes on Path)
+            SetPluginFS(pluginFS->GetInterface(), plugin->DLLName, plugin->Version,
+                        plugin->GetPluginInterfaceForFS()->GetInterface(),
+                        plugin->GetPluginInterface()->GetInterface(),
+                        pluginFS->GetPluginFSName(), pluginFS->GetPluginFSNameIndex(),
+                        pluginFS->GetPluginFSCreateTime(), pluginFS->GetChngDrvDuplicateItemIndex(),
+                        plugin->BuiltForVersion);
+            SetPluginIface(plugin->GetPluginInterface()->GetInterface());
+            SetPluginFSDir(newFSDir);
+            PluginData.Init(pluginData, plugin->DLLName, plugin->Version,
+                            plugin->GetPluginInterface()->GetInterface(), plugin->BuiltForVersion);
+            SetPluginIconsType(pluginIconsType);
+            SetValidFileData(GetPluginFSDir()->GetValidData());
+
+            // refresh the panel
+            UpdateDriveIcon(FALSE); // get the icon for the current path from the plugin
+            CommonRefresh(HWindow, suggestedTopIndex, suggestedFocusName, refreshListBox);
+
+            // notify the FS that it is attached again
+            GetPluginFS()->Event(FSE_ATTACHED, GetPanelCode());
+            GetPluginFS()->Event(FSE_PATHCHANGED, GetPanelCode());
+
+            ok = TRUE;
+        }
+        else
+        {
+            if (failReason != NULL)
+                *failReason = CHPPFR_INVALIDPATH;
+            closeDetachedFS = TRUE;
+        }
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+        if (!ok)
+        {
+            delete newFSDir;
+            CloseCurrentPath(HWindow, TRUE, detachFS, FALSE, FALSE, FALSE); // failure, stay on the original path
+        }
+
+        EndStopRefresh();
+        if (setWait)
+            SetCursor(oldCur);
+
+        if (ok)
+        {
+            // successful attachment, remove the FS from the detached list (Delete cannot fail)
+            MainWindow->DetachedFSList->Delete(fsIndex);
+            if (!MainWindow->DetachedFSList->IsGood())
+                MainWindow->DetachedFSList->ResetState();
+        }
+        else
+        {
+            if (closeDetachedFS) // no path can be opened on the FS anymore, close it
+            {
+                BOOL dummy;
+                if (pluginFS->TryCloseOrDetach(FALSE, FALSE, dummy, FSTRYCLOSE_ATTACHFAILURE))
+                { // ask the user whether to close it or keep it (after a fatal ChangePath() error)
+                    pluginFS->ReleaseObject(HWindow);
+                    plugin->GetPluginInterfaceForFS()->CloseFS(pluginFS->GetInterface());
+                    // remove the FS from the detached list (Delete cannot fail)
+                    MainWindow->DetachedFSList->Delete(fsIndex);
+                    if (!MainWindow->DetachedFSList->IsGood())
+                        MainWindow->DetachedFSList->ResetState();
+                }
+            }
+        }
+
+        return ok ? !shorterPath : FALSE;
+    }
+    else // the current path cannot be closed
+    {
+        EndStopRefresh();
+        if (setWait)
+            SetCursor(oldCur);
+
+        if (failReason != NULL)
+            *failReason = CHPPFR_CANNOTCLOSEPATH;
+        return FALSE;
+    }
+}
+
+void CFilesWindow::RefreshDiskFreeSpace(BOOL check, BOOL doNotRefreshOtherPanel)
+{
+    CALL_STACK_MESSAGE3("CFilesWindow::RefreshDiskFreeSpace(%d, %d)", check, doNotRefreshOtherPanel);
+    if (Is(ptDisk))
+    {
+        if (!check || CheckPath(FALSE) == ERROR_SUCCESS)
+        { // only if the path is accessible
+            CQuadWord r = MyGetDiskFreeSpace(GetPath());
+            DirectoryLine->SetSize(r);
+
+            if (!doNotRefreshOtherPanel)
+            {
+                // if the other panel uses the same root path, refresh disk-free-space there as well
+                // not perfect - ideally we would test whether both paths are on the same volume,
+                // but that would be too slow; this simplification should be good enough for normal use
+                // this simplification should be more than enough for normal use)
+                CFilesWindow* otherPanel = (MainWindow->LeftPanel == this) ? MainWindow->RightPanel : MainWindow->LeftPanel;
+                if (otherPanel->Is(ptDisk) && HasTheSameRootPath(GetPath(), otherPanel->GetPath()))
+                    otherPanel->RefreshDiskFreeSpace(TRUE, TRUE /* otherwise we'd recurse endlessly */);
+            }
+        }
+    }
+    else
+    {
+        if (Is(ptZIPArchive))
+        {
+            DirectoryLine->SetSize(CQuadWord(-1, -1)); // for archives free space is meaningless, hide the value
+        }
+        else
+        {
+            if (Is(ptPluginFS))
+            {
+                CQuadWord r;
+                GetPluginFS()->GetFSFreeSpace(&r); // get free space information from the plugin
+                DirectoryLine->SetSize(r);
+            }
+        }
+    }
+}
+
+void CFilesWindow::GetContextMenuPos(POINT* p)
+{
+    CALL_STACK_MESSAGE_NONE
+    RECT r;
+    if (!ListBox->GetItemRect(FocusedIndex, &r))
+    {
+        GetWindowRect(GetListBoxHWND(), &r);
+        p->x = r.left;
+        p->y = r.top;
+        return;
+    }
+    p->x = r.left + 18;
+    p->y = r.bottom;
+    ClientToScreen(GetListBoxHWND(), p);
+}
+
+void GetCommonFileTypeStr(char* buf, int* resLen, const char* ext)
+{
+    char uppercaseExt[MAX_PATH];
+    char* d = uppercaseExt;
+    char* end = uppercaseExt + MAX_PATH - 1;
+    while (d < end && *ext != 0 && *ext != ' ')
+        *d++ = UpperCase[*ext++];
+    *d = 0;
+    if (*ext == 0 && uppercaseExt[0] != 0)
+    { // we have the entire extension in uppercase (no spaces and shorter than MAX_PATH) and it is not empty
+        *resLen = _snprintf_s(buf, TRANSFER_BUFFER_MAX, _TRUNCATE, CommonFileTypeName2, uppercaseExt);
+        if (*resLen < 0)
+            *resLen = TRANSFER_BUFFER_MAX - 1; // _snprintf_s reports truncation to the buffer size
+    }
+    else
+    {
+        memcpy(buf, CommonFileTypeName, CommonFileTypeNameLen + 1);
+        *resLen = CommonFileTypeNameLen;
+    }
+}
+
+void CFilesWindow::RefreshListBox(int suggestedXOffset,
+                                  int suggestedTopIndex, int suggestedFocusIndex,
+                                  BOOL ensureFocusIndexVisible, BOOL wholeItemVisible)
+{
+    CALL_STACK_MESSAGE6("CFilesWindow::RefreshListBox(%d, %d, %d, %d, %d)", suggestedXOffset,
+                        suggestedTopIndex, suggestedFocusIndex, ensureFocusIndexVisible, wholeItemVisible);
+
+    //TRACE_I("refreshlist: begin");
+
+    KillQuickRenameTimer(); // prevent a potential QuickRenameWindow from opening
+
+    NarrowedNameColumn = FALSE;
+    FullWidthOfNameCol = 0;
+    WidthOfMostOfNames = 0;
+
+    HDC dc = HANDLES(GetDC(GetListBoxHWND()));
+    HFONT of = (HFONT)SelectObject(dc, Font);
+    SIZE act;
+
+    char formatedFileName[MAX_PATH];
+    switch (GetViewMode())
+    {
+    case vmBrief:
+    {
+        SIZE max;
+        max.cx = 0;
+        act.cy = 0;
+        int i;
+        for (i = 0; i < Dirs->Count; i++)
+        {
+            CFileData* f = &Dirs->At(i);
+            AlterFileName(formatedFileName, f->Name, f->NameLen,
+                          Configuration.FileNameFormat, 0, TRUE);
+            GetTextExtentPoint32(dc, formatedFileName, f->NameLen, &act);
+            if (max.cx < act.cx)
+                max.cx = act.cx;
+        }
+        for (i = 0; i < Files->Count; i++)
+        {
+            CFileData* f = &Files->At(i);
+            AlterFileName(formatedFileName, f->Name, f->NameLen,
+                          Configuration.FileNameFormat, 0, FALSE);
+            GetTextExtentPoint32(dc, formatedFileName, f->NameLen, &act);
+            if (max.cx < act.cx)
+                max.cx = act.cx;
+        }
+        max.cy = act.cy;
+        CaretHeight = (short)act.cy;
+
+        max.cx += 2 * IconSizes[ICONSIZE_16];
+        // minimal width (e.g., for an empty panel) so the user can hit UpDir
+        if (max.cx < 4 * IconSizes[ICONSIZE_16])
+            max.cx = 4 * IconSizes[ICONSIZE_16];
+        Columns[0].Width = max.cx; // width of the 'Name' column
+        max.cy += 4;
+        if (max.cy < IconSizes[ICONSIZE_16] + 1)
+            max.cy = IconSizes[ICONSIZE_16] + 1;
+        ListBox->SetItemWidthHeight(max.cx, max.cy);
+        break;
+    }
+
+    case vmIcons:
+    {
+        int w = IconSizes[ICONSIZE_32];
+        int h = IconSizes[ICONSIZE_32];
+        w += Configuration.IconSpacingHorz;
+        h += Configuration.IconSpacingVert;
+        ListBox->SetItemWidthHeight(w, h);
+        break;
+    }
+
+    case vmThumbnails:
+    {
+        int w = ListBox->ThumbnailWidth + 2;
+        int h = ListBox->ThumbnailHeight + 2;
+        w += Configuration.ThumbnailSpacingHorz;
+        h += Configuration.IconSpacingVert;
+        ListBox->SetItemWidthHeight(w, h);
+        break;
+    }
+
+    case vmTiles:
+    {
+        int w = IconSizes[ICONSIZE_48];
+        int h = IconSizes[ICONSIZE_48];
+        if (w < 48)
+            w = 48; // for 32x32 the width was insufficient
+        w += (int)(2.5 * (double)w);
+        h += Configuration.TileSpacingVert;
+        int textH = 3 * FontCharHeight + 4;
+        ListBox->SetItemWidthHeight(w, max(textH, h));
+        break;
+    }
+
+    case vmDetailed:
+    {
+        // Detailed view
+        int columnWidthName = 0;
+        int columnWidthExt = 0;
+        int columnWidthDosName = 0;
+        int columnWidthSize = 0;
+        int columnWidthType = 0;
+        int columnWidthDate = 0;
+        int columnWidthTime = 0;
+        int columnWidthAttr = 0;
+        int columnWidthDesc = 0;
+
+        // determine which columns are really visible (the plugin may have modified them)
+        BOOL extColumnIsVisible = FALSE;
+        DWORD autoWidthColumns = 0;
+        int i;
+        for (i = 0; i < Columns.Count; i++)
+        {
+            CColumn* column = &Columns[i];
+
+            if (column->ID == COLUMN_ID_EXTENSION)
+                extColumnIsVisible = TRUE;
+            if (column->FixedWidth == 0)
+            {
+                switch (column->ID)
+                {
+                case COLUMN_ID_EXTENSION:
+                    autoWidthColumns |= VIEW_SHOW_EXTENSION;
+                    break;
+                case COLUMN_ID_DOSNAME:
+                    autoWidthColumns |= VIEW_SHOW_DOSNAME;
+                    break;
+                case COLUMN_ID_SIZE:
+                    autoWidthColumns |= VIEW_SHOW_SIZE;
+                    break;
+                case COLUMN_ID_TYPE:
+                    autoWidthColumns |= VIEW_SHOW_TYPE;
+                    break;
+                case COLUMN_ID_DATE:
+                    autoWidthColumns |= VIEW_SHOW_DATE;
+                    break;
+                case COLUMN_ID_TIME:
+                    autoWidthColumns |= VIEW_SHOW_TIME;
+                    break;
+                case COLUMN_ID_ATTRIBUTES:
+                    autoWidthColumns |= VIEW_SHOW_ATTRIBUTES;
+                    break;
+                case COLUMN_ID_DESCRIPTION:
+                    autoWidthColumns |= VIEW_SHOW_DESCRIPTION;
+                    break;
+                }
+            }
+        }
+
+        i = 0;
+
+        int dirsCount = Dirs->Count;
+        int totalCount = Files->Count + Dirs->Count;
+        if (dirsCount > 0)
+        {
+            GetTextExtentPoint32(dc, DirColumnStr, DirColumnStrLen, &act);
+            act.cx += SPACE_WIDTH;
+            if (columnWidthSize < act.cx)
+                columnWidthSize = act.cx;
+        }
+        else
+            act.cx = act.cy = 0;
+
+        char text[50];
+
+        DWORD attrSkipCache[10]; // optimization of attribute-width measurement
+        int attrSkipCacheCount = 0;
+        ZeroMemory(&attrSkipCache, sizeof(attrSkipCache));
+
+        CQuadWord maxSize(0, 0);
+
+        BOOL computeDate = autoWidthColumns & VIEW_SHOW_DATE;
+        if (computeDate && (totalCount > 20))
+        {
+            // determine whether we can estimate the widths
+            if (GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_SSHORTDATE, text, 50) != 0)
+            {
+                // check if the date format contains words (dddd or MMMM),
+                // which would be rendered as text like "Monday" or "May"
+                if (strstr(text, "dddd") == NULL && strstr(text, "MMMM") == NULL)
+                {
+                    SYSTEMTIME st;
+                    st.wMilliseconds = 0;
+                    st.wMinute = 59;
+                    st.wSecond = 59;
+                    st.wHour = 10;
+                    st.wYear = 2000;
+                    st.wMonth = 12;
+                    st.wDay = 24;
+                    st.wDayOfWeek = 0; // Sunday
+                    if (GetDateFormat(LOCALE_USER_DEFAULT, DATE_SHORTDATE, &st, NULL, text, 50) == 0)
+                        sprintf(text, "%u.%u.%u", st.wDay, st.wMonth, st.wYear);
+                    GetTextExtentPoint32(dc, text, (int)strlen(text), &act);
+                    act.cx += SPACE_WIDTH;
+                    if (columnWidthDate < act.cx)
+                        columnWidthDate = act.cx;
+                    computeDate = FALSE;
+                }
+            }
+        }
+
+        int* nameColWidths = NULL;
+        if (totalCount > 0)
+            nameColWidths = (int*)malloc(totalCount * sizeof(int));
+
+        BOOL dirTypeDone = FALSE;
+        int nameLen;
+        for (i = 0; i < totalCount; i++)
+        {
+            BOOL isDir = i < Dirs->Count;
+            CFileData* f = isDir ? &Dirs->At(i) : &Files->At(i - dirsCount);
+            //--- name
+            BOOL extIsInExtColumn = extColumnIsVisible && (!isDir || Configuration.SortDirsByExt) &&
+                                    f->Ext[0] != 0 && f->Ext > f->Name + 1; // exception for names like ".htaccess"; they appear in Name even though they are extensions
+            if (Columns[0].FixedWidth == 0 || (autoWidthColumns & VIEW_SHOW_EXTENSION) && extIsInExtColumn)
+            {
+                AlterFileName(formatedFileName, f->Name, f->NameLen, // prepare the formatted name also to compute the width of the separate Ext column
+                              Configuration.FileNameFormat, 0, isDir);
+                if (Columns[0].FixedWidth == 0)
+                {
+                    nameLen = extIsInExtColumn ? (int)(f->Ext - f->Name - 1) : f->NameLen;
+
+                    GetTextExtentPoint32(dc, formatedFileName, nameLen, &act);
+                    act.cx += 1 + IconSizes[ICONSIZE_16] + 1 + 2 + SPACE_WIDTH;
+                    if (columnWidthName < act.cx)
+                        columnWidthName = act.cx;
+                    if (nameColWidths != NULL)
+                        nameColWidths[i] = act.cx;
+                }
+            }
+            //--- extension
+            if ((autoWidthColumns & VIEW_SHOW_EXTENSION) && extIsInExtColumn)
+            {
+                GetTextExtentPoint32(dc, formatedFileName + (int)(f->Ext - f->Name), (int)(f->NameLen - (f->Ext - f->Name)), &act);
+                act.cx += SPACE_WIDTH;
+                if (columnWidthExt < act.cx)
+                    columnWidthExt = act.cx;
+            }
+            //--- dosname
+            if ((autoWidthColumns & VIEW_SHOW_DOSNAME) && f->DosName != NULL)
+            {
+                GetTextExtentPoint32(dc, f->DosName, (int)strlen(f->DosName), &act);
+                act.cx += SPACE_WIDTH;
+                if (columnWidthDosName < act.cx)
+                    columnWidthDosName = act.cx;
+            }
+            //--- size
+            if ((autoWidthColumns & VIEW_SHOW_SIZE) &&
+                (!isDir || f->SizeValid)) // files and directories with a valid calculated size
+            {
+                if (f->Size > maxSize)
+                    maxSize = f->Size;
+            }
+            //--- date || time
+            if (computeDate)
             {
                 SYSTEMTIME st;
-                st.wYear = 2000;
-                st.wMonth = 1;
-                st.wDayOfWeek = 6;
-                st.wDay = 1;
-                st.wMilliseconds = 0;
-                st.wMinute = 59;
-                st.wSecond = 59;
-                st.wHour = 10; // AM
-                if (GetTimeFormat(LOCALE_USER_DEFAULT, 0, &st, NULL, text, 50) == 0)
-                    sprintf(text, "%u:%02u:%02u", st.wHour, st.wMinute, st.wSecond);
-                GetTextExtentPoint32(dc, text, (int)strlen(text), &act);
-                act.cx += SPACE_WIDTH;
-                if (columnWidthTime < act.cx)
-                    columnWidthTime = act.cx;
-                st.wHour = 23; // PM
-                if (GetTimeFormat(LOCALE_USER_DEFAULT, 0, &st, NULL, text, 50) == 0)
-                    sprintf(text, "%u:%02u:%02u", st.wHour, st.wMinute, st.wSecond);
-                GetTextExtentPoint32(dc, text, (int)strlen(text), &act);
-                act.cx += SPACE_WIDTH;
-                if (columnWidthTime < act.cx)
-                    columnWidthTime = act.cx;
-            }
-
-            ListBox->HeaderLine.SetMinWidths();
-
-            FullWidthOfNameCol = (WORD)columnWidthName;
-
-            if (nameColWidths != NULL && Columns[0].FixedWidth == 0 && totalCount > 0)
-            {
-                if (totalCount > 1)
-                    IntSort(nameColWidths, 0, totalCount - 1);
-                WidthOfMostOfNames = (DWORD)(1.2 * nameColWidths[(DWORD)(totalCount * 0.85)]); // add 20% extra width so very long names are more visible and names near the threshold show fully
-                if (WidthOfMostOfNames * 1.2 >= FullWidthOfNameCol)
-                    WidthOfMostOfNames = FullWidthOfNameCol; // if expanding by 44% (1.2*1.2) is enough to show all names, do it
-            }
-            if (nameColWidths != NULL)
-                free(nameColWidths);
-
-            TransferPluginDataIface = PluginData.GetInterface();
-            int totalWidth = 0;
-            for (i = 0; i < Columns.Count; i++)
-            {
-                CColumn* column = &Columns[i];
-
-                if (column->FixedWidth == 0)
+                FILETIME ft;
+                int len;
+                if (!FileTimeToLocalFileTime(&f->LastWrite, &ft) ||
+                    !FileTimeToSystemTime(&ft, &st))
                 {
-                    switch (column->ID)
-                    {
-                    case COLUMN_ID_NAME:
-                        column->Width = (WORD)columnWidthName;
-                        break;
-                    case COLUMN_ID_EXTENSION:
-                        column->Width = (WORD)columnWidthExt;
-                        break;
-                    case COLUMN_ID_DOSNAME:
-                        column->Width = (WORD)columnWidthDosName;
-                        break;
-                    case COLUMN_ID_SIZE:
-                        column->Width = (WORD)columnWidthSize;
-                        break;
-                    case COLUMN_ID_TYPE:
-                        column->Width = (WORD)columnWidthType;
-                        break;
-                    case COLUMN_ID_DATE:
-                        column->Width = (WORD)columnWidthDate;
-                        break;
-                    case COLUMN_ID_TIME:
-                        column->Width = (WORD)columnWidthTime;
-                        break;
-                    case COLUMN_ID_ATTRIBUTES:
-                        column->Width = (WORD)columnWidthAttr;
-                        break;
-                    case COLUMN_ID_DESCRIPTION:
-                        column->Width = (WORD)columnWidthDesc;
-                        break;
-                    case COLUMN_ID_CUSTOM:
-                    {
-                        TransferActCustomData = column->CustomData;
-                        int columnMaxWidth = column->MinWidth;
-                        // ask the plugin
-                        int j;
-                        for (j = 0; j < totalCount; j++)
-                        {
-                            if (j < Dirs->Count)
-                            {
-                                TransferFileData = &Dirs->At(j);
-                                TransferIsDir = (j == 0 && strcmp(TransferFileData->Name, "..") == 0) ? 2 : 1;
-                            }
-                            else
-                            {
-                                TransferFileData = &Files->At(j - dirsCount);
-                                TransferIsDir = 0;
-                            }
-                            TransferRowData = 0;
-                            TransferAssocIndex = -2; // maybe unnecessary if InternalGetType() cannot be called
-                            column->GetText();
-                            if (TransferLen > 0)
-                            {
-                                GetTextExtentPoint32(dc, TransferBuffer, TransferLen, &act);
-                                act.cx += SPACE_WIDTH;
-                                if (act.cx > columnMaxWidth)
-                                    columnMaxWidth = act.cx;
-                            }
-                            else
-                                act.cx = 0;
-                        }
-                        column->Width = columnMaxWidth;
-                        break;
-                    }
-
-                    default:
-                        TRACE_E("Unknown type of column");
-                        break;
-                    }
-                }
-                // keep boundaries so the width never drops below header-line minimum
-                if (column->Width < column->MinWidth)
-                    column->Width = column->MinWidth;
-
-                totalWidth += column->Width;
-            }
-
-            // handle Smart Mode for the Name column
-            BOOL leftPanel = (MainWindow->LeftPanel == this);
-            if (Columns[0].FixedWidth == 0 &&
-                (leftPanel && ViewTemplate->LeftSmartMode || !leftPanel && ViewTemplate->RightSmartMode) &&
-                ListBox->FilesRect.right - ListBox->FilesRect.left > 0) // only if the files-box has already been initialized
-            {
-                CColumn* column = &Columns[0];
-                int narrow = totalWidth - (ListBox->FilesRect.right - ListBox->FilesRect.left);
-                if (narrow > 0)
-                {
-                    DWORD minWidth = WidthOfMostOfNames;
-                    if (minWidth > (DWORD)(0.75 * (ListBox->FilesRect.right - ListBox->FilesRect.left)))
-                        minWidth = (DWORD)(0.75 * (ListBox->FilesRect.right - ListBox->FilesRect.left));
-                    if (minWidth < column->MinWidth)
-                        minWidth = column->MinWidth;
-                    DWORD newWidth = max((int)(column->Width - narrow), (int)minWidth);
-                    NarrowedNameColumn = column->Width > newWidth;
-                    totalWidth -= column->Width - newWidth;
-                    column->Width = newWidth;
-                }
-            }
-
-            CaretHeight = (short)FontCharHeight;
-
-            int cy = FontCharHeight + 4;
-            if (cy < IconSizes[ICONSIZE_16] + 1)
-                cy = IconSizes[ICONSIZE_16] + 1;
-            ListBox->SetItemWidthHeight(totalWidth, cy);
-            break;
-        }
-        }
-
-        SelectObject(dc, of);
-        HANDLES(ReleaseDC(GetListBoxHWND(), dc));
-
-        LastFocus = INT_MAX;
-        FocusedIndex = 0;
-        if (suggestedFocusIndex != -1)
-        {
-            FocusedIndex = suggestedFocusIndex;
-            // if no TopIndex is suggested or focus visibility is required,
-            // compute a new TopIndex
-            // -- clearer version with support for vmIcons and vmThumbnails
-            // -- change for partially visible items: previously TopIndex was recalculated
-            //    causing unnecessary jumps; now we keep TopIndex unchanged
-
-            BOOL findTopIndex = TRUE; // TRUE -> search for TopIndex; FALSE -> keep the current one
-            if (suggestedTopIndex != -1)
-            {
-                // let EntireItemsInColumn be computed
-                ListBox->SetItemsCount2(Files->Count + Dirs->Count);
-                if (ensureFocusIndexVisible)
-                {
-                    // we must ensure the focus is visible
-                    switch (ListBox->ViewMode)
-                    {
-                    case vmBrief:
-                    {
-                        if (suggestedFocusIndex < suggestedTopIndex)
-                            break; // focus lies before the panel, need a better TopIndex
-
-                        int cols = (ListBox->FilesRect.right - ListBox->FilesRect.left +
-                                    ListBox->ItemWidth - 1) /
-                                   ListBox->ItemWidth;
-                        if (cols < 1)
-                            cols = 1;
-
-                        if (wholeItemVisible)
-                        {
-                            if (suggestedTopIndex + cols * ListBox->EntireItemsInColumn <=
-                                suggestedFocusIndex + ListBox->EntireItemsInColumn)
-                                break; // focus lies past the panel, need a better TopIndex
-                        }
-                        else
-                        {
-                            if (suggestedTopIndex + cols * ListBox->EntireItemsInColumn <=
-                                suggestedFocusIndex)
-                                break; // focus lies past the panel, need a better TopIndex
-                        }
-
-                        // focus is at least partially visible, skip TopIndex search
-                        findTopIndex = FALSE;
-                        break;
-                    }
-
-                    case vmDetailed:
-                    {
-                        if (suggestedFocusIndex < suggestedTopIndex)
-                            break; // focus lies above the panel, need a better TopIndex
-
-                        int rows = (ListBox->FilesRect.bottom - ListBox->FilesRect.top +
-                                    ListBox->ItemHeight - 1) /
-                                   ListBox->ItemHeight;
-                        if (rows < 1)
-                            rows = 1;
-
-                        if (wholeItemVisible)
-                        {
-                            if (suggestedTopIndex + rows <= suggestedFocusIndex + 1) // avoid partial visibility, hence the +1
-                                break;                                               // focus lies below the panel, need a better TopIndex
-                        }
-                        else
-                        {
-                            if (suggestedTopIndex + rows <= suggestedFocusIndex)
-                                break; // focus lies below the panel, need a better TopIndex
-                        }
-
-                        // focus is fully visible, skip TopIndex search
-                        findTopIndex = FALSE;
-                        break;
-                    }
-
-                    case vmIcons:
-                    case vmThumbnails:
-                    case vmTiles:
-                    {
-                        int suggestedTop = ListBox->FilesRect.top + (suggestedFocusIndex /
-                                                                     ListBox->ColumnsCount) *
-                                                                        ListBox->ItemHeight;
-                        int suggestedBottom = suggestedTop + ListBox->ItemHeight;
-
-                        if (wholeItemVisible)
-                        {
-                            if (suggestedTop < suggestedTopIndex)
-                                break; // focus is above the panel; need a better TopIndex
-
-                            if (suggestedBottom > suggestedTopIndex +
-                                                      ListBox->FilesRect.bottom - ListBox->FilesRect.top)
-                                break; // focus is below the panel; need a better TopIndex
-                        }
-                        else
-                        {
-                            if (suggestedBottom <= suggestedTopIndex)
-                                break; // focus is above the panel; need a better TopIndex
-
-                            if (suggestedTop >= suggestedTopIndex +
-                                                    ListBox->FilesRect.bottom - ListBox->FilesRect.top)
-                                break; // focus is below the panel; need a better TopIndex
-                        }
-
-                        // focus is at least partially visible, skip TopIndex search
-                        findTopIndex = FALSE;
-                        break;
-                    }
-                    }
+                    len = sprintf(text, LoadStr(IDS_INVALID_DATEORTIME));
                 }
                 else
-                    findTopIndex = FALSE;
+                {
+                    len = GetDateFormat(LOCALE_USER_DEFAULT, DATE_SHORTDATE, &st, NULL, text, 50) - 1;
+                    if (len < 0)
+                        len = sprintf(text, "%u.%u.%u", st.wDay, st.wMonth, st.wYear);
+                }
+                GetTextExtentPoint32(dc, text, len, &act);
+                act.cx += SPACE_WIDTH;
+                if (columnWidthDate < act.cx)
+                    columnWidthDate = act.cx;
             }
-            if (findTopIndex)
+
+            if (autoWidthColumns & VIEW_SHOW_ATTRIBUTES)
             {
-                ListBox->SetItemsCount2(Files->Count + Dirs->Count);
-                suggestedTopIndex = ListBox->PredictTopIndex(suggestedFocusIndex);
+                //--- attr
+                // prepare data for the cache !!! additional measured attributes may need hooking here
+                DWORD mask = f->Attr & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN |
+                                        FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_ARCHIVE |
+                                        FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_COMPRESSED |
+                                        FILE_ATTRIBUTE_ENCRYPTED);
+                if (mask != 0)
+                {
+                    if (mask != attrSkipCache[0] && mask != attrSkipCache[1] &&
+                        mask != attrSkipCache[2] && mask != attrSkipCache[3] &&
+                        mask != attrSkipCache[4] && mask != attrSkipCache[5] &&
+                        mask != attrSkipCache[6] && mask != attrSkipCache[7] &&
+                        mask != attrSkipCache[8] && mask != attrSkipCache[9])
+                    {
+                        GetAttrsString(text, f->Attr);
+                        // this combination has not been measured yet
+                        GetTextExtentPoint32(dc, text, (int)strlen(text), &act);
+                        act.cx += SPACE_WIDTH;
+                        if (columnWidthAttr < act.cx)
+                            columnWidthAttr = act.cx;
+                        if (attrSkipCacheCount < 10)
+                        {
+                            // still space left, add the item to the cache
+                            attrSkipCache[attrSkipCacheCount] = mask;
+                            attrSkipCacheCount++;
+                        }
+                        else
+                            attrSkipCache[0] = mask; // put it in the first position
+                    }
+                }
             }
-            /*
+
+            if (autoWidthColumns & VIEW_SHOW_TYPE)
+            {
+                //--- file-type
+                if (!isDir) // is a file
+                {
+                    char buf[TRANSFER_BUFFER_MAX];
+                    BOOL commonFileType = TRUE;
+                    if (f->Ext[0] != 0) // extension exists
+                    {
+                        char* dst = buf;
+                        char* src = f->Ext;
+                        while (*src != 0)
+                            *dst++ = LowerCase[*src++];
+                        *((DWORD*)dst) = 0;
+                        int index;
+                        if (Associations.GetIndex(buf, index))
+                        {
+                            src = Associations[index].Type;
+                            if (src != NULL) // if it is not an empty string
+                            {
+                                commonFileType = FALSE;
+                                GetTextExtentPoint32(dc, src, (int)strlen(src), &act);
+                                act.cx += SPACE_WIDTH;
+                                if (columnWidthType < act.cx)
+                                    columnWidthType = act.cx;
+                            }
+                        }
+                    }
+                    if (commonFileType)
+                    {
+                        int resLen;
+                        GetCommonFileTypeStr(buf, &resLen, f->Ext);
+                        GetTextExtentPoint32(dc, buf, resLen, &act);
+                        act.cx += SPACE_WIDTH;
+                        if (columnWidthType < act.cx)
+                            columnWidthType = act.cx;
+                    }
+                }
+                else // is a directory
+                {
+                    if (!dirTypeDone) // only if we have not computed it yet
+                    {
+                        if (i == 0 && isDir && strcmp(f->Name, "..") == 0)
+                        {
+                            GetTextExtentPoint32(dc, UpDirTypeName, UpDirTypeNameLen, &act);
+                        }
+                        else
+                        {
+                            dirTypeDone = TRUE;
+                            GetTextExtentPoint32(dc, FolderTypeName, FolderTypeNameLen, &act);
+                        }
+                        act.cx += SPACE_WIDTH;
+                        if (columnWidthType < act.cx)
+                            columnWidthType = act.cx;
+                    }
+                }
+            }
+        }
+
+        // size
+        if (autoWidthColumns & VIEW_SHOW_SIZE)
+        {
+            int numLen;
+            switch (Configuration.SizeFormat)
+            {
+            case SIZE_FORMAT_BYTES:
+            {
+                numLen = NumberToStr2(text, maxSize);
+                break;
+            }
+
+            case SIZE_FORMAT_KB: // note: the same code appears elsewhere, search for this constant
+            {
+                PrintDiskSize(text, maxSize, 3);
+                numLen = (int)strlen(text);
+                break;
+            }
+
+            case SIZE_FORMAT_MIXED:
+            {
+                sprintf(text, "1023 GB"); // worst case scenario
+                numLen = (int)strlen(text);
+                break;
+            }
+            }
+            GetTextExtentPoint32(dc, text, numLen, &act);
+            act.cx += SPACE_WIDTH;
+            if (columnWidthSize < act.cx)
+                columnWidthSize = act.cx;
+        }
+        // time
+        if (autoWidthColumns & VIEW_SHOW_TIME)
+        {
+            SYSTEMTIME st;
+            st.wYear = 2000;
+            st.wMonth = 1;
+            st.wDayOfWeek = 6;
+            st.wDay = 1;
+            st.wMilliseconds = 0;
+            st.wMinute = 59;
+            st.wSecond = 59;
+            st.wHour = 10; // AM
+            if (GetTimeFormat(LOCALE_USER_DEFAULT, 0, &st, NULL, text, 50) == 0)
+                sprintf(text, "%u:%02u:%02u", st.wHour, st.wMinute, st.wSecond);
+            GetTextExtentPoint32(dc, text, (int)strlen(text), &act);
+            act.cx += SPACE_WIDTH;
+            if (columnWidthTime < act.cx)
+                columnWidthTime = act.cx;
+            st.wHour = 23; // PM
+            if (GetTimeFormat(LOCALE_USER_DEFAULT, 0, &st, NULL, text, 50) == 0)
+                sprintf(text, "%u:%02u:%02u", st.wHour, st.wMinute, st.wSecond);
+            GetTextExtentPoint32(dc, text, (int)strlen(text), &act);
+            act.cx += SPACE_WIDTH;
+            if (columnWidthTime < act.cx)
+                columnWidthTime = act.cx;
+        }
+
+        ListBox->HeaderLine.SetMinWidths();
+
+        FullWidthOfNameCol = (WORD)columnWidthName;
+
+        if (nameColWidths != NULL && Columns[0].FixedWidth == 0 && totalCount > 0)
+        {
+            if (totalCount > 1)
+                IntSort(nameColWidths, 0, totalCount - 1);
+            WidthOfMostOfNames = (DWORD)(1.2 * nameColWidths[(DWORD)(totalCount * 0.85)]); // add 20% extra width so very long names are more visible and names near the threshold show fully
+            if (WidthOfMostOfNames * 1.2 >= FullWidthOfNameCol)
+                WidthOfMostOfNames = FullWidthOfNameCol; // if expanding by 44% (1.2*1.2) is enough to show all names, do it
+        }
+        if (nameColWidths != NULL)
+            free(nameColWidths);
+
+        TransferPluginDataIface = PluginData.GetInterface();
+        int totalWidth = 0;
+        for (i = 0; i < Columns.Count; i++)
+        {
+            CColumn* column = &Columns[i];
+
+            if (column->FixedWidth == 0)
+            {
+                switch (column->ID)
+                {
+                case COLUMN_ID_NAME:
+                    column->Width = (WORD)columnWidthName;
+                    break;
+                case COLUMN_ID_EXTENSION:
+                    column->Width = (WORD)columnWidthExt;
+                    break;
+                case COLUMN_ID_DOSNAME:
+                    column->Width = (WORD)columnWidthDosName;
+                    break;
+                case COLUMN_ID_SIZE:
+                    column->Width = (WORD)columnWidthSize;
+                    break;
+                case COLUMN_ID_TYPE:
+                    column->Width = (WORD)columnWidthType;
+                    break;
+                case COLUMN_ID_DATE:
+                    column->Width = (WORD)columnWidthDate;
+                    break;
+                case COLUMN_ID_TIME:
+                    column->Width = (WORD)columnWidthTime;
+                    break;
+                case COLUMN_ID_ATTRIBUTES:
+                    column->Width = (WORD)columnWidthAttr;
+                    break;
+                case COLUMN_ID_DESCRIPTION:
+                    column->Width = (WORD)columnWidthDesc;
+                    break;
+                case COLUMN_ID_CUSTOM:
+                {
+                    TransferActCustomData = column->CustomData;
+                    int columnMaxWidth = column->MinWidth;
+                    // ask the plugin
+                    int j;
+                    for (j = 0; j < totalCount; j++)
+                    {
+                        if (j < Dirs->Count)
+                        {
+                            TransferFileData = &Dirs->At(j);
+                            TransferIsDir = (j == 0 && strcmp(TransferFileData->Name, "..") == 0) ? 2 : 1;
+                        }
+                        else
+                        {
+                            TransferFileData = &Files->At(j - dirsCount);
+                            TransferIsDir = 0;
+                        }
+                        TransferRowData = 0;
+                        TransferAssocIndex = -2; // maybe unnecessary if InternalGetType() cannot be called
+                        column->GetText();
+                        if (TransferLen > 0)
+                        {
+                            GetTextExtentPoint32(dc, TransferBuffer, TransferLen, &act);
+                            act.cx += SPACE_WIDTH;
+                            if (act.cx > columnMaxWidth)
+                                columnMaxWidth = act.cx;
+                        }
+                        else
+                            act.cx = 0;
+                    }
+                    column->Width = columnMaxWidth;
+                    break;
+                }
+
+                default:
+                    TRACE_E("Unknown type of column");
+                    break;
+                }
+            }
+            // keep boundaries so the width never drops below header-line minimum
+            if (column->Width < column->MinWidth)
+                column->Width = column->MinWidth;
+
+            totalWidth += column->Width;
+        }
+
+        // handle Smart Mode for the Name column
+        BOOL leftPanel = (MainWindow->LeftPanel == this);
+        if (Columns[0].FixedWidth == 0 &&
+            (leftPanel && ViewTemplate->LeftSmartMode || !leftPanel && ViewTemplate->RightSmartMode) &&
+            ListBox->FilesRect.right - ListBox->FilesRect.left > 0) // only if the files-box has already been initialized
+        {
+            CColumn* column = &Columns[0];
+            int narrow = totalWidth - (ListBox->FilesRect.right - ListBox->FilesRect.left);
+            if (narrow > 0)
+            {
+                DWORD minWidth = WidthOfMostOfNames;
+                if (minWidth > (DWORD)(0.75 * (ListBox->FilesRect.right - ListBox->FilesRect.left)))
+                    minWidth = (DWORD)(0.75 * (ListBox->FilesRect.right - ListBox->FilesRect.left));
+                if (minWidth < column->MinWidth)
+                    minWidth = column->MinWidth;
+                DWORD newWidth = max((int)(column->Width - narrow), (int)minWidth);
+                NarrowedNameColumn = column->Width > newWidth;
+                totalWidth -= column->Width - newWidth;
+                column->Width = newWidth;
+            }
+        }
+
+        CaretHeight = (short)FontCharHeight;
+
+        int cy = FontCharHeight + 4;
+        if (cy < IconSizes[ICONSIZE_16] + 1)
+            cy = IconSizes[ICONSIZE_16] + 1;
+        ListBox->SetItemWidthHeight(totalWidth, cy);
+        break;
+    }
+    }
+
+    SelectObject(dc, of);
+    HANDLES(ReleaseDC(GetListBoxHWND(), dc));
+
+    LastFocus = INT_MAX;
+    FocusedIndex = 0;
+    if (suggestedFocusIndex != -1)
+    {
+        FocusedIndex = suggestedFocusIndex;
+        // if no TopIndex is suggested or focus visibility is required,
+        // compute a new TopIndex
+        // -- clearer version with support for vmIcons and vmThumbnails
+        // -- change for partially visible items: previously TopIndex was recalculated
+        //    causing unnecessary jumps; now we keep TopIndex unchanged
+
+        BOOL findTopIndex = TRUE; // TRUE -> search for TopIndex; FALSE -> keep the current one
+        if (suggestedTopIndex != -1)
+        {
+            // let EntireItemsInColumn be computed
+            ListBox->SetItemsCount2(Files->Count + Dirs->Count);
+            if (ensureFocusIndexVisible)
+            {
+                // we must ensure the focus is visible
+                switch (ListBox->ViewMode)
+                {
+                case vmBrief:
+                {
+                    if (suggestedFocusIndex < suggestedTopIndex)
+                        break; // focus lies before the panel, need a better TopIndex
+
+                    int cols = (ListBox->FilesRect.right - ListBox->FilesRect.left +
+                                ListBox->ItemWidth - 1) /
+                               ListBox->ItemWidth;
+                    if (cols < 1)
+                        cols = 1;
+
+                    if (wholeItemVisible)
+                    {
+                        if (suggestedTopIndex + cols * ListBox->EntireItemsInColumn <=
+                            suggestedFocusIndex + ListBox->EntireItemsInColumn)
+                            break; // focus lies past the panel, need a better TopIndex
+                    }
+                    else
+                    {
+                        if (suggestedTopIndex + cols * ListBox->EntireItemsInColumn <=
+                            suggestedFocusIndex)
+                            break; // focus lies past the panel, need a better TopIndex
+                    }
+
+                    // focus is at least partially visible, skip TopIndex search
+                    findTopIndex = FALSE;
+                    break;
+                }
+
+                case vmDetailed:
+                {
+                    if (suggestedFocusIndex < suggestedTopIndex)
+                        break; // focus lies above the panel, need a better TopIndex
+
+                    int rows = (ListBox->FilesRect.bottom - ListBox->FilesRect.top +
+                                ListBox->ItemHeight - 1) /
+                               ListBox->ItemHeight;
+                    if (rows < 1)
+                        rows = 1;
+
+                    if (wholeItemVisible)
+                    {
+                        if (suggestedTopIndex + rows <= suggestedFocusIndex + 1) // avoid partial visibility, hence the +1
+                            break;                                               // focus lies below the panel, need a better TopIndex
+                    }
+                    else
+                    {
+                        if (suggestedTopIndex + rows <= suggestedFocusIndex)
+                            break; // focus lies below the panel, need a better TopIndex
+                    }
+
+                    // focus is fully visible, skip TopIndex search
+                    findTopIndex = FALSE;
+                    break;
+                }
+
+                case vmIcons:
+                case vmThumbnails:
+                case vmTiles:
+                {
+                    int suggestedTop = ListBox->FilesRect.top + (suggestedFocusIndex /
+                                                                 ListBox->ColumnsCount) *
+                                                                    ListBox->ItemHeight;
+                    int suggestedBottom = suggestedTop + ListBox->ItemHeight;
+
+                    if (wholeItemVisible)
+                    {
+                        if (suggestedTop < suggestedTopIndex)
+                            break; // focus is above the panel; need a better TopIndex
+
+                        if (suggestedBottom > suggestedTopIndex +
+                                                  ListBox->FilesRect.bottom - ListBox->FilesRect.top)
+                            break; // focus is below the panel; need a better TopIndex
+                    }
+                    else
+                    {
+                        if (suggestedBottom <= suggestedTopIndex)
+                            break; // focus is above the panel; need a better TopIndex
+
+                        if (suggestedTop >= suggestedTopIndex +
+                                                ListBox->FilesRect.bottom - ListBox->FilesRect.top)
+                            break; // focus is below the panel; need a better TopIndex
+                    }
+
+                    // focus is at least partially visible, skip TopIndex search
+                    findTopIndex = FALSE;
+                    break;
+                }
+                }
+            }
+            else
+                findTopIndex = FALSE;
+        }
+        if (findTopIndex)
+        {
+            ListBox->SetItemsCount2(Files->Count + Dirs->Count);
+            suggestedTopIndex = ListBox->PredictTopIndex(suggestedFocusIndex);
+        }
+        /*
     // if no TopIndex is suggested or focusIndex visibility is required,
     // compute a new TopIndex
     if (suggestedTopIndex == -1 || (ensureFocusIndexVisible &&
@@ -4191,68 +4198,68 @@ BOOL CFilesWindow::ChangeAndListPathOnFS(const char* fsName, int fsNameIndex, co
       suggestedTopIndex = ListBox->PredictTopIndex(suggestedFocusIndex);
     }
 */
+    }
+    else
+    {
+        // patch for situation when suggestedTopIndex != -1 and suggestedFocusIndex == -1
+        // (e.g., going Back in history to a place where the previously focused file no longer exists)
+        if (ensureFocusIndexVisible && suggestedTopIndex != -1) // focus must be visible
+        {
+            suggestedTopIndex = -1; // cannot set top-index because the focus wouldn't be visible
         }
+    }
+
+    if (suggestedXOffset == -1)
+    {
+        suggestedXOffset = 0;
+        if (ListBox->ViewMode == vmDetailed)
+            suggestedXOffset = ListBox->GetXOffset();
+    }
+    if (suggestedTopIndex == -1)
+    {
+        suggestedTopIndex = 0;
+    }
+
+    ListBox->SetItemsCount(Files->Count + Dirs->Count, suggestedXOffset, suggestedTopIndex, FALSE);
+    ListBox->PaintHeaderLine();
+    if (ListBox->HVScrollBar != NULL)
+        UpdateWindow(ListBox->HVScrollBar);
+    if (ListBox->HHScrollBar != NULL)
+        UpdateWindow(ListBox->BottomBar.HWindow);
+    ListBox->PaintAllItems(NULL, 0);
+
+    IdleRefreshStates = TRUE;                       // force state-variable check on next idle
+    PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
+                                                    //TRACE_I("refreshlist: end");
+}
+
+int CFilesWindow::GetResidualColumnWidth(int nameColWidth)
+{
+    CALL_STACK_MESSAGE1("CFilesWindow::GetResidualColumnWidth()");
+    if (GetViewMode() == vmBrief)
+        return 0;
+
+    int colsWidth = 0;
+    int colNameWidth = nameColWidth;
+    // sum the width of visible columns (excluding the NAME column)
+    int i;
+    for (i = 0; i < Columns.Count; i++)
+    {
+        CColumn* column = &Columns[i];
+        if (column->ID != COLUMN_ID_NAME)
+            colsWidth += column->Width;
         else
         {
-            // patch for situation when suggestedTopIndex != -1 and suggestedFocusIndex == -1
-            // (e.g., going Back in history to a place where the previously focused file no longer exists)
-            if (ensureFocusIndexVisible && suggestedTopIndex != -1) // focus must be visible
-            {
-                suggestedTopIndex = -1; // cannot set top-index because the focus wouldn't be visible
-            }
+            if (colNameWidth == 0)
+                colNameWidth = column->Width;
         }
-
-        if (suggestedXOffset == -1)
-        {
-            suggestedXOffset = 0;
-            if (ListBox->ViewMode == vmDetailed)
-                suggestedXOffset = ListBox->GetXOffset();
-        }
-        if (suggestedTopIndex == -1)
-        {
-            suggestedTopIndex = 0;
-        }
-
-        ListBox->SetItemsCount(Files->Count + Dirs->Count, suggestedXOffset, suggestedTopIndex, FALSE);
-        ListBox->PaintHeaderLine();
-        if (ListBox->HVScrollBar != NULL)
-            UpdateWindow(ListBox->HVScrollBar);
-        if (ListBox->HHScrollBar != NULL)
-            UpdateWindow(ListBox->BottomBar.HWindow);
-        ListBox->PaintAllItems(NULL, 0);
-
-        IdleRefreshStates = TRUE;                       // force state-variable check on next idle
-        PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
-                                                        //TRACE_I("refreshlist: end");
     }
 
-    int CFilesWindow::GetResidualColumnWidth(int nameColWidth)
-    {
-        CALL_STACK_MESSAGE1("CFilesWindow::GetResidualColumnWidth()");
-        if (GetViewMode() == vmBrief)
-            return 0;
-
-        int colsWidth = 0;
-        int colNameWidth = nameColWidth;
-        // sum the width of visible columns (excluding the NAME column)
-        int i;
-        for (i = 0; i < Columns.Count; i++)
-        {
-            CColumn* column = &Columns[i];
-            if (column->ID != COLUMN_ID_NAME)
-                colsWidth += column->Width;
-            else
-            {
-                if (colNameWidth == 0)
-                    colNameWidth = column->Width;
-            }
-        }
-
-        int residual = ListBox->FilesRect.right - ListBox->FilesRect.left;
-        residual -= colsWidth;
-        if (residual < 0)
-            residual = 0;
-        if (residual > colNameWidth)
-            residual = colNameWidth;
-        return residual;
-    }
+    int residual = ListBox->FilesRect.right - ListBox->FilesRect.left;
+    residual -= colsWidth;
+    if (residual < 0)
+        residual = 0;
+    if (residual > colNameWidth)
+        residual = colNameWidth;
+    return residual;
+}

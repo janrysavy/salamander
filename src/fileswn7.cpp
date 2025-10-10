@@ -509,7 +509,7 @@ void CFilesWindow::UnpackZIPArchive(CFilesWindow* target, BOOL deleteOp, const c
                  Is(ptDisk) || Is(ptZIPArchive)))
             // disk+archive relative paths
             {
-                // this is a disk path (absolute or relative) - convert all / to \\ and remove duplicate \\
+                // this is a disk path (absolute or relative) - convert all / to \\ and remove duplicate '\\'
                 SlashesToBackslashesAndRemoveDups(path);
             }
             //---  adjust the entered path -> absolute, without '.' or '..'
@@ -1548,107 +1548,111 @@ _PACK_AGAIN:
                 SetCurrentDirectoryToSystem();
                 // the directory contains a link and cannot be combined with "delete files after packing":
                 // handling cases where packing fails for a file inside a linked directory is impossible
-                PackerConfig.Move = FALSE;
-                goto _PACK_AGAIN;
-            }
-            if (containsDirLinks == 2) // user canceled loading (ESC pressed or closed the wait window)
-                performPack = FALSE;
-        }
-
-        //--- confirmation for adding (updating) an existing archive
-        if (performPack && Configuration.CnfrmAddToArchive && FileExists(fileBuf))
-        {
-            BOOL dontShow = !Configuration.CnfrmAddToArchive;
-
-            char filesDirs[200];
-            ExpandPluralFilesDirs(filesDirs, 200, files, data.IndexesCount - files, epfdmNormal, FALSE);
-
-            char buff[3 * MAX_PATH];
-            sprintf(buff, LoadStr(IDS_CONFIRM_ADDTOARCHIVE), "%s", filesDirs);
-
-            char* namePart = strrchr(fileBuf, '\\');
-            if (namePart != NULL)
-                namePart++;
-            else
-                namePart = fileBuf;
-            CTruncatedString str2;
-            str2.Set(buff, namePart);
-
-            char alias[200];
-            sprintf(alias, "%d\t%s\t%d\t%s",
-                    DIALOG_YES, LoadStr(IDS_CONFIRM_ADDTOARCHIVE_ADD),
-                    DIALOG_NO, LoadStr(IDS_CONFIRM_ADDTOARCHIVE_OVER));
-            CMessageBox msgBox(HWindow,
-                               MSGBOXEX_YESNOCANCEL | MSGBOXEX_ESCAPEENABLED | MSGBOXEX_ICONQUESTION | MSGBOXEX_SILENT | MSGBOXEX_HINT,
-                               LoadStr(IDS_QUESTION),
-                               &str2,
-                               LoadStr(IDS_CONFIRM_ADDTOARCHIVE_NOASK),
-                               &dontShow,
-                               NULL, 0, NULL, alias, NULL, NULL);
-            int msgBoxRed = msgBox.Execute();
-            performPack = (msgBoxRed == IDYES);
-            if (msgBoxRed == IDNO) // OVERWRITE
-            {
-                ClearReadOnlyAttr(fileBuf); // so it can be deleted...
-                if (!DeleteFile(fileBuf))
+                if (containsDirLinks == 1)
                 {
-                    DWORD err;
-                    err = GetLastError();
-                    SalMessageBox(HWindow, GetErrorText(err), LoadStr(IDS_ERROROVERWRITINGFILE), MB_OK | MB_ICONEXCLAMATION);
-                    // fall through to _PACK_AGAIN
+                    _snprintf_s(text, _TRUNCATE, LoadStr(IDS_DELFILESAFTERPACKINGNOLINKS), linkName);
+                    SalMessageBox(HWindow, text, LoadStr(IDS_PACKTITLE), MB_OK | MB_ICONEXCLAMATION);
+                    PackerConfig.Move = FALSE;
+                    goto _PACK_AGAIN;
                 }
-                else
-                    performPack = TRUE;
+                if (containsDirLinks == 2) // user canceled loading (ESC pressed or closed the wait window)
+                    performPack = FALSE;
             }
-            Configuration.CnfrmAddToArchive = !dontShow;
-            if (!performPack)
-                goto _PACK_AGAIN;
-        }
 
-        //---  actual packing
-        if (performPack)
-        {
-            SetCurrentDirectory(GetPath());
-            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
-            if (PackerConfig.ExecutePacker(this, fileBuf, PackerConfig.Move, GetPath(),
-                                           PanelEnumDiskSelection, &data))
-            { // packing succeeded
-                // if (nextFocus[0] != 0) strcpy(NextFocusName, nextFocus);
-                FocusFirstNewItem = TRUE; // focus also archives renamed by a plugin (e.g. SFX -> archive.exe)
-
-                SetSel(FALSE, -1, TRUE);                        // explicit redraw
-                PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
-            }
-            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
-            SetCurrentDirectoryToSystem();
-
-            //---  refresh directories that are not refreshed automatically
-            // changes in the directory where the new archive is located
-            CutDirectory(fileBuf); // may fail, but we do not handle this case (an extra refresh is harmless)
-            MainWindow->PostChangeOnPathNotification(fileBuf, FALSE);
-            // moving from disk to archive -> also a change on disk (files/directories removed)
-            if (PackerConfig.Move)
+            //--- confirmation for adding (updating) an existing archive
+            if (performPack && Configuration.CnfrmAddToArchive && FileExists(fileBuf))
             {
-                // changes in the current directory in the panel including its subdirectories
-                MainWindow->PostChangeOnPathNotification(GetPath(), TRUE);
+                BOOL dontShow = !Configuration.CnfrmAddToArchive;
+
+                char filesDirs[200];
+                ExpandPluralFilesDirs(filesDirs, 200, files, data.IndexesCount - files, epfdmNormal, FALSE);
+
+                char buff[3 * MAX_PATH];
+                sprintf(buff, LoadStr(IDS_CONFIRM_ADDTOARCHIVE), "%s", filesDirs);
+
+                char* namePart = strrchr(fileBuf, '\\');
+                if (namePart != NULL)
+                    namePart++;
+                else
+                    namePart = fileBuf;
+                CTruncatedString str2;
+                str2.Set(buff, namePart);
+
+                char alias[200];
+                sprintf(alias, "%d\t%s\t%d\t%s",
+                        DIALOG_YES, LoadStr(IDS_CONFIRM_ADDTOARCHIVE_ADD),
+                        DIALOG_NO, LoadStr(IDS_CONFIRM_ADDTOARCHIVE_OVER));
+                CMessageBox msgBox(HWindow,
+                                   MSGBOXEX_YESNOCANCEL | MSGBOXEX_ESCAPEENABLED | MSGBOXEX_ICONQUESTION | MSGBOXEX_SILENT | MSGBOXEX_HINT,
+                                   LoadStr(IDS_QUESTION),
+                                   &str2,
+                                   LoadStr(IDS_CONFIRM_ADDTOARCHIVE_NOASK),
+                                   &dontShow,
+                                   NULL, 0, NULL, alias, NULL, NULL);
+                int msgBoxRed = msgBox.Execute();
+                performPack = (msgBoxRed == IDYES);
+                if (msgBoxRed == IDNO) // OVERWRITE
+                {
+                    ClearReadOnlyAttr(fileBuf); // so it can be deleted...
+                    if (!DeleteFile(fileBuf))
+                    {
+                        DWORD err;
+                        err = GetLastError();
+                        SalMessageBox(HWindow, GetErrorText(err), LoadStr(IDS_ERROROVERWRITINGFILE), MB_OK | MB_ICONEXCLAMATION);
+                        // fall through to _PACK_AGAIN
+                    }
+                    else
+                        performPack = TRUE;
+                }
+                Configuration.CnfrmAddToArchive = !dontShow;
+                if (!performPack)
+                    goto _PACK_AGAIN;
+            }
+
+            //---  actual packing
+            if (performPack)
+            {
+                SetCurrentDirectory(GetPath());
+                SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
+                if (PackerConfig.ExecutePacker(this, fileBuf, PackerConfig.Move, GetPath(),
+                                               PanelEnumDiskSelection, &data))
+                { // packing succeeded
+                    // if (nextFocus[0] != 0) strcpy(NextFocusName, nextFocus);
+                    FocusFirstNewItem = TRUE; // focus also archives renamed by a plugin (e.g. SFX -> archive.exe)
+
+                    SetSel(FALSE, -1, TRUE);                        // explicit redraw
+                    PostMessage(HWindow, WM_USER_SELCHANGED, 0, 0); // sel-change notify
+                }
+                SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+                SetCurrentDirectoryToSystem();
+
+                //---  refresh directories that are not refreshed automatically
+                // changes in the directory where the new archive is located
+                CutDirectory(fileBuf); // may fail, but we do not handle this case (an extra refresh is harmless)
+                MainWindow->PostChangeOnPathNotification(fileBuf, FALSE);
+                // moving from disk to archive -> also a change on disk (files/directories removed)
+                if (PackerConfig.Move)
+                {
+                    // changes in the current directory in the panel including its subdirectories
+                    MainWindow->PostChangeOnPathNotification(GetPath(), TRUE);
+                }
             }
         }
+        else
+        {
+            SalMessageBox(HWindow, LoadStr(errTextID), LoadStr(IDS_PACKTITLE), MB_OK | MB_ICONEXCLAMATION);
+            goto _PACK_AGAIN;
+        }
     }
-    else
-    {
-        SalMessageBox(HWindow, LoadStr(errTextID), LoadStr(IDS_PACKTITLE), MB_OK | MB_ICONEXCLAMATION);
-        goto _PACK_AGAIN;
-    }
-}
 
-// if we selected an item, deselect it again
-UnselectItemWithName(temporarySelected);
+    // if we selected an item, deselect it again
+    UnselectItemWithName(temporarySelected);
 
-UpdateWindow(MainWindow->HWindow);
-delete[] (data.Indexes);
+    UpdateWindow(MainWindow->HWindow);
+    delete[] (data.Indexes);
 
-//---  if any Salamander window is active, suspend mode ends
-EndStopRefresh();
+    //---  if any Salamander window is active, suspend mode ends
+    EndStopRefresh();
 }
 
 void CFilesWindow::Unpack(CFilesWindow* target, int pluginIndex, const char* pluginName, const char* unpackMask)
