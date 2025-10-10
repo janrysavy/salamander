@@ -767,20 +767,18 @@ public:
     virtual void WINAPI ColumnWidthWasChanged(BOOL leftPanel, const CColumn* column,
                                               int newWidth) = 0;
 
-    // obtains the Information Line content for the file/directory ('isDir' TRUE/FALSE) 'file'
-    // or for the selected files and directories ('file' is NULL and the counts of selected files/directories
-    // are in 'selectedFiles'/'selectedDirs') in the panel ('panel' is one of PANEL_XXX);
-    // called even for an empty listing (only for file systems—archives cannot encounter this; 'file' is NULL,
-    // 'selectedFiles' and 'selectedDirs' are 0); if 'displaySize' is TRUE, the size
-    // of all selected directories is known (see CFileData::SizeValid; TRUE if nothing is selected);
-    // 'selectedSize' contains the sum of CFileData::Size values of selected files and directories
-    // (zero if nothing is selected); 'buffer' is the buffer for the returned text (size 1000 bytes);
-    // 'hotTexts' is an array (size 100 DWORDs) that returns the positions of hot texts—
-    // the lower WORD always contains the position of the hot text in 'buffer', the upper WORD contains
-    // the length of the hot text; 'hotTextsCount' holds the size of the 'hotTexts' array (100) and returns
-    // the number of hot texts written into 'hotTexts'; returns TRUE if 'buffer' + 'hotTexts' +
-    // 'hotTextsCount' are filled, returns FALSE if the Information Line should be filled
-    // in the standard way (as on disk)
+    // Retrieves the Information Line content for 'file' ('isDir' TRUE for directories, FALSE for files)
+    // or for the current selection if 'file' is NULL. The counts of selected files and directories
+    // are provided in 'selectedFiles' and 'selectedDirs'; 'panel' identifies the panel (one of PANEL_XXX).
+    // The method is invoked even for an empty listing (file systems only—archives never encounter this);
+    // in that case 'file' is NULL and both 'selectedFiles' and 'selectedDirs' are zero. When 'displaySize'
+    // is TRUE the size of all selected directories is known (see CFileData::SizeValid; TRUE if nothing is
+    // selected). 'selectedSize' contains the sum of CFileData::Size values for the selection (zero if no
+    // items are selected). 'buffer' points to storage for the formatted text (1000 bytes). 'hotTexts' is an
+    // array of 100 DWORDs that receives hot-text positions: the low WORD stores the offset in 'buffer', the
+    // high WORD the hot-text length. 'hotTextsCount' provides the array capacity (100) and returns how many
+    // hot texts were written. Return TRUE after filling 'buffer', 'hotTexts', and 'hotTextsCount'; return
+    // FALSE to request the default Information Line formatting used for standard file-system paths.
     virtual BOOL WINAPI GetInfoLineContent(int panel, const CFileData* file, BOOL isDir, int selectedFiles,
                                            int selectedDirs, BOOL displaySize, const CQuadWord& selectedSize,
                                            char* buffer, DWORD* hotTexts, int& hotTextsCount) = 0;
