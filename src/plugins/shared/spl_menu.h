@@ -12,7 +12,7 @@
 #pragma once
 
 #ifdef _MSC_VER
-#pragma pack(push, enter_include_spl_menu) // aby byly struktury nezavisle na nastavenem zarovnavani
+#pragma pack(push, enter_include_spl_menu) // to keep the structures independent of the configured alignment
 #pragma pack(4)
 #endif // _MSC_VER
 #ifdef __BORLANDC__
@@ -25,32 +25,32 @@ class CSalamanderForOperationsAbstract;
 // ****************************************************************************
 // CSalamanderBuildMenuAbstract
 //
-// sada metod Salamandera pro stavbu menu pluginu
+// set of Salamander methods for building plugin menus
 //
-// jde o podmnozinu metod CSalamanderConnectAbstract, metody se stejne chovaji,
-// pouzivaji se stejne konstanty, popis viz CSalamanderConnectAbstract
+// this is a subset of CSalamanderConnectAbstract methods; they behave the same,
+// use the same constants, and are documented in CSalamanderConnectAbstract
 
 class CSalamanderBuildMenuAbstract
 {
 public:
-    // ikony se zadavaji metodou CSalamanderBuildMenuAbstract::SetIconListForMenu, zbytek
-    // popisu viz CSalamanderConnectAbstract::AddMenuItem
+    // configure icons through CSalamanderBuildMenuAbstract::SetIconListForMenu; see
+    // CSalamanderConnectAbstract::AddMenuItem for the remaining description
     virtual void WINAPI AddMenuItem(int iconIndex, const char* name, DWORD hotKey, int id, BOOL callGetState,
                                     DWORD state_or, DWORD state_and, DWORD skillLevel) = 0;
 
-    // ikony se zadavaji metodou CSalamanderBuildMenuAbstract::SetIconListForMenu, zbytek
-    // popisu viz CSalamanderConnectAbstract::AddSubmenuStart
+    // configure icons through CSalamanderBuildMenuAbstract::SetIconListForMenu; see
+    // CSalamanderConnectAbstract::AddSubmenuStart for the remaining description
     virtual void WINAPI AddSubmenuStart(int iconIndex, const char* name, int id, BOOL callGetState,
                                         DWORD state_or, DWORD state_and, DWORD skillLevel) = 0;
 
-    // popis viz CSalamanderConnectAbstract::AddSubmenuEnd
+    // description see CSalamanderConnectAbstract::AddSubmenuEnd
     virtual void WINAPI AddSubmenuEnd() = 0;
 
-    // nastavi bitmapu s ikonami pluginu pro menu; bitmapu je treba alokovat pomoci volani
-    // CSalamanderGUIAbstract::CreateIconList() a nasledne vytvorit a naplnit pomoci
-    // metod CGUIIconListAbstract interfacu; rozmery ikonek musi byt 16x16 bodu;
-    // Salamander si objekt bitmapy prebira do sve spravy, plugin ji po zavolani
-    // teto funkce nesmi destruovat; Salamander ji drzi jen v pameti, nikam se neuklada
+    // sets the bitmap with plugin icons for the menu; the bitmap must be allocated by
+    // calling CSalamanderGUIAbstract::CreateIconList() and then created and filled with the
+    // CGUIIconListAbstract interface methods; the icon dimensions must be 16x16 pixels;
+    // Salamander assumes ownership of the bitmap object, so the plugin must not destroy it
+    // after calling this function; Salamander keeps it in memory only and does not save it elsewhere
     virtual void WINAPI SetIconListForMenu(CGUIIconListAbstract* iconList) = 0;
 };
 
@@ -59,56 +59,54 @@ public:
 // CPluginInterfaceForMenuExtAbstract
 //
 
-// flagy stavu polozek v menu (pro pluginy rozsireni menu)
-#define MENU_ITEM_STATE_ENABLED 0x01 // enablovana, bez tohoto flagu je polozka disablovana
-#define MENU_ITEM_STATE_CHECKED 0x02 // pred polozkou je "check" nebo "radio" znacka
-#define MENU_ITEM_STATE_RADIO 0x04   // bez MENU_ITEM_STATE_CHECKED se ignoruje, \
-                                     // "radio" znacka, bez tohoto flagu "check" znacka
-#define MENU_ITEM_STATE_HIDDEN 0x08  // polozka se v menu vubec nema objevit
+// state flags of menu items (for menu extension plugins)
+#define MENU_ITEM_STATE_ENABLED 0x01 // enabled, without this flag the item is disabled
+#define MENU_ITEM_STATE_CHECKED 0x02 // a "check" or "radio" mark is shown before the item
+#define MENU_ITEM_STATE_RADIO 0x04   // ignored without MENU_ITEM_STATE_CHECKED, \
+                                     // "radio" mark, without this flag a "check" mark
+#define MENU_ITEM_STATE_HIDDEN 0x08  // the item should not appear in the menu at all
 
 class CPluginInterfaceForMenuExtAbstract
 {
 #ifdef INSIDE_SALAMANDER
-private: // ochrana proti nespravnemu primemu volani metod (viz CPluginInterfaceForMenuExtEncapsulation)
+private: // protection against incorrect direct method calls (see CPluginInterfaceForMenuExtEncapsulation)
     friend class CPluginInterfaceForMenuExtEncapsulation;
 #else  // INSIDE_SALAMANDER
 public:
 #endif // INSIDE_SALAMANDER
 
-    // vraci stav polozky menu s identifikacnim cislem 'id'; navratova hodnota je kombinaci
-    // flagu (viz MENU_ITEM_STATE_XXX); 'eventMask' viz CSalamanderConnectAbstract::AddMenuItem
+    // returns the state of the menu item with identifier 'id'; the return value is a combination
+    // of flags (see MENU_ITEM_STATE_XXX); for 'eventMask' see CSalamanderConnectAbstract::AddMenuItem
     virtual DWORD WINAPI GetMenuItemState(int id, DWORD eventMask) = 0;
 
-    // spousti prikaz menu s identifikacnim cislem 'id', 'eventMask' viz
-    // CSalamanderConnectAbstract::AddMenuItem, 'salamander' je sada pouzitelnych metod
-    // Salamandera pro provadeni operaci (POZOR: muze byt NULL, viz popis metody
-    // CSalamanderGeneralAbstract::PostMenuExtCommand), 'parent' je parent messageboxu,
-    // vraci TRUE pokud ma byt v panelu zruseno oznaceni (nebyl pouzit Cancel, mohl byt
-    // pouzit Skip), jinak vraci FALSE (neprovede se odznaceni);
-    // POZOR: Pokud prikaz zpusobi zmeny na nejake ceste (diskove/FS), mel by pouzit
-    //        CSalamanderGeneralAbstract::PostChangeOnPathNotification pro informovani
-    //        panelu bez automatickeho refreshe a otevrene FS (aktivni i odpojene)
-    // POZNAMKA: pokud prikaz pracuje se soubory/adresari z cesty v aktualnim panelu nebo
-    //           i primo s touto cestou, je treba volat
-    //           CSalamanderGeneralAbstract::SetUserWorkedOnPanelPath pro aktualni panel,
-    //           jinak nebude cesta v tomto panelu vlozena do seznamu pracovnich
-    //           adresaru - List of Working Directories (Alt+F12)
+    // runs the menu command with identifier 'id'; for 'eventMask' see
+    // CSalamanderConnectAbstract::AddMenuItem; 'salamander' provides a set of usable Salamander
+    // methods for carrying out operations (WARNING: it can be NULL, see the description of
+    // CSalamanderGeneralAbstract::PostMenuExtCommand); 'parent' is the parent message box;
+    // returns TRUE if the panel selection should be cleared (Cancel was not used, Skip might have been),
+    // otherwise returns FALSE (no deselection takes place);
+    // WARNING: If the command changes anything on a path (disk/FS), it should call
+    //          CSalamanderGeneralAbstract::PostChangeOnPathNotification to inform panels
+    //          without automatic refresh and open FS (active and disconnected)
+    // NOTE: if the command works with files/directories from the active panel path, or even with
+    //       that path directly, it must call CSalamanderGeneralAbstract::SetUserWorkedOnPanelPath
+    //       for the active panel; otherwise the path will not be added to the List of Working
+    //       Directories (Alt+F12)
     virtual BOOL WINAPI ExecuteMenuItem(CSalamanderForOperationsAbstract* salamander, HWND parent,
                                         int id, DWORD eventMask) = 0;
 
-    // zobrazi napovedu pro prikaz menu s identifikacnim cislem 'id' (user stiskne Shift+F1,
-    // najde v menu Plugins menu tohoto pluginu a vybere z nej prikaz), 'parent' je parent
-    // messageboxu, vraci TRUE pokud byla zobrazena nejaka napoveda, jinak se zobrazi z helpu
-    // Salamandera kapitola "Using Plugins"
+    // shows help for the menu command with identifier 'id' (the user presses Shift+F1,
+    // finds this plugin's menu in Plugins, and selects a command from it); 'parent' is the parent
+    // message box; returns TRUE if specific help was displayed; otherwise Salamander shows the
+    // "Using Plugins" chapter from its help
     virtual BOOL WINAPI HelpForMenuItem(HWND parent, int id) = 0;
 
-    // funkce pro "dynamic menu extension", vola se jen pokud zadate FUNCTION_DYNAMICMENUEXT do
-    // SetBasicPluginData; sestavi menu pluginu pri jeho loadu, a pak vzdy znovu tesne pred
-    // jeho otevrenim v menu Plugins nebo na Plugin bare (navic i pred otevrenim okna Keyboard
-    // Shortcuts z Plugins Manageru); prikazy v novem menu by mely mit stejne ID jako ve starem,
-    // aby jim zustavaly uzivatelem pridelene hotkeys a aby pripadne fungovaly jako posledni
-    // pouzity prikaz (viz Plugins / Last Command); 'parent' je parent messageboxu, 'salamander'
-    // je sada metod pro stavbu menu
+    // function for the "dynamic menu extension", called only if you pass FUNCTION_DYNAMICMENUEXT to
+    // SetBasicPluginData; builds the plugin menu when it is loaded, and then again right before the menu
+    // is opened in the Plugins menu or on the Plugin bar (also before opening the Keyboard Shortcuts
+    // window from the Plugins Manager); commands in the new menu should keep the same IDs as the previous
+    // menu so that user-assigned hotkeys remain valid and they can still be treated as the last command used
+    // (see Plugins / Last Command); 'parent' is the parent message box; 'salamander' is the helper used to build the menu
     virtual void WINAPI BuildMenu(HWND parent, CSalamanderBuildMenuAbstract* salamander) = 0;
 };
 
