@@ -20,15 +20,15 @@
 // boundaries so we can find the real functions
 // that we need to call for initialization.
 
-#pragma warning(disable : 4075) // chceme definovat poradi inicializace modulu
+#pragma warning(disable : 4075) // we want to define the module initialization order
 
 typedef void(__cdecl* _PVFV)(void);
 
 #pragma section(".i_msg$a", read)
-__declspec(allocate(".i_msg$a")) const _PVFV i_messages = (_PVFV)1; // na zacatek sekce .i_msg si dame promennou i_messages
+__declspec(allocate(".i_msg$a")) const _PVFV i_messages = (_PVFV)1; // place the i_messages variable at the beginning of the .i_msg section
 
 #pragma section(".i_msg$z", read)
-__declspec(allocate(".i_msg$z")) const _PVFV i_messages_end = (_PVFV)1; // a na konec sekce .i_msg si dame promennou i_messages_end
+__declspec(allocate(".i_msg$z")) const _PVFV i_messages_end = (_PVFV)1; // and the i_messages_end variable at the end of the .i_msg section
 
 void Initialize__Messages()
 {
@@ -77,16 +77,16 @@ WCHAR __MessagesTitleBufW[200];
 
 #ifdef MULTITHREADED_MESSAGES_ENABLE
 
-// kriticka sekce pro cely modul - monitor
+// critical section for the whole module - monitor
 CRITICAL_SECTION __MessagesCriticalSection;
-// handle aktualniho vlastniciho threadu
+// ID of the thread that currently owns it
 DWORD __MessagesOwnerThreadID = 0;
-// pocet vnorenych volani EnterMessagesModul (v ramci aktualniho vlastniciho threadu)
+// number of nested EnterMessagesModul calls (within the current owning thread)
 int __MessagesModulBlockCount = 0;
 
 #ifdef MESSAGES_DEBUG
 
-// volani z threadu, ktery nema pristup k datum a funkcim modulu (nezalokoval)
+// call from a thread that does not have access to the module's data and functions (did not lock it)
 const char* __MessagesBadCall = "Incorrect call to function from modul MESSAGES.";
 
 #endif // MESSAGES_DEBUG
@@ -139,20 +139,19 @@ void LeaveMessagesModul()
 C__Messages::C__Messages() : MessagesStrStream(&MessagesStringBuf)
 {
 #ifdef _DEBUG
-    // nove streamy pouzivaji interne locales, ktere maji implementovany
-    // jednotlive "facets" pomoci lazy creation - jsou alokovany na heapu
-    // kdyz jsou potreba, tedy kdyz nekdo posle do streamu neco, co ma
-    // formatovani zavisle na lokalich pravidlech, treba cislo, datum,
-    // nebo boolean. Tyto "facets" jsou pak dealokovany pri exitu
-    // programu s prioritou compiler, tzn. po nasi kontrole memory leaku.
-    // Takze pokud nekdo pouzije stream k vypisu cehokoli lokalizovatelneho,
-    // nas debug heap zacne hlasit memory leaky, i kdyz zadne nejsou. Abychom
-    // tomu predesli, donutime locales vytvorit vsechny "facets" ted, dokud
-    // jeste nehlidame heap.
-    // Zatim pouzivame pouze vystupni stream a pouze se stringy (bez konverze)
-    // a cisly. Takze poslat cislo do stringstreamu by melo stacit. Pokud
-    // v budoucnu zacneme pouzivat streamy vic a debug heap zacne hlasit
-    // leaky, budeme zde muset pridat vic vstupu/vystupu.
+    // New streams internally use locales whose individual "facets" are implemented
+    // through lazy creation - they are allocated on the heap when needed, that is,
+    // when someone sends to the stream something whose formatting depends on locale
+    // rules, such as a number, date, or boolean. These "facets" are then deallocated
+    // at program exit with compiler priority, i.e. after our memory leak check.
+    // So if someone uses the stream to output anything localizable, our debug heap
+    // starts reporting memory leaks even though there are none. To prevent that,
+    // we force the locales to create all "facets" now, while we are not yet
+    // watching the heap.
+    // For now we use only the output stream and only with strings (without conversion)
+    // and numbers. Sending a number to the stringstream should therefore be enough.
+    // If in the future we start using streams more and the debug heap begins to report
+    // leaks, we will need to add more input/output here.
     std::stringstream s;
     s << 1;
 #endif // _DEBUG
@@ -175,8 +174,8 @@ struct C__MessageBoxData
 };
 
 int CALLBACK __MessagesMessageBoxThreadF(C__MessageBoxData* data)
-{ // nesmi cekat na odezvu volajiciho threadu, protoze ten nebude reagovat
-    // proto je parent==NULL -> zadne disablovani oken atd.
+{ // must not wait for the calling thread's response, because it would not react
+    // therefore parent==NULL -> no disabling of windows, etc.
     data->Return = MessageBoxA(NULL, data->Text, data->Caption, data->Type | MB_SETFOREGROUND);
     return 0;
 }
@@ -188,31 +187,31 @@ int C__Messages::MessageBoxT(const char* lpCaption, UINT uType)
     data.Type = uType;
     data.Return = 0;
 
-    MessagesStrStream.flush(); // flushnuti do bufferu (v lpText)
+    MessagesStrStream.flush(); // flush the stream into the buffer (into lpText)
 
 #ifndef MULTITHREADED_MESSAGES_ENABLE
     data.Text = MessagesStringBuf.c_str();
-    MessagesStringBuf.erase(); // priprava pro dalsi message
+    MessagesStringBuf.erase(); // prepare for the next message
 #else                          // MULTITHREADED_MESSAGES_ENABLE
     int len = (int)MessagesStringBuf.length() + 1;
-    HGLOBAL message = GlobalAlloc(GMEM_FIXED, len); // zaloha textu
+    HGLOBAL message = GlobalAlloc(GMEM_FIXED, len); // backup of the text
     if (message != NULL)
     {
-        memcpy((char*)message, MessagesStringBuf.c_str(), len); // je to FIXED -> HANDLE==PTR
+        memcpy((char*)message, MessagesStringBuf.c_str(), len); // since it is FIXED -> HANDLE==PTR
         data.Text = (char*)message;
     }
     else
         data.Text = __MessagesLowMemory;
-    MessagesStringBuf.erase(); // priprava pro dalsi message
-    LeaveMessagesModul();      // ted uz muzou zacit blbnout ostatni thready + message loopy
+    MessagesStringBuf.erase(); // prepare for the next message
+    LeaveMessagesModul();      // now the other threads and message loops can resume their work
 #endif                         // MULTITHREADED_MESSAGES_ENABLE
 
-    // MessageBox nahodime v novem threadu, aby nerozeslal message tohoto threadu
+    // Launch the MessageBox on a new thread so it does not dispatch this thread's messages
     DWORD threadID;
     HANDLE thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)__MessagesMessageBoxThreadF, &data, 0, &threadID);
     if (thread != NULL)
     {
-        WaitForSingleObject(thread, INFINITE); // pockame az ho user odmackne
+        WaitForSingleObject(thread, INFINITE); // wait until the user dismisses it
         CloseHandle(thread);
     }
     else
@@ -229,24 +228,24 @@ int C__Messages::MessageBoxT(const char* lpCaption, UINT uType)
 int C__Messages::MessageBox(HWND hWnd, const char* lpCaption, UINT uType)
 {
     int ret;
-    MessagesStrStream.flush(); // flushnuti do bufferu (v lpText)
+    MessagesStrStream.flush(); // flush the stream into the buffer (into lpText)
 
 #ifndef MULTITHREADED_MESSAGES_ENABLE
     if (!IsWindow(hWnd))
         hWnd = NULL;
     ret = ::MessageBoxA(hWnd, MessagesStringBuf.c_str(), lpCaption, uType);
-    MessagesStringBuf.erase(); // priprava pro dalsi message
+    MessagesStringBuf.erase(); // prepare for the next message
 #else                          // MULTITHREADED_MESSAGES_ENABLE
     size_t len = MessagesStringBuf.length() + 1;
-    HGLOBAL message = GlobalAlloc(GMEM_FIXED, len); // zaloha textu
+    HGLOBAL message = GlobalAlloc(GMEM_FIXED, len); // backup of the text
     char* txt;
-    txt = (char*)message; // je to FIXED -> HANDLE==PTR
+    txt = (char*)message; // since it is FIXED -> HANDLE==PTR
     if (txt != NULL)
         memcpy(txt, MessagesStringBuf.c_str(), len);
     else
         txt = (char*)__MessagesLowMemory;
-    MessagesStringBuf.erase(); // priprava pro dalsi message
-    LeaveMessagesModul();      // ted uz muzou zacit blbnout ostatni thready + message loopy
+    MessagesStringBuf.erase(); // prepare for the next message
+    LeaveMessagesModul();      // now the other threads and message loops can resume their work
 
     if (!IsWindow(hWnd))
         hWnd = NULL;
@@ -267,20 +266,19 @@ int C__Messages::MessageBox(HWND hWnd, const char* lpCaption, UINT uType)
 C__MessagesW::C__MessagesW() : MessagesStrStream(&MessagesStringBuf)
 {
 #ifdef _DEBUG
-    // nove streamy pouzivaji interne locales, ktere maji implementovany
-    // jednotlive "facets" pomoci lazy creation - jsou alokovany na heapu
-    // kdyz jsou potreba, tedy kdyz nekdo posle do streamu neco, co ma
-    // formatovani zavisle na lokalich pravidlech, treba cislo, datum,
-    // nebo boolean. Tyto "facets" jsou pak dealokovany pri exitu
-    // programu s prioritou compiler, tzn. po nasi kontrole memory leaku.
-    // Takze pokud nekdo pouzije stream k vypisu cehokoli lokalizovatelneho,
-    // nas debug heap zacne hlasit memory leaky, i kdyz zadne nejsou. Abychom
-    // tomu predesli, donutime locales vytvorit vsechny "facets" ted, dokud
-    // jeste nehlidame heap.
-    // Zatim pouzivame pouze vystupni stream a pouze se stringy (bez konverze)
-    // a cisly. Takze poslat cislo do stringstreamu by melo stacit. Pokud
-    // v budoucnu zacneme pouzivat streamy vic a debug heap zacne hlasit
-    // leaky, budeme zde muset pridat vic vstupu/vystupu.
+    // New streams internally use locales whose individual "facets" are implemented
+    // through lazy creation - they are allocated on the heap when needed, that is,
+    // when someone sends to the stream something whose formatting depends on locale
+    // rules, such as a number, date, or boolean. These "facets" are then deallocated
+    // at program exit with compiler priority, i.e. after our memory leak check.
+    // So if someone uses the stream to output anything localizable, our debug heap
+    // starts reporting memory leaks even though there are none. To prevent that,
+    // we force the locales to create all "facets" now, while we are not yet
+    // watching the heap.
+    // For now we use only the output stream and only with strings (without conversion)
+    // and numbers. Sending a number to the stringstream should therefore be enough.
+    // If in the future we start using streams more and the debug heap begins to report
+    // leaks, we will need to add more input/output here.
     std::wstringstream s;
     s << 1;
 #endif // _DEBUG
@@ -295,8 +293,8 @@ struct C__MessageBoxDataW
 };
 
 int CALLBACK __MessagesWMessageBoxThreadF(C__MessageBoxDataW* data)
-{ // nesmi cekat na odezvu volajiciho threadu, protoze ten nebude reagovat
-    // proto je parent==NULL -> zadne disablovani oken atd.
+{ // must not wait for the calling thread's response, because it would not react
+    // therefore parent==NULL -> no disabling of windows, etc.
     data->Return = MessageBoxW(NULL, data->Text, data->Caption, data->Type | MB_SETFOREGROUND);
     return 0;
 }
@@ -308,31 +306,31 @@ int C__MessagesW::MessageBoxT(const WCHAR* lpCaption, UINT uType)
     data.Type = uType;
     data.Return = 0;
 
-    MessagesStrStream.flush(); // flushnuti do bufferu (v lpText)
+    MessagesStrStream.flush(); // flush the stream into the buffer (into lpText)
 
 #ifndef MULTITHREADED_MESSAGES_ENABLE
     data.Text = MessagesStringBuf.c_str();
-    MessagesStringBuf.erase(); // priprava pro dalsi message
+    MessagesStringBuf.erase(); // prepare for the next message
 #else                          // MULTITHREADED_MESSAGES_ENABLE
     int len = (int)MessagesStringBuf.length() + 1;
-    HGLOBAL message = GlobalAlloc(GMEM_FIXED, sizeof(WCHAR) * len); // zaloha textu
+    HGLOBAL message = GlobalAlloc(GMEM_FIXED, sizeof(WCHAR) * len); // backup of the text
     if (message != NULL)
     {
-        memcpy((WCHAR*)message, MessagesStringBuf.c_str(), sizeof(WCHAR) * len); // je to FIXED -> HANDLE==PTR
+        memcpy((WCHAR*)message, MessagesStringBuf.c_str(), sizeof(WCHAR) * len); // since it is FIXED -> HANDLE==PTR
         data.Text = (WCHAR*)message;
     }
     else
         data.Text = __MessagesLowMemoryW;
-    MessagesStringBuf.erase(); // priprava pro dalsi message
-    LeaveMessagesModul();      // ted uz muzou zacit blbnout ostatni thready + message loopy
+    MessagesStringBuf.erase(); // prepare for the next message
+    LeaveMessagesModul();      // now the other threads and message loops can resume their work
 #endif                         // MULTITHREADED_MESSAGES_ENABLE
 
-    // MessageBox nahodime v novem threadu, aby nerozeslal message tohoto threadu
+    // Launch the MessageBox on a new thread so it does not dispatch this thread's messages
     DWORD threadID;
     HANDLE thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)__MessagesWMessageBoxThreadF, &data, 0, &threadID);
     if (thread != NULL)
     {
-        WaitForSingleObject(thread, INFINITE); // pockame az ho user odmackne
+        WaitForSingleObject(thread, INFINITE); // wait until the user dismisses it
         CloseHandle(thread);
     }
     else
@@ -349,24 +347,24 @@ int C__MessagesW::MessageBoxT(const WCHAR* lpCaption, UINT uType)
 int C__MessagesW::MessageBox(HWND hWnd, const WCHAR* lpCaption, UINT uType)
 {
     int ret;
-    MessagesStrStream.flush(); // flushnuti do bufferu (v lpText)
+    MessagesStrStream.flush(); // flush the stream into the buffer (into lpText)
 
 #ifndef MULTITHREADED_MESSAGES_ENABLE
     if (!IsWindow(hWnd))
         hWnd = NULL;
     ret = ::MessageBoxW(hWnd, MessagesStringBuf.c_str(), lpCaption, uType);
-    MessagesStringBuf.erase(); // priprava pro dalsi message
+    MessagesStringBuf.erase(); // prepare for the next message
 #else                          // MULTITHREADED_MESSAGES_ENABLE
     size_t len = MessagesStringBuf.length() + 1;
-    HGLOBAL message = GlobalAlloc(GMEM_FIXED, sizeof(WCHAR) * len); // zaloha textu
+    HGLOBAL message = GlobalAlloc(GMEM_FIXED, sizeof(WCHAR) * len); // backup of the text
     WCHAR* txt;
-    txt = (WCHAR*)message; // je to FIXED -> HANDLE==PTR
+    txt = (WCHAR*)message; // since it is FIXED -> HANDLE==PTR
     if (txt != NULL)
         memcpy(txt, MessagesStringBuf.c_str(), sizeof(WCHAR) * len);
     else
         txt = (WCHAR*)__MessagesLowMemoryW;
-    MessagesStringBuf.erase(); // priprava pro dalsi message
-    LeaveMessagesModul();      // ted uz muzou zacit blbnout ostatni thready + message loopy
+    MessagesStringBuf.erase(); // prepare for the next message
+    LeaveMessagesModul();      // now the other threads and message loops can resume their work
 
     if (!IsWindow(hWnd))
         hWnd = NULL;
