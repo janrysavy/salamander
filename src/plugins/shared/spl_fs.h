@@ -28,8 +28,9 @@ class CPluginDataInterfaceAbstract;
 // ****************************************************************************
 // CSalamanderForViewFileOnFSAbstract
 //
-// a set of methods from Salamander to support performing ViewFile in CPluginFSInterfaceAbstract,
-// the lifetime of the interface is limited to the method to which the interface is passed as a parameter
+// a set of callbacks provided by Salamander to support the ViewFile operation in
+// CPluginFSInterfaceAbstract; the interface instance lives only for the duration of the
+// method call that received it as a parameter
 
 class CSalamanderForViewFileOnFSAbstract
 {
@@ -57,10 +58,10 @@ public:
     virtual const char* WINAPI AllocFileNameInCache(HWND parent, const char* uniqueFileName, const char* nameInCache,
                                                     const char* rootTmpPath, BOOL& fileExists) = 0;
 
-    // opens the file 'fileName' from the Windows path in the viewer requested by the user (either
-    // using the viewer association or via the View With command); 'parent' is the parent of
+    // opens the file 'fileName' identified by a Windows path in the viewer requested by the user
+    // (either using the viewer association or via the View With command); 'parent' is the owner of
     // error message boxes; if 'fileLock' and 'fileLockOwner' are not NULL, they return a
-    // binding to the opened viewer (used as a parameter of the FreeFileNameInCache method);
+    // binding to the opened viewer (passed later to the FreeFileNameInCache method);
     // returns TRUE if the viewer was opened
     virtual BOOL WINAPI OpenViewer(HWND parent, const char* fileName, HANDLE* fileLock,
                                    BOOL* fileLockOwner) = 0;
@@ -93,7 +94,7 @@ public:
 // ****************************************************************************
 // CPluginFSInterfaceAbstract
 //
-// a set of plugin methods that Salamander needs to work with the file system
+// a set of plugin callbacks that Salamander needs to work with the file system
 
 // icon types in the panel when browsing the FS (used in CPluginFSInterfaceAbstract::ListCurrentPath())
 #define pitSimple 0       // simple icons for files and directories - according to extension (association)
@@ -198,11 +199,11 @@ public:
 #define FS_SERVICE_GETFREESPACE 0x00010000
 // get icon of FS (icon in directory line or Disconnect dialog)
 #define FS_SERVICE_GETFSICON 0x00020000
-// get next directory-line FS hot-path (for shortening of current FS path in panel)
+// get the next hot segment for the Directory Line (used to shorten the current FS path in the panel)
 #define FS_SERVICE_GETNEXTDIRLINEHOTPATH 0x00040000
 // context menu on FS (Shift+F10)
 #define FS_SERVICE_CONTEXTMENU 0x00080000
-// get item for change drive menu or Disconnect dialog (item for active/detached FS in Alt+F1/F2 or Disconnect dialog)
+// get the item for the Change Drive menu or Disconnect dialog (entry for active/detached FS in Alt+F1/F2 or the Disconnect dialog)
 #define FS_SERVICE_GETCHANGEDRIVEORDISCONNECTITEM 0x00100000
 // accepts change on path notifications from Salamander (see PostChangeOnPathNotification)
 #define FS_SERVICE_ACCEPTSCHANGENOTIF 0x00200000
