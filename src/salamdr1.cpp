@@ -46,11 +46,11 @@ extern "C"
 #include "execute.h"
 #include "drivelst.h"
 
-#pragma comment(linker, "/ENTRY:MyEntryPoint") // chceme vlastni vstupni bod do aplikace
+#pragma comment(linker, "/ENTRY:MyEntryPoint") // we want our own entry point for the application
 
 #pragma comment(lib, "UxTheme.lib")
 
-// zpristupnime si puvodni vstupni bod aplikace
+// expose the original application entry point
 extern "C" int WinMainCRTStartup();
 
 #ifdef X64_STRESS_TEST
@@ -61,64 +61,64 @@ LPVOID X64StressTestPointers[X64_STRESS_TEST_ALLOC_COUNT];
 
 void X64StressTestAlloc()
 {
-    // v teto chvili jiz loader nacetl EXE a RTL a v inicializaci RTL doslo k vytvoreni a alokaci heapu,
-    // ktery lezi na adresach pod 4GB; abychom dalsi alokace vystrcili nahoru nad 4GB, muysime zabrat spodek
-    // virtualni pameti a pak nasledne donutit RTL pomoci alokaci k rozsireni jeho heapu
+    // At this point the loader has already loaded the EXE and RTL, and the RTL initialization created and allocated the heap,
+    // which resides at addresses below 4GB; to push further allocations above 4GB we must occupy the lower part
+    // of the virtual memory and then force the RTL to expand its heap through allocations.
     //
-    // zabereme prostor ve virtualni pameti
+    // Reserve space in virtual memory
     UINT64 vaAllocated = 0;
     _int64 allocSize[] = {10000000, 1000000, 100000, 10000, 1000, 100, 10, 1, 0};
     for (int i = 0; allocSize[i] != 0; i++)
-        while (VirtualAlloc(0, allocSize[i], MEM_RESERVE, PAGE_NOACCESS) <= (LPVOID)(UINT_PTR)0x00000000ffffffff) // pri pristupu chceme exception a nechceme MEM_COMMIT, at zbytecne nezerem
+        while (VirtualAlloc(0, allocSize[i], MEM_RESERVE, PAGE_NOACCESS) <= (LPVOID)(UINT_PTR)0x00000000ffffffff) // we want an exception on access and we do not want MEM_COMMIT so we do not waste memory
             vaAllocated += allocSize[i];
 
-    // nyni nafoukneme RTL heap
+    // Now inflate the RTL heap
     UINT64 rtlAllocated = 0;
     _int64 rtlAllocSize[] = {10000000, 1000000, 100000, 10000, 1000, 100, 10, 1, 0};
     for (int i = 0; rtlAllocSize[i] != 0; i++)
         while (_malloc_dbg(rtlAllocSize[i], _CRT_BLOCK, __FILE__, __LINE__) <= (LPVOID)(UINT_PTR)0x00000000ffffffff)
             rtlAllocated += rtlAllocSize[i];
 
-    // kontrola uspechu
-    void* testNew = new char; // new jede pres alloc, ale radeji take overime
+    // Verify success
+    void* testNew = new char; // new goes through alloc, but we will verify it as well
     if (testNew <= (LPVOID)(UINT_PTR)0x00000000ffffffff)
         MessageBox(NULL, "new address <= 0x00000000ffffffff!\nPlease contact jan.rysavy@altap.cz with this information.", "X64_STRESS_TEST", MB_OK | MB_ICONEXCLAMATION);
     delete testNew;
 }
 
 #endif //X64_STRESS_TEST
-// nas vlastni vstupni bod, o ktery jsme si pozadali linker pomoci pragmy
+// our own entry point requested from the linker via pragma
 int MyEntryPoint()
 {
 #ifdef X64_STRESS_TEST
-    // alokacema vyzereme spodni 4GB pameti, aby dalsi alokace mely ukazatele vetsi nez DWORD
+    // consume the lower 4GB of memory with allocations so that further allocations have pointers greater than a DWORD
     X64StressTestAlloc();
 #endif //X64_STRESS_TEST
 
     int ret = 1; // error
 
-    // spustime Salmon, chceme aby pochytal maximum nasich padu
+    // start Salmon, we want it to capture as many of our crashes as possible
     if (SalmonInit())
     {
-        // zavolame puvodni entry point aplikace a spustime tim program
+        // call the original application entry point and run the program
         ret = WinMainCRTStartup();
     }
     else
         MessageBox(NULL, "Open Salamander Bug Reporter (salmon.exe) initialization has failed. Please reinstall Open Salamander.",
                    SALAMANDER_TEXT_VERSION, MB_OK | MB_ICONSTOP);
 
-    // sem uz mi debugger nechodi, sestreli nas v RTL (testovano pod VC 2008 s nasim RTL)
+    // the debugger does not reach this point; RTL shuts us down (tested under VC 2008 with our RTL)
 
-    // koncime
+    // finish up
     return ret;
 }
 
-BOOL SalamanderBusy = TRUE;       // je Salamander busy?
-DWORD LastSalamanderIdleTime = 0; // GetTickCount() z okamziku, kdy SalamanderBusy naposledy presel na TRUE
+BOOL SalamanderBusy = TRUE;       // is Salamander busy?
+DWORD LastSalamanderIdleTime = 0; // GetTickCount() from the moment when SalamanderBusy last switched to TRUE
 
-int PasteLinkIsRunning = 0; // pokud je vetsi nez nula, probiha prave Past Shortcuts prikaz v jednom z panelu
+int PasteLinkIsRunning = 0; // if it is greater than zero, the Paste Shortcuts command is currently running in one of the panels
 
-BOOL CannotCloseSalMainWnd = FALSE; // TRUE = nesmi dojit k zavreni hlavniho okna
+BOOL CannotCloseSalMainWnd = FALSE; // TRUE = closing the main window is not allowed
 
 DWORD MainThreadID = -1;
 
@@ -131,14 +131,14 @@ int GTDExceptionHasOccured = 0;
 int SHLExceptionHasOccured = 0;
 int RelExceptionHasOccured = 0;
 
-char DecimalSeparator[5] = "."; // "znaky" (max. 4 znaky) vytazene ze systemu
-int DecimalSeparatorLen = 1;    // delka ve znacich bez nuly na konci
+char DecimalSeparator[5] = "."; // "characters" (maximum of 4 characters) retrieved from the system
+int DecimalSeparatorLen = 1;    // length in characters without the terminating zero
 char ThousandsSeparator[5] = " ";
 int ThousandsSeparatorLen = 1;
 
-BOOL WindowsXP64AndLater = FALSE;  // JRYFIXME - zrusit
-BOOL WindowsVistaAndLater = FALSE; // JRYFIXME - zrusit
-BOOL Windows7AndLater = FALSE;     // JRYFIXME - zrusit
+BOOL WindowsXP64AndLater = FALSE;  // JRYFIXME - remove
+BOOL WindowsVistaAndLater = FALSE; // JRYFIXME - remove
+BOOL Windows7AndLater = FALSE;     // JRYFIXME - remove
 BOOL Windows8AndLater = FALSE;
 BOOL Windows8_1AndLater = FALSE;
 BOOL Windows10AndLater = FALSE;
@@ -189,14 +189,14 @@ const char* CommonFileTypeName2 = NULL;
 
 char WindowsDirectory[MAX_PATH] = "";
 
-// pro zajisteni uniku z odstranenych drivu na fixed drive (po vysunuti device - USB flash disk, atd.)
-BOOL ChangeLeftPanelToFixedWhenIdleInProgress = FALSE; // TRUE = prave se meni cesta, nastaveni ChangeLeftPanelToFixedWhenIdle na TRUE je zbytecne
+// ensures escape from removed drives to a fixed drive (after ejecting a device - USB flash drive, etc.)
+BOOL ChangeLeftPanelToFixedWhenIdleInProgress = FALSE; // TRUE = the path is currently being changed; setting ChangeLeftPanelToFixedWhenIdle to TRUE is redundant
 BOOL ChangeLeftPanelToFixedWhenIdle = FALSE;
-BOOL ChangeRightPanelToFixedWhenIdleInProgress = FALSE; // TRUE = prave se meni cesta, nastaveni ChangeRightPanelToFixedWhenIdle na TRUE je zbytecne
+BOOL ChangeRightPanelToFixedWhenIdleInProgress = FALSE; // TRUE = the path is currently being changed; setting ChangeRightPanelToFixedWhenIdle to TRUE is redundant
 BOOL ChangeRightPanelToFixedWhenIdle = FALSE;
-BOOL OpenCfgToChangeIfPathIsInaccessibleGoTo = FALSE; // TRUE = v idle otevre konfiguraci na Drives a focusne "If path in panel is inaccessible, go to:"
+BOOL OpenCfgToChangeIfPathIsInaccessibleGoTo = FALSE; // TRUE = during idle it opens the Drives configuration and focuses "If path in panel is inaccessible, go to:"
 
-char IsSLGIncomplete[ISSLGINCOMPLETE_SIZE]; // pokud je retezec prazdny, SLG je kompletne prelozene; jinak obsahuje URL na forum do sekce daneho jazyka
+char IsSLGIncomplete[ISSLGINCOMPLETE_SIZE]; // if the string is empty, the SLG is fully translated; otherwise it contains a message-board URL for the respective language section
 
 UINT TaskbarBtnCreatedMsg = 0;
 
@@ -217,7 +217,7 @@ const char* CMAINWINDOW_CLASSNAME = "SalamanderMainWindowVer25";
 const char* SAVEBITS_CLASSNAME = "SalamanderSaveBits";
 const char* SHELLEXECUTE_CLASSNAME = "SalamanderShellExecute";
 
-CAssociations Associations; // asociace nactene z registry
+CAssociations Associations; // associations loaded from the registry
 CShares Shares;
 
 char DefaultDir['Z' - 'A' + 1][MAX_PATH];
@@ -225,15 +225,15 @@ char DefaultDir['Z' - 'A' + 1][MAX_PATH];
 HACCEL AccelTable1 = NULL;
 HACCEL AccelTable2 = NULL;
 
-HINSTANCE NtDLL = NULL;             // handle k ntdll.dll
-HINSTANCE Shell32DLL = NULL;        // handle k shell32.dll (ikonky)
-HINSTANCE ImageResDLL = NULL;       // handle k imageres.dll (ikonky - Vista)
-HINSTANCE User32DLL = NULL;         // handle k user32.dll (DisableProcessWindowsGhosting)
-HINSTANCE HLanguage = NULL;         // handle k jazykove zavislym resourcum (.SPL souboru)
-char CurrentHelpDir[MAX_PATH] = ""; // po prvnim pouziti helpu je zde cesta do adresare helpu (umisteni vsech .chm souboru)
-WORD LanguageID = 0;                // language-id .SPL souboru
+HINSTANCE NtDLL = NULL;             // handle to ntdll.dll
+HINSTANCE Shell32DLL = NULL;        // handle to shell32.dll (icons)
+HINSTANCE ImageResDLL = NULL;       // handle to imageres.dll (icons - Vista)
+HINSTANCE User32DLL = NULL;         // handle to user32.dll (DisableProcessWindowsGhosting)
+HINSTANCE HLanguage = NULL;         // handle to language-dependent resources (.SPL file)
+char CurrentHelpDir[MAX_PATH] = ""; // after the first use of help, this holds the path to the help directory (location of all .chm files)
+WORD LanguageID = 0;                // language ID of the .SPL file
 
-char OpenReadmeInNotepad[MAX_PATH]; // pouziva se jen pri spusteni z instalaku: jmeno souboru, ktere mame v IDLE otevrit v notepadu (spustit notepad)
+char OpenReadmeInNotepad[MAX_PATH]; // used only when launched from the installer: file name to open in Notepad while idle (start Notepad)
 
 BOOL UseCustomPanelFont = FALSE;
 HFONT Font = NULL;
@@ -262,12 +262,12 @@ HBRUSH HMenuSelectedTextBrush = NULL;
 HBRUSH HMenuHilightBrush = NULL;
 HBRUSH HMenuGrayTextBrush = NULL;
 
-HPEN HActiveNormalPen = NULL; // pera pro ramecek kolem polozky
+HPEN HActiveNormalPen = NULL; // pens for the frame around an item
 HPEN HActiveSelectedPen = NULL;
 HPEN HInactiveNormalPen = NULL;
 HPEN HInactiveSelectedPen = NULL;
 
-HPEN HThumbnailNormalPen = NULL; // pera pro ramecek kolem thumbnail
+HPEN HThumbnailNormalPen = NULL; // pens for the frame around a thumbnail
 HPEN HThumbnailFucsedPen = NULL;
 HPEN HThumbnailSelectedPen = NULL;
 HPEN HThumbnailFocSelPen = NULL;
@@ -297,7 +297,7 @@ HBITMAP HZoomBitmap = NULL;
 
 HCURSOR HHelpCursor = NULL;
 
-int SystemDPI = 0; // Globalni DPI pres vsechny monitory. Salamander nepodporuje Per-Monitor DPI, viz https://msdn.microsoft.com/library/windows/desktop/dn469266.aspx
+int SystemDPI = 0; // Global DPI across all monitors. Salamander does not support per-monitor DPI, see https://msdn.microsoft.com/library/windows/desktop/dn469266.aspx
 int IconSizes[] = {16, 32, 48};
 int IconLRFlags = 0;
 HICON HSharedOverlays[] = {0};
@@ -305,7 +305,7 @@ HICON HShortcutOverlays[] = {0};
 HICON HSlowFileOverlays[] = {0};
 CIconList* SimpleIconLists[] = {0};
 CIconList* ThrobberFrames = NULL;
-CIconList* LockFrames = NULL; // pro jednoduchost deklaruji a nacitam jako throbber
+CIconList* LockFrames = NULL; // for simplicity declare and load it as a throbber
 
 HICON HGroupIcon = NULL;
 HICON HFavoritIcon = NULL;
@@ -315,9 +315,9 @@ RGBQUAD ColorTable[256] = {0};
 
 DWORD MouseHoverTime = 0;
 
-SYSTEMTIME SalamanderStartSystemTime = {0}; // cas startu Salamandera (GetSystemTime)
+SYSTEMTIME SalamanderStartSystemTime = {0}; // Salamander start time (GetSystemTime)
 
-BOOL WaitForESCReleaseBeforeTestingESC = FALSE; // ma se cekat na pusteni ESC pred zacatkem listovani cesty v panelu?
+BOOL WaitForESCReleaseBeforeTestingESC = FALSE; // should we wait for ESC to be released before starting path browsing in the panel?
 
 int SPACE_WIDTH = 10;
 
@@ -340,40 +340,40 @@ BOOL CriticalShutdown = FALSE;
 HANDLE SalOpenFileMapping = NULL;
 void* SalOpenSharedMem = NULL;
 
-// mutex pro synchronizaci load/save do Registry (dva procesy najednou nemuzou, ma to neblahe vysledky)
+// mutex for synchronizing load/save to the registry (two processes cannot do it at once; it ends badly)
 CLoadSaveToRegistryMutex LoadSaveToRegistryMutex;
 
-BOOL IsNotAlphaNorNum[256]; // pole TRUE/FALSE pro znaky (TRUE = neni pismeno ani cislice)
-BOOL IsAlpha[256];          // pole TRUE/FALSE pro znaky (TRUE = pismeno)
+BOOL IsNotAlphaNorNum[256]; // TRUE/FALSE array for characters (TRUE = not a letter or digit)
+BOOL IsAlpha[256];          // TRUE/FALSE array for characters (TRUE = letter)
 
-// defaultni useruv charset pro fonty; pod W2K+ uz by stacilo DEFAULT_CHARSET
+// default user charset for fonts; under W2K+ DEFAULT_CHARSET would already be sufficient
 //
-// Pod WinXP lze v regionalnim nastaveni zvolit jako default napriklad cestinu,
-// ale na zalozce Advanced nenainstalovat ceske fotny. Potom pri konstrukci
-// fontu s kodovanim UserCharset operacni system vrati font s uplne
-// jinym nazvem (face name), hlavne aby mel pozadovane kodovani. Proto je DULEZITE pri
-// specifikaci parametru fontu spravne zvolit promennou lfPitchAndFamily,
-// kde si lze volit mezi FF_SWISS a FF_ROMAN fonty (bezpatkove/patkove).
+// Under WinXP you can choose for example Czech as the default in regional settings,
+// but on the Advanced tab skip installing Czech fonts. When constructing
+// a font with the UserCharset encoding, the operating system then returns a font with a completely
+// different face name, as long as it has the required encoding. It is therefore IMPORTANT when
+// specifying font parameters to choose the lfPitchAndFamily value correctly,
+// where you can choose between FF_SWISS and FF_ROMAN fonts (sans-serif/serif).
 int UserCharset = DEFAULT_CHARSET;
 
-DWORD AllocationGranularity = 1; // granularita alokaci (potreba pro pouzivani souboru mapovanych do pameti)
+DWORD AllocationGranularity = 1; // step size used by memory-mapped files
 
 #ifdef USE_BETA_EXPIRATION_DATE
 
-// urcuje prvni den, kdy uz tato beta/PB verze nepobezi
-// beta/PB verze 4.0 beta 1 pojede pouze do 1. unora 2020
+// determines the first day when this beta/PB version will no longer run
+// beta/PB version 4.0 beta 1 will run only until 1 February 2020
 //                                 YEAR  MONTH DAY
 SYSTEMTIME BETA_EXPIRATION_DATE = {2020, 2, 0, 1, 0, 0, 0, 0};
 #endif // USE_BETA_EXPIRATION_DATE
 
 //******************************************************************************
 //
-// Rizeni Idle processingu (CMainWindow::OnEnterIdle)
+// Idle processing control (CMainWindow::OnEnterIdle)
 //
 
-BOOL IdleRefreshStates = TRUE;  // na uvod nechame nastavit promenne
-BOOL IdleForceRefresh = FALSE;  // vyradi cache Enabler*
-BOOL IdleCheckClipboard = TRUE; // koukneme taky na clipboard
+BOOL IdleRefreshStates = TRUE;  // let the variables be initialized at startup
+BOOL IdleForceRefresh = FALSE;  // disables the Enabler* cache
+BOOL IdleCheckClipboard = TRUE; // also check the clipboard
 
 DWORD EnablerUpDir = FALSE;
 DWORD EnablerRootDir = FALSE;
@@ -448,7 +448,7 @@ SALCOLOR ViewerColors[NUMBER_OF_VIEWERCOLORS] =
 
 COLORREF SalamanderColors[NUMBER_OF_COLORS] =
     {
-        // barvy pera pro ramecek kolem polozky
+        // pen colors for the frame around an item
         RGBF(0, 0, 0, SCF_DEFAULT),       // FOCUS_ACTIVE_NORMAL
         RGBF(0, 0, 0, SCF_DEFAULT),       // FOCUS_ACTIVE_SELECTED
         RGBF(128, 128, 128, 0),           // FOCUS_FG_INACTIVE_NORMAL
@@ -456,43 +456,43 @@ COLORREF SalamanderColors[NUMBER_OF_COLORS] =
         RGBF(255, 255, 255, SCF_DEFAULT), // FOCUS_BK_INACTIVE_NORMAL
         RGBF(255, 255, 255, SCF_DEFAULT), // FOCUS_BK_INACTIVE_SELECTED
 
-        // barvy textu polozek v panelu
+        // text colors of items in the panel
         RGBF(0, 0, 0, SCF_DEFAULT), // ITEM_FG_NORMAL
         RGBF(255, 0, 0, 0),         // ITEM_FG_SELECTED
         RGBF(0, 0, 0, SCF_DEFAULT), // ITEM_FG_FOCUSED
         RGBF(255, 0, 0, 0),         // ITEM_FG_FOCSEL
         RGBF(0, 0, 0, SCF_DEFAULT), // ITEM_FG_HIGHLIGHT
 
-        // barvy pozadi polozek v panelu
+        // background colors of items in the panel
         RGBF(255, 255, 255, SCF_DEFAULT), // ITEM_BK_NORMAL
         RGBF(255, 255, 255, SCF_DEFAULT), // ITEM_BK_SELECTED
         RGBF(232, 232, 232, 0),           // ITEM_BK_FOCUSED
         RGBF(232, 232, 232, 0),           // ITEM_BK_FOCSEL
         RGBF(0, 0, 0, SCF_DEFAULT),       // ITEM_BK_HIGHLIGHT
 
-        // barvy pro blend ikonek
+        // colors for icon blending
         RGBF(255, 128, 128, SCF_DEFAULT), // ICON_BLEND_SELECTED
         RGBF(128, 128, 128, 0),           // ICON_BLEND_FOCUSED
         RGBF(255, 0, 0, 0),               // ICON_BLEND_FOCSEL
 
-        // barvy progress bary
+        // progress bar colors
         RGBF(0, 0, 192, SCF_DEFAULT),     // PROGRESS_FG_NORMAL
         RGBF(255, 255, 255, SCF_DEFAULT), // PROGRESS_FG_SELECTED
         RGBF(255, 255, 255, SCF_DEFAULT), // PROGRESS_BK_NORMAL
         RGBF(0, 0, 192, SCF_DEFAULT),     // PROGRESS_BK_SELECTED
 
-        // barvy hot polozek
+        // colors for hot items
         RGBF(0, 0, 255, SCF_DEFAULT),     // HOT_PANEL
         RGBF(128, 128, 128, SCF_DEFAULT), // HOT_ACTIVE
         RGBF(128, 128, 128, SCF_DEFAULT), // HOT_INACTIVE
 
-        // barvy titulku panelu
+        // panel caption colors
         RGBF(255, 255, 255, SCF_DEFAULT), // ACTIVE_CAPTION_FG
         RGBF(0, 0, 128, SCF_DEFAULT),     // ACTIVE_CAPTION_BK
         RGBF(255, 255, 255, SCF_DEFAULT), // INACTIVE_CAPTION_FG
         RGBF(128, 128, 128, SCF_DEFAULT), // INACTIVE_CAPTION_BK
 
-        // barvy pera pro ramecek kolem thumbnails
+        // pen colors for the frame around thumbnails
         RGBF(192, 192, 192, 0), // THUMBNAIL_FRAME_NORMAL
         RGBF(0, 0, 0, 0),       // THUMBNAIL_FRAME_FOCUSED
         RGBF(255, 0, 0, 0),     // THUMBNAIL_FRAME_SELECTED
@@ -501,7 +501,7 @@ COLORREF SalamanderColors[NUMBER_OF_COLORS] =
 
 COLORREF ExplorerColors[NUMBER_OF_COLORS] =
     {
-        // barvy pera pro ramecek kolem polozky
+        // pen colors for the frame around an item
         RGBF(0, 0, 0, SCF_DEFAULT),       // FOCUS_ACTIVE_NORMAL
         RGBF(255, 255, 0, 0),             // FOCUS_ACTIVE_SELECTED
         RGBF(128, 128, 128, 0),           // FOCUS_FG_INACTIVE_NORMAL
@@ -509,43 +509,43 @@ COLORREF ExplorerColors[NUMBER_OF_COLORS] =
         RGBF(255, 255, 255, SCF_DEFAULT), // FOCUS_BK_INACTIVE_NORMAL
         RGBF(255, 255, 0, 0),             // FOCUS_BK_INACTIVE_SELECTED
 
-        // barvy textu polozek v panelu
+        // text colors of items in the panel
         RGBF(0, 0, 0, SCF_DEFAULT), // ITEM_FG_NORMAL
         RGBF(255, 255, 255, 0),     // ITEM_FG_SELECTED
         RGBF(0, 0, 0, SCF_DEFAULT), // ITEM_FG_FOCUSED
         RGBF(255, 255, 255, 0),     // ITEM_FG_FOCSEL
         RGBF(0, 0, 0, SCF_DEFAULT), // ITEM_FG_HIGHLIGHT
 
-        // barvy pozadi polozek v panelu
+        // background colors of items in the panel
         RGBF(255, 255, 255, SCF_DEFAULT), // ITEM_BK_NORMAL
         RGBF(0, 0, 128, 0),               // ITEM_BK_SELECTED
         RGBF(232, 232, 232, 0),           // ITEM_BK_FOCUSED
         RGBF(0, 0, 128, 0),               // ITEM_BK_FOCSEL
         RGBF(0, 0, 0, SCF_DEFAULT),       // ITEM_BK_HIGHLIGHT
 
-        // barvy pro blend ikonek
+        // colors for icon blending
         RGBF(0, 0, 128, SCF_DEFAULT), // ICON_BLEND_SELECTED
         RGBF(128, 128, 128, 0),       // ICON_BLEND_FOCUSED
         RGBF(0, 0, 128, 0),           // ICON_BLEND_FOCSEL
 
-        // barvy progress bary
+        // progress bar colors
         RGBF(0, 0, 192, SCF_DEFAULT),     // PROGRESS_FG_NORMAL
         RGBF(255, 255, 255, SCF_DEFAULT), // PROGRESS_FG_SELECTED
         RGBF(255, 255, 255, SCF_DEFAULT), // PROGRESS_BK_NORMAL
         RGBF(0, 0, 192, SCF_DEFAULT),     // PROGRESS_BK_SELECTED
 
-        // barvy hot polozek
+        // colors for hot items
         RGBF(0, 0, 255, SCF_DEFAULT),     // HOT_PANEL
         RGBF(128, 128, 128, SCF_DEFAULT), // HOT_ACTIVE
         RGBF(128, 128, 128, SCF_DEFAULT), // HOT_INACTIVE
 
-        // barvy titulku panelu
+        // panel caption colors
         RGBF(255, 255, 255, SCF_DEFAULT), // ACTIVE_CAPTION_FG
         RGBF(0, 0, 128, SCF_DEFAULT),     // ACTIVE_CAPTION_BK
         RGBF(255, 255, 255, SCF_DEFAULT), // INACTIVE_CAPTION_FG
         RGBF(128, 128, 128, SCF_DEFAULT), // INACTIVE_CAPTION_BK
 
-        // barvy pera pro ramecek kolem thumbnails
+        // pen colors for the frame around thumbnails
         RGBF(192, 192, 192, 0), // THUMBNAIL_FRAME_NORMAL
         RGBF(0, 0, 128, 0),     // THUMBNAIL_FRAME_FOCUSED
         RGBF(0, 0, 128, 0),     // THUMBNAIL_FRAME_SELECTED
@@ -554,7 +554,7 @@ COLORREF ExplorerColors[NUMBER_OF_COLORS] =
 
 COLORREF NortonColors[NUMBER_OF_COLORS] =
     {
-        // barvy pera pro ramecek kolem polozky
+        // pen colors for the frame around an item
         RGBF(0, 128, 128, 0), // FOCUS_ACTIVE_NORMAL
         RGBF(0, 128, 128, 0), // FOCUS_ACTIVE_SELECTED
         RGBF(0, 128, 128, 0), // FOCUS_FG_INACTIVE_NORMAL
@@ -562,43 +562,43 @@ COLORREF NortonColors[NUMBER_OF_COLORS] =
         RGBF(0, 0, 128, 0),   // FOCUS_BK_INACTIVE_NORMAL
         RGBF(0, 0, 128, 0),   // FOCUS_BK_INACTIVE_SELECTED
 
-        // barvy textu polozek v panelu
+        // text colors of items in the panel
         RGBF(0, 255, 255, 0),       // ITEM_FG_NORMAL
         RGBF(255, 255, 0, 0),       // ITEM_FG_SELECTED
         RGBF(0, 0, 0, SCF_DEFAULT), // ITEM_FG_FOCUSED
         RGBF(255, 255, 0, 0),       // ITEM_FG_FOCSEL
         RGBF(0, 0, 0, SCF_DEFAULT), // ITEM_FG_HIGHLIGHT
 
-        // barvy pozadi polozek v panelu
+        // background colors of items in the panel
         RGBF(0, 0, 128, 0),         // ITEM_BK_NORMAL
         RGBF(0, 0, 128, 0),         // ITEM_BK_SELECTED
         RGBF(0, 128, 128, 0),       // ITEM_BK_FOCUSED
         RGBF(0, 128, 128, 0),       // ITEM_BK_FOCSEL
         RGBF(0, 0, 0, SCF_DEFAULT), // ITEM_BK_HIGHLIGHT
 
-        // barvy pro blend ikonek
+        // colors for icon blending
         RGBF(255, 255, 0, SCF_DEFAULT), // ICON_BLEND_SELECTED
         RGBF(128, 128, 128, 0),         // ICON_BLEND_FOCUSED
         RGBF(255, 255, 0, 0),           // ICON_BLEND_FOCSEL
 
-        // barvy progress bary
+        // progress bar colors
         RGBF(0, 0, 192, SCF_DEFAULT),     // PROGRESS_FG_NORMAL
         RGBF(255, 255, 255, SCF_DEFAULT), // PROGRESS_FG_SELECTED
         RGBF(255, 255, 255, SCF_DEFAULT), // PROGRESS_BK_NORMAL
         RGBF(0, 0, 192, SCF_DEFAULT),     // PROGRESS_BK_SELECTED
 
-        // barvy hot polozek
+        // colors for hot items
         RGBF(0, 0, 255, SCF_DEFAULT),     // HOT_PANEL
         RGBF(128, 128, 128, SCF_DEFAULT), // HOT_ACTIVE
         RGBF(128, 128, 128, SCF_DEFAULT), // HOT_INACTIVE
 
-        // barvy titulku panelu
+        // panel caption colors
         RGBF(255, 255, 255, SCF_DEFAULT), // ACTIVE_CAPTION_FG
         RGBF(0, 0, 128, SCF_DEFAULT),     // ACTIVE_CAPTION_BK
         RGBF(255, 255, 255, SCF_DEFAULT), // INACTIVE_CAPTION_FG
         RGBF(128, 128, 128, SCF_DEFAULT), // INACTIVE_CAPTION_BK
 
-        // barvy pera pro ramecek kolem thumbnails
+        // pen colors for the frame around thumbnails
         RGBF(192, 192, 192, 0), // THUMBNAIL_FRAME_NORMAL
         RGBF(0, 128, 128, 0),   // THUMBNAIL_FRAME_FOCUSED
         RGBF(255, 255, 0, 0),   // THUMBNAIL_FRAME_SELECTED
@@ -607,7 +607,7 @@ COLORREF NortonColors[NUMBER_OF_COLORS] =
 
 COLORREF NavigatorColors[NUMBER_OF_COLORS] =
     {
-        // barvy pera pro ramecek kolem polozky
+        // pen colors for the frame around an item
         RGBF(0, 128, 128, 0), // FOCUS_ACTIVE_NORMAL
         RGBF(0, 128, 128, 0), // FOCUS_ACTIVE_SELECTED
         RGBF(0, 128, 128, 0), // FOCUS_FG_INACTIVE_NORMAL
@@ -615,43 +615,43 @@ COLORREF NavigatorColors[NUMBER_OF_COLORS] =
         RGBF(0, 0, 128, 0),   // FOCUS_BK_INACTIVE_NORMAL
         RGBF(0, 0, 128, 0),   // FOCUS_BK_INACTIVE_SELECTED
 
-        // barvy textu polozek v panelu
+        // text colors of items in the panel
         RGBF(255, 255, 255, 0),     // ITEM_FG_NORMAL
         RGBF(255, 255, 0, 0),       // ITEM_FG_SELECTED
         RGBF(0, 0, 0, SCF_DEFAULT), // ITEM_FG_FOCUSED
         RGBF(255, 255, 0, 0),       // ITEM_FG_FOCSEL
         RGBF(0, 0, 0, SCF_DEFAULT), // ITEM_FG_HIGHLIGHT
 
-        // barvy pozadi polozek v panelu
+        // background colors of items in the panel
         RGBF(80, 80, 80, 0),        // ITEM_BK_NORMAL
         RGBF(80, 80, 80, 0),        // ITEM_BK_SELECTED
         RGBF(0, 128, 128, 0),       // ITEM_BK_FOCUSED
         RGBF(0, 128, 128, 0),       // ITEM_BK_FOCSEL
         RGBF(0, 0, 0, SCF_DEFAULT), // ITEM_BK_HIGHLIGHT
 
-        // barvy pro blend ikonek
+        // colors for icon blending
         RGBF(255, 255, 0, SCF_DEFAULT), // ICON_BLEND_SELECTED
         RGBF(128, 128, 128, 0),         // ICON_BLEND_FOCUSED
         RGBF(255, 255, 0, 0),           // ICON_BLEND_FOCSEL
 
-        // barvy progress bary
+        // progress bar colors
         RGBF(0, 0, 192, SCF_DEFAULT),     // PROGRESS_FG_NORMAL
         RGBF(255, 255, 255, SCF_DEFAULT), // PROGRESS_FG_SELECTED
         RGBF(255, 255, 255, SCF_DEFAULT), // PROGRESS_BK_NORMAL
         RGBF(0, 0, 192, SCF_DEFAULT),     // PROGRESS_BK_SELECTED
 
-        // barvy hot polozek
+        // colors for hot items
         RGBF(0, 0, 255, SCF_DEFAULT),     // HOT_PANEL
         RGBF(173, 182, 205, SCF_DEFAULT), // HOT_ACTIVE
         RGBF(212, 212, 212, SCF_DEFAULT), // HOT_INACTIVE
 
-        // barvy titulku panelu
+        // panel caption colors
         RGBF(255, 255, 255, SCF_DEFAULT), // ACTIVE_CAPTION_FG
         RGBF(0, 0, 128, SCF_DEFAULT),     // ACTIVE_CAPTION_BK
         RGBF(255, 255, 255, SCF_DEFAULT), // INACTIVE_CAPTION_FG
         RGBF(128, 128, 128, SCF_DEFAULT), // INACTIVE_CAPTION_BK
 
-        // barvy pera pro ramecek kolem thumbnails
+        // pen colors for the frame around thumbnails
         RGBF(192, 192, 192, 0), // THUMBNAIL_FRAME_NORMAL
         RGBF(0, 128, 128, 0),   // THUMBNAIL_FRAME_FOCUSED
         RGBF(255, 255, 0, 0),   // THUMBNAIL_FRAME_SELECTED
@@ -736,11 +736,11 @@ DWORD UpdateCrc32(const void* buffer, DWORD count, DWORD crcVal)
             c = Crc32Tab[((int)c ^ (*p++)) & 0xff] ^ (c >> 8);
         } while (--count);
 
-    // Honza: meril jsem nasledujici optimalizace a nemaji zadny vyznam;
-    // jedina sance by bylo prepsani do ASM a cteni pameti po DWORDech,
-    // ze kterych by pak bylo mozne vyzobavat jednotlive bajty;
-    // pri soucasnem nastaveni release verze neni prekladac schopen tuto
-    // optimalizaci provest za nas.
+    // Honza: I benchmarked the following optimizations and they are pointless;
+    // the only chance would be to rewrite this into ASM and read memory in DWORDs,
+    // from which we could then pick individual bytes;
+    // with the current release-build settings the compiler cannot perform this
+    // optimization for us.
     /*
   int remain = count % 8;
   count -= remain;
@@ -796,17 +796,17 @@ BOOL IsRemoteSession(void)
 
 BOOL SalamanderIsNotBusy(DWORD* lastIdleTime)
 {
-    // k SalamanderBusy a k LastSalamanderIdleTime se chodi bez kritickych sekci, nevadi,
-    // protoze jsou to DWORDy a tudiz nemuzou byt "rozpracovane" pri switchnuti kontextu
-    // (vzdy je tam stara nebo nova hodnota, nic jineho nehrozi)
+    // SalamanderBusy and LastSalamanderIdleTime are accessed without critical sections, which is fine,
+    // because they are DWORDs and therefore cannot be "half-written" during a context switch
+    // (you always get either the old or the new value; nothing else can happen)
     if (lastIdleTime != NULL)
         *lastIdleTime = LastSalamanderIdleTime;
     if (!SalamanderBusy)
         return TRUE;
     DWORD oldLastIdleTime = LastSalamanderIdleTime;
-    if (GetTickCount() - oldLastIdleTime <= 100)                                   // pokud neni SalamanderBusy uz prilis dlouho (napr. otevreny modalni dialog)
-        Sleep(100);                                                                // pockame jestli se SalamanderBusy nezmeni
-    return !SalamanderBusy || (int)(LastSalamanderIdleTime - oldLastIdleTime) > 0; // neni "busy" nebo aspon osciluje
+    if (GetTickCount() - oldLastIdleTime <= 100)                                   // if SalamanderBusy has not been set for too long (for example, a modal dialog is open)
+        Sleep(100);                                                                // wait to see whether SalamanderBusy changes
+    return !SalamanderBusy || (int)(LastSalamanderIdleTime - oldLastIdleTime) > 0; // not "busy" or at least fluctuating
 }
 
 BOOL InitPreloadedStrings()
@@ -886,7 +886,7 @@ void InitLocales()
     else
     {
         DecimalSeparatorLen--;
-        DecimalSeparator[DecimalSeparatorLen] = 0; // posychrujeme nulu na konci
+        DecimalSeparator[DecimalSeparatorLen] = 0; // make sure the trailing zero is there
     }
 
     if ((ThousandsSeparatorLen = GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_STHOUSAND, ThousandsSeparator, 5)) == 0 ||
@@ -898,7 +898,7 @@ void InitLocales()
     else
     {
         ThousandsSeparatorLen--;
-        ThousandsSeparator[ThousandsSeparatorLen] = 0; // posychrujeme nulu na konci
+        ThousandsSeparator[ThousandsSeparatorLen] = 0; // make sure the trailing zero is there
     }
 }
 
@@ -911,11 +911,11 @@ HICON GetFileOrPathIconAux(const char* path, BOOL large, BOOL isDir)
         SHFILEINFO shi;
         if (!GetFileIcon(path, FALSE, &shi.hIcon, large ? ICONSIZE_32 : ICONSIZE_16, TRUE, isDir))
             shi.hIcon = NULL;
-        //Presli jsme na vlastni implementaci (mensi pametova narocnost, fungujici XOR ikonky)
+        // We switched to our own implementation (lower memory usage, working XOR icons)
         //shi.hIcon = NULL;
         //SHGetFileInfo(path, 0, &shi, sizeof(shi),
         //              SHGFI_ICON | SHGFI_SHELLICONSIZE | (large ? 0 : SHGFI_SMALLICON));
-        // pridame handle na 'shi.hIcon' do HANDLES
+        // add the handle for 'shi.hIcon' into HANDLES
         if (shi.hIcon != NULL)
             HANDLES_ADD(__htIcon, __hoLoadImage, shi.hIcon);
         return shi.hIcon;
@@ -933,12 +933,12 @@ HICON GetDriveIcon(const char* root, UINT type, BOOL accessible, BOOL large)
     int id;
     switch (type)
     {
-    case DRIVE_REMOVABLE: // ikonky 3.5, 5.25
+    case DRIVE_REMOVABLE: // icons for 3.5 and 5.25 drives
     {
         HICON i = GetFileOrPathIconAux(root, large, TRUE);
         if (i != NULL)
             return i;
-        id = 28; // 3 1/2 " mechanika
+        id = 28; // 3 1/2" drive
         break;
     }
 
@@ -967,9 +967,9 @@ HICON GetDriveIcon(const char* root, UINT type, BOOL accessible, BOOL large)
     int iconSize = IconSizes[large ? ICONSIZE_32 : ICONSIZE_16];
     return SalLoadIcon(ImageResDLL, id, iconSize);
 
-    // JRYFIXME - prozkoumat jestli neni IconLRFlags na zruseni? (W7+)
+    // JRYFIXME - check whether IconLRFlags can be removed? (W7+)
 
-    /* JRYFIXME - grepnout plosne zdrojaky na LoadImage / IMAGE_ICON
+    /* JRYFIXME - search the sources globally for LoadImage / IMAGE_ICON
   return (HICON)HANDLES(LoadImage(ImageResDLL, MAKEINTRESOURCE(id), IMAGE_ICON,
                                   large ? ICON32_CX : ICON16_CX,
                                   large ? ICON32_CX : ICON16_CX,
@@ -992,7 +992,7 @@ char* BuildName(char* path, char* name, char* dosName, BOOL* skip, BOOL* skipAll
 {
     if (skip != NULL)
         *skip = FALSE;
-    int l1 = (int)strlen(path); // je vzdy na stacku ...
+    int l1 = (int)strlen(path); // always on the stack ...
     int l2, len = l1;
     if (name != NULL)
     {
@@ -1027,9 +1027,9 @@ char* BuildName(char* path, char* name, char* dosName, BOOL* skip, BOOL* skipAll
                 params.Caption = LoadStr(IDS_ERRORTITLE);
                 params.Text = text;
                 char aliasBtnNames[200];
-                /* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-   nechame pro tlacitka msgboxu resit kolize hotkeys tim, ze simulujeme, ze jde o menu
-MENU_TEMPLATE_ITEM MsgBoxButtons[] = 
+                /* used by the export_mnu.py script that generates salmenu.mnu for the Translator
+   we let the message-box buttons resolve hotkey collisions by simulating a menu
+MENU_TEMPLATE_ITEM MsgBoxButtons[] =
 {
   {MNTT_PB, 0
   {MNTT_IT, IDS_MSGBOXBTN_SKIP
@@ -1086,10 +1086,10 @@ BOOL HasTheSameRootPath(const char* path1, const char* path2)
     if (LowerCase[path1[0]] == LowerCase[path2[0]] && path1[1] == path2[1])
     {
         if (path1[1] == ':')
-            return TRUE; // stejny root normal ("c:\path") cesty
+            return TRUE; // same root for a normal ("c:\path") path
         else
         {
-            if (path1[0] == '\\' && path1[1] == '\\') // oboji UNC
+            if (path1[0] == '\\' && path1[1] == '\\') // both UNC
             {
                 const char* s1 = path1 + 2;
                 const char* s2 = path2 + 2;
@@ -1101,9 +1101,9 @@ BOOL HasTheSameRootPath(const char* path1, const char* path2)
                         s2++;
                     }
                     else
-                        break; // ruzne masiny
+                        break; // different machines
                 }
-                if (*s1 != 0 && *s1++ == *s2++) // preskok '\\'
+                if (*s1 != 0 && *s1++ == *s2++) // skip '\\'
                 {
                     while (*s1 != 0 && *s1 != '\\')
                     {
@@ -1113,7 +1113,7 @@ BOOL HasTheSameRootPath(const char* path1, const char* path2)
                             s2++;
                         }
                         else
-                            break; // ruzne disky
+                            break; // different drives
                     }
                     return (*s1 == 0 && (*s2 == 0 || *s2 == '\\')) || *s1 == *s2 ||
                            (*s2 == 0 && (*s1 == 0 || *s1 == '\\'));
@@ -1142,44 +1142,44 @@ BOOL HasTheSameRootPathAndVolume(const char* p1, const char* p2)
         lstrcpyn(resPath, p1, MAX_PATH);
         ResolveSubsts(resPath);
         GetRootPath(root, resPath);
-        if (!IsUNCPath(root) && GetDriveType(root) == DRIVE_FIXED) // reparse pointy ma smysl hledat jen na fixed discich
+        if (!IsUNCPath(root) && GetDriveType(root) == DRIVE_FIXED) // searching for reparse points only makes sense on fixed disks
         {
-            // pokud nejde o root cestu, zkusime jeste traverzovat po reparse pointech
+            // if this is not a root path, try traversing via reparse points
             BOOL cutPathIsPossible = TRUE;
             char p1NetPath[MAX_PATH];
             p1NetPath[0] = 0;
             ResolveLocalPathWithReparsePoints(ourPath, p1, &cutPathIsPossible, NULL, NULL, NULL, NULL, p1NetPath);
 
-            if (p1NetPath[0] == 0) // ze sitove cesty volume ziskat nelze, nebudeme se ani snazit
+            if (p1NetPath[0] == 0) // cannot obtain the volume from a network path, do not even try
             {
                 while (!GetVolumeNameForVolumeMountPoint(ourPath, p1Volume, 100))
                 {
                     if (!cutPathIsPossible || !CutDirectory(ourPath))
                     {
-                        strcpy(p1Volume, "fail"); // ani root nevratil uspech, neocekavane (bohuzel se deje na substenych discich pod W2K - ladeno u Bachaalany - pri selhani na obou cestach vracime SHODU, protoze je pravdepodobnejsi)
+                        strcpy(p1Volume, "fail"); // even the root did not succeed, unexpected (unfortunately happens on SUBST disks under W2K - tuned with Bachaalany - if both paths fail we return MATCH because it is more likely)
                         break;
                     }
                     SalPathAddBackslash(ourPath, MAX_PATH);
                 }
             }
 
-            // pokud jsme pod W2K a nejde o root cestu, zkusime jeste traverzovat po reparse pointech
+            // if we are under W2K and not at the root, try traversing via reparse points
             cutPathIsPossible = TRUE;
             char p2NetPath[MAX_PATH];
             p2NetPath[0] = 0;
             ResolveLocalPathWithReparsePoints(ourPath, p2, &cutPathIsPossible, NULL, NULL, NULL, NULL, p2NetPath);
 
-            if ((p1NetPath[0] == 0) != (p2NetPath[0] == 0) || // pokud je jen jedna z cest sitova nebo
+            if ((p1NetPath[0] == 0) != (p2NetPath[0] == 0) || // if only one of the paths is network or
                 p1NetPath[0] != 0 && !HasTheSameRootPath(p1NetPath, p2NetPath))
-                ret = FALSE; // nemaji stejny root, ohlasime ruzne volumy (na sitovych cestach nelze overit volumy)
+                ret = FALSE; // the roots differ, report different volumes (cannot verify volumes on network paths)
 
-            if (p2NetPath[0] == 0 && ret) // ze sitove cesty volume ziskat nelze, nebudeme se ani snazit + pokud uz je rozhodnuto, tez se nebudeme snazit
+            if (p2NetPath[0] == 0 && ret) // cannot obtain the volume from a network path, so do not try; also skip once the outcome is already decided
             {
                 while (!GetVolumeNameForVolumeMountPoint(ourPath, p2Volume, 100))
                 {
                     if (!cutPathIsPossible || !CutDirectory(ourPath))
                     {
-                        strcpy(p2Volume, "fail"); // ani root nevratil uspech, neocekavane (bohuzel se deje na substenych discich pod W2K - ladeno u Bachaalany - pri selhani na obou cestach vracime SHODU, protoze je pravdepodobnejsi)
+                        strcpy(p2Volume, "fail"); // even the root did not succeed, unexpected (unfortunately happens on SUBST disks under W2K - tuned with Bachaalany - if both paths fail we return MATCH because it is more likely)
                         break;
                     }
                     SalPathAddBackslash(ourPath, MAX_PATH);
@@ -1211,30 +1211,30 @@ BOOL PathsAreOnTheSameVolume(const char* path1, const char* path2, BOOL* resIsOn
     BOOL trySimpleTest = TRUE;
     if (resIsOnlyEstimation != NULL)
         *resIsOnlyEstimation = TRUE;
-    if (!IsUNCPath(path1) && !IsUNCPath(path2)) // svazky na UNC cestach nema smysl resit
+    if (!IsUNCPath(path1) && !IsUNCPath(path2)) // no point checking volumes on UNC paths
     {
         char p1Volume[100] = "1";
         char p2Volume[100] = "2";
         UINT drvType1 = GetDriveType(root1);
         UINT drvType2 = GetDriveType(root2);
-        if (drvType1 != DRIVE_REMOTE && drvType2 != DRIVE_REMOTE) // krome site je sance zjistit "volume name"
+        if (drvType1 != DRIVE_REMOTE && drvType2 != DRIVE_REMOTE) // apart from the network we can try to obtain the "volume name"
         {
             BOOL cutPathIsPossible = TRUE;
-            path1NetPath[0] = 0;         // sitova cesta, na kterou vede aktualni (posledni) lokalni symlink v ceste
-            if (drvType1 == DRIVE_FIXED) // reparse pointy ma smysl hledat jen na fixed discich
+            path1NetPath[0] = 0;         // network path that the current (last) local symlink in the path points to
+            if (drvType1 == DRIVE_FIXED) // searching for reparse points only makes sense on fixed disks
             {
-                // pokud jsme pod W2K a nejde o root cestu, zkusime jeste traverzovat po reparse pointech
+                // if we are under W2K and not at the root, try traversing via reparse points
                 ResolveLocalPathWithReparsePoints(ourPath, path1, &cutPathIsPossible, NULL, NULL, NULL, NULL, path1NetPath);
             }
             else
                 lstrcpyn(ourPath, root1, MAX_PATH);
             int numOfGetVolNamesFailed = 0;
-            if (path1NetPath[0] == 0) // ze sitove cesty "volume name" ziskat nelze, nebudeme se ani snazit
+            if (path1NetPath[0] == 0) // cannot obtain the "volume name" from a network path, do not even try
             {
                 while (!GetVolumeNameForVolumeMountPoint(ourPath, p1Volume, 100))
                 {
                     if (!cutPathIsPossible || !CutDirectory(ourPath))
-                    { // ani root nevratil uspech, neocekavane (bohuzel se deje na substenych discich pod W2K - ladeno u Bachaalany - pri selhani na obou cestach se stejnymi rooty vracime SHODU, protoze je pravdepodobnejsi)
+                    { // even the root did not succeed, unexpected (unfortunately happens on SUBST disks under W2K - tuned with Bachaalany - if both paths fail with the same roots we return MATCH because it is more likely)
                         numOfGetVolNamesFailed++;
                         break;
                     }
@@ -1243,22 +1243,22 @@ BOOL PathsAreOnTheSameVolume(const char* path1, const char* path2, BOOL* resIsOn
             }
 
             cutPathIsPossible = TRUE;
-            path2NetPath[0] = 0;         // sitova cesta, na kterou vede aktualni (posledni) lokalni symlink v ceste
-            if (drvType2 == DRIVE_FIXED) // reparse pointy ma smysl hledat jen na fixed discich
+            path2NetPath[0] = 0;         // network path that the current (last) local symlink in the path points to
+            if (drvType2 == DRIVE_FIXED) // searching for reparse points only makes sense on fixed disks
             {
-                // pokud jsme pod W2K a nejde o root cestu, zkusime jeste traverzovat po reparse pointech
+                // if we are under W2K and not at the root, try traversing via reparse points
                 ResolveLocalPathWithReparsePoints(ourPath, path2, &cutPathIsPossible, NULL, NULL, NULL, NULL, path2NetPath);
             }
             else
                 lstrcpyn(ourPath, root2, MAX_PATH);
-            if (path2NetPath[0] == 0) // ze sitove cesty "volume name" ziskat nelze, nebudeme se ani snazit
+            if (path2NetPath[0] == 0) // cannot obtain the "volume name" from a network path, do not even try
             {
                 if (path1NetPath[0] == 0)
                 {
                     while (!GetVolumeNameForVolumeMountPoint(ourPath, p2Volume, 100))
                     {
                         if (!cutPathIsPossible || !CutDirectory(ourPath))
-                        { // ani root nevratil uspech, neocekavane (bohuzel se deje na substenych discich pod W2K - ladeno u Bachaalany - pri selhani na obou cestach se stejnymi rooty vracime SHODU, protoze je pravdepodobnejsi)
+                        { // even the root did not succeed, unexpected (unfortunately happens on SUBST disks under W2K - tuned with Bachaalany - if both paths fail with the same roots we return MATCH because it is more likely)
                             numOfGetVolNamesFailed++;
                             break;
                         }
@@ -1267,13 +1267,13 @@ BOOL PathsAreOnTheSameVolume(const char* path1, const char* path2, BOOL* resIsOn
                     if (numOfGetVolNamesFailed != 2)
                     {
                         if (numOfGetVolNamesFailed == 0 && resIsOnlyEstimation != NULL)
-                            *resIsOnlyEstimation = FALSE; // jediny pripad, kdy jsme si jisty vysledkem je, kdyz se podarilo ziskat "volume name" z obou cest (zaroven tak nemohly byt sitove)
+                            *resIsOnlyEstimation = FALSE; // the only time we are sure of the result is when the "volume name" was obtained from both paths (which also means they could not be network paths)
                         if (numOfGetVolNamesFailed == 1 || strcmp(p1Volume, p2Volume) != 0)
-                            ret = FALSE; // povedl se ziskat jen jeden "volume name", takze nejde o stejne svazky (a pokud ano, nejsme schopny to zjistit - mozna pokud slo o selhani kvuli SUBSTu, dalo by se to resit resolvnutim cilove cesty ze SUBSTu)
+                            ret = FALSE; // only one "volume name" was obtained, so they are not the same volumes (and if they are, we cannot detect it - maybe if the failure was due to SUBST, resolving the target path from SUBST might help)
                         trySimpleTest = FALSE;
                     }
                 }
-                else // sitova je jen jedna cesta, nejde o stejne svazky (a pokud ano, nejsme schopny to zjistit)
+                else // only one path is network, so the volumes differ (and if not, we cannot detect it)
                 {
                     ret = FALSE;
                     trySimpleTest = FALSE;
@@ -1281,12 +1281,12 @@ BOOL PathsAreOnTheSameVolume(const char* path1, const char* path2, BOOL* resIsOn
             }
             else
             {
-                if (path1NetPath[0] != 0) // srovname rooty sitovych cest
+                if (path1NetPath[0] != 0) // compare the roots of the network paths
                 {
                     GetRootPath(root1, path1NetPath);
                     GetRootPath(root2, path2NetPath);
                 }
-                else // sitova je jen jedna cesta, nejde o stejne svazky (a pokud ano, nejsme schopny to zjistit)
+                else // only one path is network, so the volumes differ (and if not, we cannot detect it)
                 {
                     ret = FALSE;
                     trySimpleTest = FALSE;
@@ -1295,7 +1295,7 @@ BOOL PathsAreOnTheSameVolume(const char* path1, const char* path2, BOOL* resIsOn
         }
     }
 
-    if (trySimpleTest) // zkusime jen jestli se shoduji root-cesty (sitove cesty + vse na NT)
+    if (trySimpleTest) // only check whether the root paths match (network paths + everything on NT)
     {
         ret = _stricmp(root1, root2) == 0;
 
@@ -1306,7 +1306,7 @@ BOOL PathsAreOnTheSameVolume(const char* path1, const char* path2, BOOL* resIsOn
             if (ResolveSubsts(path1NetPath) && ResolveSubsts(path2NetPath))
             {
                 if (IsTheSamePath(path1NetPath, path2NetPath))
-                    *resIsOnlyEstimation = FALSE; // stejne cesty = urcite i stejne svazky
+                    *resIsOnlyEstimation = FALSE; // identical paths = definitely the same volumes
             }
         }
     }
@@ -1359,17 +1359,17 @@ int CommonPrefixLength(const char* path1, const char* path2)
     if (*s1 == 0 && *s2 == '\\' || *s1 == '\\' && *s2 == 0 ||
         *s1 == 0 && *s2 == 0 && *(s1 - 1) != '\\')
     {
-        lastBackslash = s1; // tento terminator nebude v lastBackslash
+        lastBackslash = s1; // this terminator will not be in lastBackslash
         backslashCount++;
     }
 
     if (path1[1] == ':')
     {
-        // klasicka cesta
+        // regular path
         if (path1[2] != '\\')
             return 0;
 
-        // osetrim specialni pripad: u root cesty musime vratit delku i s posledni zpetnym lomitkem
+        // handle the special case: for a root path we must return the length including the final backslash
         if (lastBackslash - path1 < 3)
             return 3;
 
@@ -1377,10 +1377,10 @@ int CommonPrefixLength(const char* path1, const char* path2)
     }
     else
     {
-        // UNC cesta
+        // UNC path
         if (path1[0] != '\\' || path1[1] != '\\')
             return 0;
-        if (backslashCount < 4) // cesta musi mit tvar "\\masina\share"
+        if (backslashCount < 4) // path must be in the form "\\machine\share"
             return 0;
 
         return (int)(lastBackslash - path1);
@@ -1399,8 +1399,8 @@ BOOL SalPathIsPrefix(const char* prefix, const char* path)
     if (prefixLen < 3)
         return FALSE;
 
-    // CommonPrefixLength nam vratila delku bez posledniho zpetneho lomitka (pokud neslo o root path)
-    // pokud nas prefix ma koncove zpetne lomitko, musim ho zahodit
+    // CommonPrefixLength returned the length without the last backslash (unless it was a root path)
+    // if our prefix has a trailing backslash, drop it
     if (prefixLen > 3 && prefix[prefixLen - 1] == '\\')
         prefixLen--;
 
@@ -1418,8 +1418,8 @@ BOOL IsDirError(DWORD err)
            err == ERROR_BAD_PATHNAME ||
            err == ERROR_FILE_NOT_FOUND ||
            err == ERROR_PATH_NOT_FOUND ||
-           err == ERROR_INVALID_NAME ||   // je-li hacek v ceste na anglickych Windows, hlasi se tato chyba misto ERROR_PATH_NOT_FOUND
-           err == ERROR_INVALID_FUNCTION; // hlasilo jednomu chlapikovi na WinXP na sitovem disku Y: v okamziku, kdy Salam pristupoval na cestu, ktera jiz neexistovala (nedoslo tak ke zkraceni a chlapik byl dobre v riti ;-) Shift+F7 na Y:\ to vyresila)
+           err == ERROR_INVALID_NAME ||   // when a diacritic is in the path on English Windows this error is reported instead of ERROR_PATH_NOT_FOUND
+           err == ERROR_INVALID_FUNCTION; // reported to a guy on WinXP for network drive Y: when Salamander accessed a path that no longer existed (the path was not shortened and he was in deep trouble ;-) Shift+F7 on Y:\ fixed it)
 }
 
 // ****************************************************************************
@@ -1445,7 +1445,7 @@ BOOL CutDirectory(char* path, char** cutDir)
         if (cutDir != NULL)
         {
             if (*(path + l - 1) == '\\')
-                *(path + --l) = 0; // zruseni '\\' na konci
+                *(path + --l) = 0; // remove the trailing '\\'
             memmove(lastBackslash + 2, lastBackslash + 1, l - (lastBackslash - path));
             *cutDir = lastBackslash + 2; // "somedir" or "seconddir"
         }
@@ -1454,13 +1454,13 @@ BOOL CutDirectory(char* path, char** cutDir)
     else // "c:\firstdir\seconddir" or "c:\firstdir\seconddir\"
     {    // UNC: "\\server\share\path"
         if (path[0] == '\\' && path[1] == '\\' && nextBackslash <= path + 2)
-        { // "\\server\share" - neda se zkratit
+        { // "\\server\share" - cannot be shortened
             if (cutDir != NULL)
                 *cutDir = path + l;
             return FALSE;
         }
         *lastBackslash = 0;
-        if (cutDir != NULL) // odriznuti '\' na konci
+        if (cutDir != NULL) // trim the trailing '\'
         {
             if (*(path + l - 1) == '\\')
                 *(path + l - 1) = 0;
@@ -1473,7 +1473,7 @@ BOOL CutDirectory(char* path, char** cutDir)
 // ****************************************************************************
 
 int GetRootPath(char* root, const char* path)
-{                                           // POZOR: netypicke pouziti z GetShellFolder(): pro "\\\\" vraci "\\\\\\", pro "\\\\server" vraci "\\\\server\\"
+{                                           // WARNING: nonstandard use from GetShellFolder(): returns "\\\\\\" for "\\\\" and "\\\\server\\" for "\\\\server"
     if (path[0] == '\\' && path[1] == '\\') // UNC
     {
         const char* s = path + 2;
@@ -1485,7 +1485,7 @@ int GetRootPath(char* root, const char* path)
             s++;
         int len = (int)(s - path);
         if (len > MAX_PATH - 2)
-            len = MAX_PATH - 2; // aby se to veslo i s '\\' do MAX_PATH bufferu (ocekavana velikost), orez neva, 100% je to beztak chyba
+            len = MAX_PATH - 2; // so it fits into the MAX_PATH buffer together with '\\' (expected size); truncation does not matter, it is an error anyway
         memcpy(root, path, len);
         root[len] = '\\';
         root[len + 1] = 0;
@@ -1503,8 +1503,8 @@ int GetRootPath(char* root, const char* path)
 
 // ****************************************************************************
 
-// projede vsechny barvy z konfigurace a pokud maji nastavenu default hodnotu,
-// nastavi jim prislusne barevne hodnoty
+// iterate through all colors from the configuration and if they have the default value set,
+// assign the corresponding color values
 
 COLORREF GetHilightColor(COLORREF clr1, COLORREF clr2)
 {
@@ -1559,15 +1559,15 @@ COLORREF GetHilightColor(COLORREF clr1, COLORREF clr2)
     return res;
 }
 
-COLORREF GetFullRowHighlight(COLORREF bkHighlightColor) // vraci "heuristicky" highlight pro full row mode
+COLORREF GetFullRowHighlight(COLORREF bkHighlightColor) // returns a "heuristic" highlight for full row mode
 {
-    // trochu heuristiky: zsvetle pozadi budeme "trochu" ztmavovat a tmave pozadi "trochu" zesvetlovat
+    // a bit of heuristics: slightly darken light backgrounds and slightly lighten dark backgrounds
     WORD h, l, s;
     ColorRGBToHLS(bkHighlightColor, &h, &l, &s);
 
-    if (l < 121) // [TMAVA]  0-120 -> zesvetlime Luminance progresivne 0..120 -> +40..+20
+    if (l < 121) // [DARK]  0-120 -> progressively increase luminance 0..120 -> +40..+20
         l += 20 + 20 * (120 - l) / 120;
-    else // [SVETLA] 121-240 -> ztmavime Luminance o konstatnich 20
+    else // [LIGHT] 121-240 -> decrease luminance by a constant 20
         l -= 20;
 
     return ColorHLSToRGB(h, l, s);
@@ -1579,7 +1579,7 @@ void UpdateDefaultColors(SALCOLOR* colors, CHighlightMasks* highlightMasks, BOOL
     {
         int bitsPerPixel = GetCurrentBPP();
 
-        // barvy pera pro ramecek kolem polozky prebereme ze systemove barvy textu okna
+        // copy the pen colors for the frame around an item from the system window text color
         if (GetFValue(colors[FOCUS_ACTIVE_NORMAL]) & SCF_DEFAULT)
             SetRGBPart(&colors[FOCUS_ACTIVE_NORMAL], GetSysColor(COLOR_WINDOWTEXT));
         if (GetFValue(colors[FOCUS_ACTIVE_SELECTED]) & SCF_DEFAULT)
@@ -1589,23 +1589,23 @@ void UpdateDefaultColors(SALCOLOR* colors, CHighlightMasks* highlightMasks, BOOL
         if (GetFValue(colors[FOCUS_BK_INACTIVE_SELECTED]) & SCF_DEFAULT)
             SetRGBPart(&colors[FOCUS_BK_INACTIVE_SELECTED], GetSysColor(COLOR_WINDOW));
 
-        // texty polozek v panelu prebereme ze systemove barvy textu okna
+        // copy panel item text colors from the system window text color
         if (GetFValue(colors[ITEM_FG_NORMAL]) & SCF_DEFAULT)
             SetRGBPart(&colors[ITEM_FG_NORMAL], GetSysColor(COLOR_WINDOWTEXT));
         if (GetFValue(colors[ITEM_FG_FOCUSED]) & SCF_DEFAULT)
             SetRGBPart(&colors[ITEM_FG_FOCUSED], GetSysColor(COLOR_WINDOWTEXT));
-        if (GetFValue(colors[ITEM_FG_HIGHLIGHT]) & SCF_DEFAULT) // FULL ROW HIGHLIGHT vychazi z _NORMAL
+        if (GetFValue(colors[ITEM_FG_HIGHLIGHT]) & SCF_DEFAULT) // FULL ROW HIGHLIGHT is based on _NORMAL
             SetRGBPart(&colors[ITEM_FG_HIGHLIGHT], GetCOLORREF(colors[ITEM_FG_NORMAL]));
 
-        // pozadi polozek v panelu prebereme ze systemove barvy pozadi okna
+        // copy panel item backgrounds from the system window background color
         if (GetFValue(colors[ITEM_BK_NORMAL]) & SCF_DEFAULT)
             SetRGBPart(&colors[ITEM_BK_NORMAL], GetSysColor(COLOR_WINDOW));
         if (GetFValue(colors[ITEM_BK_SELECTED]) & SCF_DEFAULT)
             SetRGBPart(&colors[ITEM_BK_SELECTED], GetSysColor(COLOR_WINDOW));
-        if (GetFValue(colors[ITEM_BK_HIGHLIGHT]) & SCF_DEFAULT) // HIGHLIGHT kopirujeme z NORMAL (aby fungovaly i custom/norton mody)
+        if (GetFValue(colors[ITEM_BK_HIGHLIGHT]) & SCF_DEFAULT) // copy HIGHLIGHT from NORMAL (so custom/Norton modes work)
             SetRGBPart(&colors[ITEM_BK_HIGHLIGHT], GetFullRowHighlight(GetCOLORREF(colors[ITEM_BK_NORMAL])));
 
-        // barvy progress bary
+        // progress bar colors
         if (GetFValue(colors[PROGRESS_FG_NORMAL]) & SCF_DEFAULT)
             SetRGBPart(&colors[PROGRESS_FG_NORMAL], GetSysColor(COLOR_WINDOWTEXT));
         if (GetFValue(colors[PROGRESS_FG_SELECTED]) & SCF_DEFAULT)
@@ -1615,35 +1615,35 @@ void UpdateDefaultColors(SALCOLOR* colors, CHighlightMasks* highlightMasks, BOOL
         if (GetFValue(colors[PROGRESS_BK_SELECTED]) & SCF_DEFAULT)
             SetRGBPart(&colors[PROGRESS_BK_SELECTED], GetSysColor(COLOR_HIGHLIGHT));
 
-        // barva selected odstinu ikonky
+        // color of the selected icon tint
         if (GetFValue(colors[ICON_BLEND_SELECTED]) & SCF_DEFAULT)
         {
-            // normalne kopirujeme do selected barvu z focused+selected
+            // normally copy the color from focused+selected into selected
             SetRGBPart(&colors[ICON_BLEND_SELECTED], GetCOLORREF(colors[ICON_BLEND_FOCSEL]));
-            // pokud jde o cervenou (salamandrovskej profil a muzeme si to diky barevne hloubce
-            // dovolit) pouzijeme pro selected svetlejsi odstin
+            // if it is red (the Salamander profile and the color depth allows it)
+            // use a lighter shade for selected
             if (bitsPerPixel > 8 && GetCOLORREF(colors[ICON_BLEND_FOCSEL]) == RGB(255, 0, 0))
                 SetRGBPart(&colors[ICON_BLEND_SELECTED], RGB(255, 128, 128));
         }
 
 #define COLOR_HOTLIGHT 26 // winuser.h
 
-        // titulky panelu (aktivni/neaktivni)
+        // panel captions (active/inactive)
 
-        // aktivni titulek panelu: POZADI
+        // active panel caption: BACKGROUND
         if (GetFValue(colors[ACTIVE_CAPTION_BK]) & SCF_DEFAULT)
             SetRGBPart(&colors[ACTIVE_CAPTION_BK], GetSysColor(COLOR_ACTIVECAPTION));
-        // aktivni titulek panelu: TEXT
+        // active panel caption: TEXT
         if (GetFValue(colors[ACTIVE_CAPTION_FG]) & SCF_DEFAULT)
             SetRGBPart(&colors[ACTIVE_CAPTION_FG], GetSysColor(COLOR_CAPTIONTEXT));
-        // neaktivni titulek panelu: POZADI
+        // inactive panel caption: BACKGROUND
         if (GetFValue(colors[INACTIVE_CAPTION_BK]) & SCF_DEFAULT)
             SetRGBPart(&colors[INACTIVE_CAPTION_BK], GetSysColor(COLOR_INACTIVECAPTION));
-        // neaktivni titulek panelu: TEXT
+        // inactive panel caption: TEXT
         if (GetFValue(colors[INACTIVE_CAPTION_FG]) & SCF_DEFAULT)
         {
-            // preferujeme stejnou barvu textu jako pro aktivni titulek, ale nekdy je tato barva priliz
-            // blizka barve pozadi, potom zkusime barvu pro textu pro neaktivni titulek
+            // prefer the same text color as for the active caption, but if it is
+            // too close to the background color, use the inactive caption text color instead
             COLORREF clrBk = GetCOLORREF(colors[INACTIVE_CAPTION_BK]);
             COLORREF clrFgAc = GetSysColor(COLOR_CAPTIONTEXT);
             COLORREF clrFgIn = GetSysColor(COLOR_INACTIVECAPTIONTEXT);
@@ -1653,12 +1653,12 @@ void UpdateDefaultColors(SALCOLOR* colors, CHighlightMasks* highlightMasks, BOOL
             SetRGBPart(&colors[INACTIVE_CAPTION_FG], (abs(grayFgAc - grayBk) >= abs(grayFgIn - grayBk)) ? clrFgAc : clrFgIn);
         }
 
-        // barvy hot polozek
+        // colors of hot items
         COLORREF hotColor = GetSysColor(COLOR_HOTLIGHT);
         if (GetFValue(colors[HOT_PANEL]) & SCF_DEFAULT)
             SetRGBPart(&colors[HOT_PANEL], hotColor);
 
-        // hilight pro active panel caption
+        // highlight for the active panel caption
         if (GetFValue(colors[HOT_ACTIVE]) & SCF_DEFAULT)
         {
             COLORREF clr = GetCOLORREF(colors[ACTIVE_CAPTION_FG]);
@@ -1666,7 +1666,7 @@ void UpdateDefaultColors(SALCOLOR* colors, CHighlightMasks* highlightMasks, BOOL
                 clr = GetHilightColor(clr, GetCOLORREF(colors[ACTIVE_CAPTION_BK]));
             SetRGBPart(&colors[HOT_ACTIVE], clr);
         }
-        // hilight pro inactive panel caption
+        // highlight for the inactive panel caption
         if (GetFValue(colors[HOT_INACTIVE]) & SCF_DEFAULT)
         {
             COLORREF clr = GetCOLORREF(colors[INACTIVE_CAPTION_FG]);
@@ -1678,7 +1678,7 @@ void UpdateDefaultColors(SALCOLOR* colors, CHighlightMasks* highlightMasks, BOOL
 
     if (processMasks)
     {
-        // barvy zavisle na jmenu+atributech souboru
+        // colors dependent on the file name and attributes
         int i;
         for (i = 0; i < highlightMasks->Count; i++)
         {
@@ -1701,7 +1701,7 @@ void UpdateDefaultColors(SALCOLOR* colors, CHighlightMasks* highlightMasks, BOOL
                 SetRGBPart(&item->FocSelBk, GetCOLORREF(colors[ITEM_BK_FOCSEL]));
             if (GetFValue(item->HighlightFg) & SCF_DEFAULT)
                 SetRGBPart(&item->HighlightFg, GetCOLORREF(item->NormalFg));
-            if (GetFValue(item->HighlightBk) & SCF_DEFAULT) // FULL ROW HIGHLIGHT vychazi z _NORMAL
+            if (GetFValue(item->HighlightBk) & SCF_DEFAULT) // FULL ROW HIGHLIGHT is based on _NORMAL
                 SetRGBPart(&item->HighlightBk, GetFullRowHighlight(GetCOLORREF(item->NormalBk)));
         }
     }
@@ -1709,20 +1709,19 @@ void UpdateDefaultColors(SALCOLOR* colors, CHighlightMasks* highlightMasks, BOOL
 
 //****************************************************************************
 //
-// Na zaklade barevne hloubky displeje urci, jestli pouzivat 256 barevne
-// nebo 16 barevne bitmapy.
+// Decide whether to use 256-color or 16-color bitmaps based on display color depth.
 //
 
 BOOL Use256ColorsBitmap()
 {
     int bitsPerPixel = GetCurrentBPP();
-    return (bitsPerPixel > 8); // vice nez 256 barev
+    return (bitsPerPixel > 8); // more than 256 colors
 }
 
 DWORD GetImageListColorFlags()
 {
-    // pokud ma image list 16bitu barevnou hloubku, zlobi alfa kanal novych ikonek pod WinXP 32-bit barevny display (32-bitova hloubka slape)
-    // pokud ma image list 32bitu barevnou hloubku, zlobi blend pri kresleni selectene polozky pod Win2K 32-bit barevny display (16-bitova hloubka slape)
+    // if the image list has 16-bit color depth, the alpha channel of new icons misbehaves on a WinXP 32-bit color display (32-bit depth works)
+    // if the image list has 32-bit color depth, blending misbehaves when drawing a selected item on a Win2K 32-bit color display (16-bit depth works)
     return ILC_COLOR32;
 }
 
@@ -1759,9 +1758,9 @@ int LoadColorTable(int id, RGBQUAD* rgb, int rgbCount)
 
 BOOL InitializeConstGraphics()
 {
-    // zajistime si hladky graficky vystup
-    // 20 volani GDI API by melo bohate stacit
-    // je to implicitni hodnota z NT 4.0 WS
+    // ensure smooth graphics output
+    // 20 GDI API calls should be more than sufficient
+    // this is the default value from NT 4.0 WS
     if (GdiGetBatchLimit() < 20)
     {
         TRACE_I("Increasing GdiBatchLimit");
@@ -1777,7 +1776,7 @@ BOOL InitializeConstGraphics()
     if (SystemParametersInfo(SPI_GETDRAGFULLWINDOWS, 0, &DragFullWindows, FALSE) == 0)
         DragFullWindows = TRUE;
 
-    // inicializace LogFont struktury
+    // initialize the LogFont structure
     NONCLIENTMETRICS ncm;
     ncm.cbSize = sizeof(ncm);
     SystemParametersInfo(SPI_GETNONCLIENTMETRICS, ncm.cbSize, &ncm, 0);
@@ -1799,7 +1798,7 @@ BOOL InitializeConstGraphics()
   strcpy(LogFont.lfFaceName, "MS Shell Dlg 2");
   */
 
-    // tyto brushe jsou alokovane systemem a automaticky se meni pri zmene barev
+    // these paint resources come from the system and follow color changes on their own
     HDialogBrush = GetSysColorBrush(COLOR_BTNFACE);
     HButtonTextBrush = GetSysColorBrush(COLOR_BTNTEXT);
     HMenuSelectedBkBrush = GetSysColorBrush(COLOR_HIGHLIGHT);
@@ -1813,18 +1812,18 @@ BOOL InitializeConstGraphics()
         TRACE_E("Unable to create brush.");
         return FALSE;
     }
-    ItemBitmap.CreateBmp(NULL, 1, 1); // zajisteni existence bitmapy
+    ItemBitmap.CreateBmp(NULL, 1, 1); // ensure the bitmap exists
 
-    // bitmapu nacitame pouze jednou (neoprasujeme ji pri zmene rozliseni)
-    // a pokud by user prepnul barvy z 256 vejs, pri LoadBitmap (tedy bitmape
-    // kompatibilni s display DC) by bitmapa zustala v degradovanych barvach;
-    // proto ji nacteme jako DIB
+    // load the bitmap only once (do not refresh it when the resolution changes)
+    // and if the user switched colors above 256, loading with LoadBitmap (bitmap
+    // compatible with the display DC) would leave the bitmap in downgraded colors;
+    // therefore load it as a DIB
     // HWorkerBitmap = HANDLES(LoadBitmap(HInstance, MAKEINTRESOURCE(IDB_WORKER)));
     //HWorkerBitmap = (HBITMAP)HANDLES(LoadImage(HInstance, MAKEINTRESOURCE(IDB_WORKER), IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION));
     //if (HWorkerBitmap == NULL)
     //  return FALSE;
 
-    // pri zmene fontu se volaji explicitne CreatePanelFont a CreateEnvFont, prvni inicializaci provedeme zde
+    // when the font changes, CreatePanelFont and CreateEnvFont are called explicitly; perform the first initialization here
     CreatePanelFont();
     CreateEnvFonts();
 
@@ -1907,8 +1906,8 @@ BOOL AuxAllocateImageLists()
     return TRUE;
 }
 
-// pomoci TweakUI si mohou uzivatele menit ikonku shortcuty (default, custom, zadna)
-// pokusime se ji ctit
+// Users can change the shortcut overlay icon with TweakUI (default, custom, none)
+// we try to honor that choice
 BOOL GetShortcutOverlay()
 {
     int i;
@@ -1924,8 +1923,8 @@ BOOL GetShortcutOverlay()
     /*  
   //#include <CommonControls.h>
 
-  // cteni ikon overlayu ze systemoveho image-listu, zbytecne pomale, nacteme je primo z imageres.dll
-  // tenhle kod tu nechavam jen pro pripad, ze bysme zase potrebovali zjistit kde ty ikony jsou
+  // reading overlay icons from the system image list is unnecessarily slow; we load them directly from imageres.dll
+  // I am leaving this code here only in case we need to rediscover where the icons are located
   typedef DECLSPEC_IMPORT HRESULT (WINAPI *F__SHGetImageList)(int iImageList, REFIID riid, void **ppvObj);
 
   F__SHGetImageList MySHGetImageList = (F__SHGetImageList)GetProcAddress(Shell32DLL, "SHGetImageList"); // Min: XP
@@ -1984,7 +1983,7 @@ BOOL GetShortcutOverlay()
         SalRegQueryValueEx(hKey, "29", NULL, NULL, (LPBYTE)buff, &buffLen);
         if (buff[0] != 0)
         {
-            char* num = strrchr(buff, ','); // cislo ikony je za posledni carkou
+            char* num = strrchr(buff, ','); // the icon number follows the last comma
             if (num != NULL)
             {
                 int index = atoi(num + 1);
@@ -2105,7 +2104,7 @@ int GetIconSizeForSystemDPI(CIconSizeEnum iconSize)
 
     int scale = GetScaleForSystemDPI();
 
-    int baseIconSize[ICONSIZE_COUNT] = {16, 32, 48}; // musi odpovidat CIconSizeEnum
+    int baseIconSize[ICONSIZE_COUNT] = {16, 32, 48}; // must match CIconSizeEnum
 
     return (baseIconSize[iconSize] * scale) / 100;
 }
@@ -2128,14 +2127,14 @@ void GetSystemDPI(HDC hDC)
 
 BOOL InitializeGraphics(BOOL colorsOnly)
 {
-    // 48x48 az od XP
-    // ve skutecnosti jsou velke ikonky podporeny uz davno, lze je nahodit
-    // Desktop/Properties/???/Large Icons; pozor, nebude pak existovat system image list
-    // pro ikonky 32x32; navic bychom meli ze systemu vytahnout realne velikosti ikonek
-    // zatim na to kasleme a 48x48 povolime az od XP, kde jsou bezne dostupne
+    // 48x48 icons only from XP onward
+    // in reality large icons have been supported for a long time and can be enabled via
+    // Desktop/Properties/???/Large Icons; note that the system image list will then lack
+    // 32x32 icons, and we would need to query the system for the actual icon sizes
+    // for now we leave it alone and allow 48x48 only from XP where they are readily available
 
     //
-    // Vytahneme z Registry pozadovanou barevnou hloubku ikonek
+    // Retrieve the requested icon color depth from the Registry
     //
     int iconColorsCount = 0;
     HDC hDesktopDC = GetDC(NULL);
@@ -2150,7 +2149,7 @@ BOOL InitializeGraphics(BOOL colorsOnly)
     HKEY hKey;
     if (OpenKeyAux(NULL, HKEY_CURRENT_USER, "Control Panel\\Desktop\\WindowMetrics", hKey))
     {
-        // dalsi zajimave hodnoty: "Shell Icon Size", "Shell Small Icon Size"
+        // other interesting values: "Shell Icon Size", "Shell Small Icon Size"
         char buff[100];
         if (GetValueAux(NULL, hKey, "Shell Icon Bpp", REG_SZ, buff, 100))
         {
@@ -2160,8 +2159,8 @@ BOOL InitializeGraphics(BOOL colorsOnly)
         {
             if (WindowsVistaAndLater)
             {
-                // ve viste tento klic proste neni a zatim netusim, cim je nahrazen,
-                // takze se budeme tvarit, ze ikonky jedou v plnych barvach (jinak jsme zobrazovali 16 barevne hnusy)
+                // this key simply does not exist in Vista and I do not know yet what replaces it,
+                // so we will assume the icons use full colors (otherwise we showed ugly 16-color results)
                 iconColorsCount = 32;
             }
         }
@@ -2193,7 +2192,7 @@ BOOL InitializeGraphics(BOOL colorsOnly)
         }
 
         Shell32DLL = HANDLES(LoadLibraryEx("shell32.dll", NULL, LOAD_LIBRARY_AS_DATAFILE));
-        if (Shell32DLL == NULL) // to se snad vubec nemuze stat (zaklad win 4.0)
+        if (Shell32DLL == NULL) // this really should never happen (a core part of Windows 4.0)
         {
             TRACE_E("Unable to load library shell32.dll.");
             return FALSE;
@@ -2233,8 +2232,8 @@ BOOL InitializeGraphics(BOOL colorsOnly)
             return FALSE;
         }
 
-        // prekladac hlasil chybu: error C2712: Cannot use __try in functions that require object unwinding
-        // obchazim to vlozenim alokace do funkce
+        // the compiler reported error C2712: Cannot use __try in functions that require object unwinding
+        // work around this by moving the allocation into a helper function
         //    SymbolsIconList = new CIconList();
         //    LargeSymbolsIconList = new CIconList();
         if (!AuxAllocateImageLists())
@@ -2268,8 +2267,8 @@ BOOL InitializeGraphics(BOOL colorsOnly)
             TRACE_E("Unable to create image list.");
             return FALSE;
         }
-        ImageList_SetImageCount(HFindSymbolsImageList, 2); // inicializace
-                                                           //    ImageList_SetBkColor(HFindSymbolsImageList, GetSysColor(COLOR_WINDOW)); // aby pod XP chodily pruhledne ikonky
+        ImageList_SetImageCount(HFindSymbolsImageList, 2); // initialization
+                                                           //    ImageList_SetBkColor(HFindSymbolsImageList, GetSysColor(COLOR_WINDOW)); // so that transparent icons render under XP
 
         int iconSize = IconSizes[ICONSIZE_16];
         HBITMAP hTmpMaskBitmap;
@@ -2318,7 +2317,7 @@ BOOL InitializeGraphics(BOOL colorsOnly)
             return FALSE;
         }
 
-        // vytahnu z shell 32 ikony:
+        // pull the icons from shell32:
         int indexes[] = {symbolsExecutable, symbolsDirectory, symbolsNonAssociated, symbolsAssociated, -1};
         int resID[] = {3, 4, 1, 2, -1};
         int vistaResID[] = {15, 4, 2, 90, -1};
@@ -2351,7 +2350,7 @@ BOOL InitializeGraphics(BOOL colorsOnly)
         int sizeIndex;
         for (sizeIndex = ICONSIZE_16; sizeIndex < ICONSIZE_COUNT; sizeIndex++)
         {
-            // ikonka adresare
+            // directory icon
             hIcon = NULL;
             __try
             {
@@ -2363,20 +2362,20 @@ BOOL InitializeGraphics(BOOL colorsOnly)
                 FGIExceptionHasOccured++;
                 hIcon = NULL;
             }
-            if (hIcon != NULL) // pokud ikonku neziskame, je tam porad jeste 4-rka z shell32.dll
+            if (hIcon != NULL) // if the icon cannot be retrieved, the 4-icon from shell32.dll remains in place
             {
                 SimpleIconLists[sizeIndex]->ReplaceIcon(symbolsDirectory, hIcon);
                 NOHANDLES(DestroyIcon(hIcon));
             }
 
-            // ikonka ".."
+            // ".." icon
             hIcon = (HICON)HANDLES(LoadImage(HInstance, MAKEINTRESOURCE(IDI_UPPERDIR),
                                              IMAGE_ICON, IconSizes[sizeIndex], IconSizes[sizeIndex],
                                              IconLRFlags));
             SimpleIconLists[sizeIndex]->ReplaceIcon(symbolsUpDir, hIcon);
             HANDLES(DestroyIcon(hIcon));
 
-            // ikonka archiv
+            // archive icon
             hIcon = LoadArchiveIcon(IconSizes[sizeIndex], IconSizes[sizeIndex], IconLRFlags);
             SimpleIconLists[sizeIndex]->ReplaceIcon(symbolsArchive, hIcon);
             HANDLES(DestroyIcon(hIcon));
@@ -2483,17 +2482,17 @@ BOOL InitializeGraphics(BOOL colorsOnly)
         return FALSE;
     }
 
-    clrMap[0].from = RGB(128, 128, 128); // seda -> COLOR_BTNSHADOW
+    clrMap[0].from = RGB(128, 128, 128); // gray -> COLOR_BTNSHADOW
     clrMap[0].to = GetSysColor(COLOR_BTNSHADOW);
-    clrMap[1].from = RGB(0, 0, 0); // cerna -> COLOR_BTNTEXT
+    clrMap[1].from = RGB(0, 0, 0); // black -> COLOR_BTNTEXT
     clrMap[1].to = GetSysColor(COLOR_BTNTEXT);
-    clrMap[2].from = RGB(255, 255, 255); // bila -> pruhledna
+    clrMap[2].from = RGB(255, 255, 255); // white -> transparent
     clrMap[2].to = RGB(255, 0, 255);
     HBITMAP hBottomTB = HANDLES(CreateMappedBitmap(HInstance, IDB_BOTTOMTOOLBAR, 0, clrMap, 3));
     BOOL remapWhite = FALSE;
     if (GetCurrentBPP() > 8)
     {
-        clrMap[2].from = RGB(255, 255, 255); // bila -> svetle sedivou (at to tak nerve)
+        clrMap[2].from = RGB(255, 255, 255); // white -> light gray (so it is not as glaring)
         clrMap[2].to = RGB(235, 235, 235);
         remapWhite = TRUE;
     }
@@ -2799,12 +2798,12 @@ BOOL PointToLocalDecimalSeparator(char* buffer, int bufferSize)
 
 // ****************************************************************************
 //
-// GetCmdLine - ziskani parametru z prikazove radky
+// GetCmdLine - retrieve parameters from the command line
 //
-// buf + size - buffer pro parametry
-// argv - pole ukazatelu, ktere se naplni parametry
-// argCount - na vstupu je to pocet prvku v argv, na vystupu obsahuje pocet parametru
-// cmdLine - parametry prikazove radky (bez jmena .exe souboru - z WinMain)
+// buf + size - buffer for the parameters
+// argv - array of pointers to be filled with individual parameters
+// argCount - on input the number of elements in argv, on output the number of parameters
+// cmdLine - the command-line parameters (without the .exe name - from WinMain)
 
 BOOL GetCmdLine(char* buf, int size, char* argv[], int& argCount, char* cmdLine)
 {
@@ -2817,7 +2816,7 @@ BOOL GetCmdLine(char* buf, int size, char* argv[], int& argCount, char* cmdLine)
     char term;
     while (*s != 0)
     {
-        if (*s == '"') // pocatecni '"'
+        if (*s == '"') // opening '"'
         {
             if (*++s == 0)
                 break;
@@ -2829,13 +2828,13 @@ BOOL GetCmdLine(char* buf, int size, char* argv[], int& argCount, char* cmdLine)
         if (argCount < space && c < end)
             argv[argCount++] = c;
         else
-            return c < end; // chyba jen pokud je maly buffer
+            return c < end; // only an error when the buffer is too small
 
         while (1)
         {
             if (*s == term || *s == 0)
             {
-                if (*s == 0 || term != '"' || *++s != '"') // neni-li to nahrada "" -> "
+                if (*s == 0 || term != '"' || *++s != '"') // unless this is the "" -> " escape
                 {
                     if (*s != 0)
                         s++;
@@ -2889,7 +2888,7 @@ HRESULT GetComCtlVersion(LPDWORD pdwMajor, LPDWORD pdwMinor)
      don't implement this function. That makes the lack of implementation of the
      function a version marker in itself.
     */
-        pDllGetVersion = (DLLGETVERSIONPROC)GetProcAddress(hComCtl, TEXT("DllGetVersion")); // nema header
+        pDllGetVersion = (DLLGETVERSIONPROC)GetProcAddress(hComCtl, TEXT("DllGetVersion")); // no header declared
         if (pDllGetVersion)
         {
             DLLVERSIONINFO dvi;
@@ -2963,8 +2962,8 @@ BOOL PackErrorHandler(HWND parent, const WORD err, ...)
 void ColorsChanged(BOOL refresh, BOOL colorsOnly, BOOL reloadUMIcons)
 {
     CALL_STACK_MESSAGE2("ColorsChanged(%d)", refresh);
-    // POZOR! fonts musi byt FALSE, aby nedoslo k zmene handlu fontu, o ktere
-    // se museji dozvedet toolbary, ktere jej pouzivaji
+    // IMPORTANT! fonts must stay FALSE to avoid changing the font handle,
+    // which the toolbars that use it must be notified about
     ReleaseGraphics(colorsOnly);
     InitializeGraphics(colorsOnly);
     ItemBitmap.ReCreateForScreenDC();
@@ -2982,10 +2981,10 @@ void ColorsChanged(BOOL refresh, BOOL colorsOnly, BOOL reloadUMIcons)
         MainWindow->OnColorsChanged(reloadUMIcons);
     }
 
-    // dame vedet findum o zmene barev
+    // let the Find dialogs know about the color change
     FindDialogQueue.BroadcastMessage(WM_USER_COLORCHANGEFIND, 0, 0);
 
-    // rozesleme tuto novinku i mezi plug-iny
+    // propagate this update to the plug-ins as well
     Plugins.Event(PLUGINEVENT_COLORSCHANGED, 0);
 
     if (MainWindow != NULL && MainWindow->HTopRebar != NULL)
@@ -2995,7 +2994,7 @@ void ColorsChanged(BOOL refresh, BOOL colorsOnly, BOOL reloadUMIcons)
     {
         InvalidateRect(MainWindow->HWindow, NULL, TRUE);
     }
-    // Internal Viewer a Find:  obnova vsech oken
+    // Internal Viewer and Find: refresh all windows
     BroadcastConfigChanged();
 }
 
@@ -3097,7 +3096,7 @@ CMessagesKeeper MessagesKeeper;
 
 typedef VOID(WINAPI* FDisableProcessWindowsGhosting)(VOID);
 
-void TurnOFFWindowGhosting() // kdyz se "ghosting" nevypne, schovavaji se safe-wait-okenka po peti sekundach "not responding" stavu aplikace (kdyz aplikace nezpracovava zpravy)
+void TurnOFFWindowGhosting() // if "ghosting" is not disabled, the safe-wait windows hide after five seconds of a "not responding" state (when the app is not processing messages)
 {
     if (User32DLL != NULL)
     {
@@ -3143,7 +3142,7 @@ void CleanUID(char* uid)
 
 //#ifdef MSVC_RUNTIME_CHECKS
 char RTCErrorDescription[RTC_ERROR_DESCRIPTION_SIZE] = {0};
-// custom reporting funkce opsana z MSDN - http://msdn.microsoft.com/en-us/library/cb00sk7k(v=VS.90).aspx
+// custom reporting function taken from MSDN - http://msdn.microsoft.com/en-us/library/cb00sk7k(v=VS.90).aspx
 #pragma runtime_checks("", off)
 int MyRTCErrorFunc(int errType, const wchar_t* file, int line,
                    const wchar_t* module, const wchar_t* format, ...)
@@ -3178,11 +3177,11 @@ int MyRTCErrorFunc(int errType, const wchar_t* file, int line,
     bufA[RTC_ERROR_DESCRIPTION_SIZE - 1] = 0;
     lstrcpyn(RTCErrorDescription, bufA, RTC_ERROR_DESCRIPTION_SIZE);
 
-    // radeji to tady zalomime s exception, bude snad jasnejsi callstack - pokud by nebyl, muzeme tady tu exception odstranit
-    // viz popis chovani _CrtDbgReportW - http://msdn.microsoft.com/en-us/library/8hyw4sy7(v=VS.90).aspx
-    RaiseException(OPENSAL_EXCEPTION_RTC, 0, 0, NULL); // nase vlastni "rtc" exception
+    // throw an exception here to get a clearer call stack; if it is not helpful we can remove it
+    // see the description of _CrtDbgReportW - http://msdn.microsoft.com/en-us/library/8hyw4sy7(v=VS.90).aspx
+    RaiseException(OPENSAL_EXCEPTION_RTC, 0, 0, NULL); // our own "rtc" exception
 
-    // sem uz se nedostaneme, proces byl ukoncen; pokracuji jen z formalnich duvodu, kdybychom neco menili
+    // we never reach this point, the process has been terminated; continue only formally in case we change something
 
     // Now, restore the RTC errortypes.
     for (int i = 0; i < numErrors; i++)
@@ -3199,7 +3198,7 @@ int MyRTCErrorFunc(int errType, const wchar_t* file, int line,
 
 #ifdef _DEBUG
 
-DWORD LastCrtCheckMemoryTime; // kdy jsme posledne kontrolovali pamet v IDLE
+DWORD LastCrtCheckMemoryTime; // when we last checked memory during IDLE
 
 #endif //_DEBUG
 
@@ -3226,9 +3225,9 @@ BOOL FindPluginsWithoutImportedCfg(BOOL* doNotDeleteImportedCfg)
         sprintf(msg, LoadStr(IDS_NOTALLPLUGINSCFGIMPORTED), names, skippedNames);
         params.Text = msg;
         char aliasBtnNames[200];
-        /* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-   nechame pro tlacitka msgboxu resit kolize hotkeys tim, ze simulujeme, ze jde o menu
-MENU_TEMPLATE_ITEM MsgBoxButtons[] = 
+        /* used by the export_mnu.py script that generates salmenu.mnu for the Translator
+   we let the message-box buttons resolve hotkey collisions by simulating a menu
+MENU_TEMPLATE_ITEM MsgBoxButtons[] =
 {
   {MNTT_PB, 0
   {MNTT_IT, IDS_STARTWITHOUTMISSINGPLUGINS
@@ -3255,7 +3254,7 @@ void StartNotepad(const char* file)
     if (lstrlen(file) >= MAX_PATH)
         return;
 
-    GetSystemDirectory(buf, MAX_PATH); // dame mu systemovy adresar, at neblokuje mazani soucasneho pracovniho adresare
+    GetSystemDirectory(buf, MAX_PATH); // point it to the system directory so it does not block deleting the current working directory
     wsprintf(buf2, "notepad.exe \"%s\"", file);
     si.cb = sizeof(STARTUPINFO);
     if (HANDLES(CreateProcess(NULL, buf2, NULL, NULL, TRUE, CREATE_DEFAULT_ERROR_MODE | NORMAL_PRIORITY_CLASS,
@@ -3268,20 +3267,20 @@ void StartNotepad(const char* file)
 
 BOOL RunningInCompatibilityMode()
 {
-    // Pokud bezime pod XP nebo nasledujicim OS, hrozi ze snazivy uzivatel zapnul
-    // Compatibility Mode. Pokud tomu tak je, zobrazime varovani.
-    // POZOR: Application Verifier nastavuje verzi Windows na novejsi nez skutecne je,
-    // dela to pri testovani aplikace pri ziskavani "Windows 7 Software Logo".
+    // If we run on XP or a newer OS, an enthusiastic user might have enabled Compatibility Mode.
+    // If that happens we display a warning.
+    // NOTE: Application Verifier reports the Windows version as newer than it really is
+    // when testing the application for the "Windows 7 Software Logo".
     WORD kernel32major, kernel32minor;
     if (GetModuleVersion(GetModuleHandle("kernel32.dll"), &kernel32major, &kernel32minor))
     {
         TRACE_I("kernel32.dll: " << kernel32major << ":" << kernel32minor);
-        // musime zavolat GetVersionEx, protoze vraci hodnoty podle nastaveneho Compatibility Mode
-        // (SalIsWindowsVersionOrGreater nastaveny Compatibility Mode ignoruje)
+        // we must call GetVersionEx because it returns values according to the selected Compatibility Mode
+        // (SalIsWindowsVersionOrGreater ignores the Compatibility Mode setting)
         OSVERSIONINFO os;
         os.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
 
-        // jen se vyhybame deprecated warningu, GetVersionEx snad bude vzdy a vsude
+        // merely avoid the deprecated warning; GetVersionEx should remain available everywhere
         typedef BOOL(WINAPI * FDynGetVersionExA)(LPOSVERSIONINFOA lpVersionInformation);
         FDynGetVersionExA DynGetVersionExA = (FDynGetVersionExA)GetProcAddress(GetModuleHandle("kernel32.dll"),
                                                                                "GetVersionExA");
@@ -3294,16 +3293,16 @@ BOOL RunningInCompatibilityMode()
         DynGetVersionExA(&os);
         TRACE_I("GetVersionEx(): " << os.dwMajorVersion << ":" << os.dwMinorVersion);
 
-        // aktualni verze Salamandera je manifestovana pro Windows 10
+        // the current version of Salamander is manifested for Windows 10
         const DWORD SAL_MANIFESTED_FOR_MAJOR = 10;
         const DWORD SAL_MANIFESTED_FOR_MINOR = 0;
 
-        // GetVersionEx nikdy nevrati vic nez os.dwMajorVersion == SAL_MANIFESTED_FOR_MAJOR
-        // a os.dwMinorVersion == SAL_MANIFESTED_FOR_MINOR, je-li tedy kernel32.dll vyssi
-        // verze, nejsme schopni 100% detekovat Compatibility Mode, je potreba mafinestovat
-        // Salamandera pro nove Windows a posunout konstanty SAL_MANIFESTED_FOR_MAJOR a
-        // SAL_MANIFESTED_FOR_MINOR, detekujeme aspon nastaveni Compatibility Mode na
-        // starsi Windows, nez pro ktera je Salamander manifestovan
+        // GetVersionEx never reports more than os.dwMajorVersion == SAL_MANIFESTED_FOR_MAJOR
+        // and os.dwMinorVersion == SAL_MANIFESTED_FOR_MINOR; if kernel32.dll has a higher
+        // version we cannot reliably detect Compatibility Mode. Salamander needs to be
+        // manifested for newer Windows and the constants SAL_MANIFESTED_FOR_MAJOR and
+        // SAL_MANIFESTED_FOR_MINOR adjusted; we at least detect Compatibility Mode set to
+        // an older Windows version than Salamander is manifested for
         if (kernel32major > SAL_MANIFESTED_FOR_MAJOR ||
             kernel32major == SAL_MANIFESTED_FOR_MAJOR && kernel32minor > SAL_MANIFESTED_FOR_MINOR)
         {
@@ -3322,21 +3321,21 @@ void GetCommandLineParamExpandEnvVars(const char* argv, char* target, DWORD targ
     char curDir[MAX_PATH];
     if (hotpathForJumplist)
     {
-        BOOL ret = ExpandHotPath(NULL, argv, target, targetSize, FALSE); // pokud neni syntax cesty OK, vyskoci TRACE_E, coz nas netrapi
+        BOOL ret = ExpandHotPath(NULL, argv, target, targetSize, FALSE); // if the path syntax is invalid, TRACE_E fires, which we ignore
         if (!ret)
         {
             TRACE_E("ExpandHotPath failed.");
-            // pokud expanze selze, pouzijeme retezec bez expanze
+            // if the expansion fails, use the string without expanding it
             lstrcpyn(target, argv, targetSize);
         }
     }
     else
     {
-        DWORD auxRes = ExpandEnvironmentStrings(argv, target, targetSize); // uzivatele si prali moznost predavat jako parametr env promenne
+        DWORD auxRes = ExpandEnvironmentStrings(argv, target, targetSize); // users wanted to pass environment variables as parameters
         if (auxRes == 0 || auxRes > targetSize)
         {
             TRACE_E("ExpandEnvironmentStrings failed.");
-            // pokud expanze selze, pouzijeme retezec bez expanze
+            // if the expansion fails, use the string without expanding it
             lstrcpyn(target, argv, targetSize);
         }
     }
@@ -3346,15 +3345,15 @@ void GetCommandLineParamExpandEnvVars(const char* argv, char* target, DWORD targ
     }
 }
 
-// pokud jsou parametry OK, vraci TRUE, jinak vraci FALSE
+// returns TRUE when the parameters are valid, otherwise FALSE
 BOOL ParseCommandLineParameters(LPSTR cmdLine, CCommandLineParams* cmdLineParams)
 {
-    // nechceme menit cesty, menit ikonu, menit prefix -- vse je potreba vynulovat
+    // we do not want to change paths, the icon, or the prefix -- everything needs to be reset
     ZeroMemory(cmdLineParams, sizeof(CCommandLineParams));
 
     char buf[4096];
     char* argv[20];
-    int p = 20; // pocet prvku pole argv
+    int p = 20; // number of elements in the argv array
 
     char curDir[MAX_PATH];
     GetModuleFileName(HInstance, ConfigurationName, MAX_PATH);
@@ -3363,7 +3362,7 @@ BOOL ParseCommandLineParameters(LPSTR cmdLine, CCommandLineParams* cmdLineParams
     strcat(ConfigurationName, configReg);
     if (!FileExists(ConfigurationName) && GetOurPathInRoamingAPPDATA(curDir) &&
         SalPathAppend(curDir, configReg, MAX_PATH) && FileExists(curDir))
-    { // pokud neexistuje soubor config.reg u .exe, hledame ho jeste v APPDATA
+    { // if config.reg does not exist next to the .exe, look for it in APPDATA
         lstrcpyn(ConfigurationName, curDir, MAX_PATH);
         ConfigurationNameIgnoreIfNotExists = FALSE;
     }
@@ -3403,7 +3402,7 @@ BOOL ParseCommandLineParameters(LPSTR cmdLine, CCommandLineParams* cmdLineParams
                 }
             }
 
-            if (StrICmp(argv[i], "-aj") == 0) // active panel path (hot paths syntax for jumplist) - interni, nedokumentovane
+            if (StrICmp(argv[i], "-aj") == 0) // active panel path (hot paths syntax for jumplist) - internal, undocumented
             {
                 if (i + 1 < p)
                 {
@@ -3420,17 +3419,17 @@ BOOL ParseCommandLineParameters(LPSTR cmdLine, CCommandLineParams* cmdLineParams
                     char* s = argv[i + 1];
                     if (*s == '\\' && *(s + 1) == '\\' || // UNC full path
                         *s != 0 && *(s + 1) == ':')       // "c:\" full path
-                    {                                     // plne jmeno
+                    {                                     // absolute path
                         lstrcpyn(ConfigurationName, argv[i + 1], MAX_PATH);
                     }
-                    else // relativni jmeno
+                    else // relative name
                     {
                         GetModuleFileName(HInstance, ConfigurationName, MAX_PATH);
                         *(strrchr(ConfigurationName, '\\') + 1) = 0;
                         SalPathAppend(ConfigurationName, s, MAX_PATH);
                         if (!FileExists(ConfigurationName) && GetOurPathInRoamingAPPDATA(curDir) &&
                             SalPathAppend(curDir, s, MAX_PATH) && FileExists(curDir))
-                        { // pokud neexistuje relativne zadany soubor za -C u .exe, hledame ho jeste v APPDATA
+                        { // if the file specified relative to -C near the .exe is missing, look again in APPDATA
                             lstrcpyn(ConfigurationName, curDir, MAX_PATH);
                         }
                     }
@@ -3475,7 +3474,7 @@ BOOL ParseCommandLineParameters(LPSTR cmdLine, CCommandLineParams* cmdLineParams
                 }
             }
 
-            if (StrICmp(argv[i], "-o") == 0) // tvarime se, jako by bylo nahozene OnlyOneIstance
+            if (StrICmp(argv[i], "-o") == 0) // behave as if OnlyOneInstance were enabled
             {
                 Configuration.ForceOnlyOneInstance = TRUE;
                 continue;
@@ -3512,10 +3511,10 @@ int WinMainBody(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine,
 {
     int myExitCode = 1;
 
-    //--- nechci zadne kriticke chyby jako "no disk in drive A:"
+    //--- avoid critical errors such as "no disk in drive A:"
     SetErrorMode(SetErrorMode(0) | SEM_FAILCRITICALERRORS);
 
-    // seed generatoru nahodnych cisel
+    // seed the random-number generator
     srand((unsigned)time(NULL) ^ (unsigned)_getpid());
 
 #ifdef _DEBUG
@@ -3526,37 +3525,36 @@ int WinMainBody(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine,
     // #define _CRTDBG_CHECK_CRT_DF        0x10  /* Leak check/diff CRT blocks */
     // #define _CRTDBG_LEAK_CHECK_DF       0x20  /* Leak check at program exit */
 
-    // pri podezreni na prepis alokovane pameti lze odkomentovat nasledujici dva radky
-    // dojde ke zpomaleni Salamandera a pri kazdem free alloc se provede test konzistence heapu
+    // when you suspect allocated memory is being overwritten, uncomment the following two lines
+    // Salamander will slow down and every free/alloc will run a heap consistency test
     // int crtDbg = _CrtSetDbgFlag(_CRTDBG_REPORT_FLAG);   // Get the current bits
     // _CrtSetDbgFlag(crtDbg | _CRTDBG_CHECK_ALWAYS_DF);
     // _CrtSetDbgFlag(crtDbg | _CRTDBG_LEAK_CHECK_DF);
 
-    // dalsi zajimava funkce pro ladeni: pokud dojde k memory leaku, v zavorce je zobrazeno
-    // dekadicke cislo, ktere udava poradi alokovaneho bloku, napriklad _CRT_WARN: {104200};
-    // funkci _CrtSetBreakAlloc umoznuje breaknou na tomto bloku
+    // another useful debugging feature: when a memory leak occurs, the braces show
+    // the decimal number indicating the allocation order, e.g. _CRT_WARN: {104200};
+    // use _CrtSetBreakAlloc to break on that block
     // _CrtSetBreakAlloc(33521);
 
     LastCrtCheckMemoryTime = GetTickCount();
 
-    // na tomto pripade prepisu konce pameti zabere ochrana -- v IDLE se zobrazi messagebox
-    // a do TraceServeru se nalejou debug hlasky
+    // in this scenario of overwriting past the end of memory, the protection triggers -- during IDLE a message box is shown
+    // and debug logs are poured into TraceServer
     //
 //  char *p1 = (char*)malloc( 4 );
 //  strcpy( p1 , "Oops" );
 #endif //_DEBUG
 
-    /*
-   // test "Heap Block Corruptions: Full-page heap", viz http://support.microsoft.com/kb/286470
-   // alokuje vsechny bloky (musi mit aspon 16 bytu) tak, ze za nimi je nepristupna stranka, takze
-   // jakykoliv prepis konce bloku vede k exceptione
-   // instalovat Debugging Tools for Windows, v gflags.exe pro "salamand.exe" vybrat "Enable page heap",
-   // fungovalo mi to pod W2K i pod XP (pod Vistou by melo taky)
-   // NEBO: pouzit pripravene sal-pageheap-register.reg a sal-pageheap-unregister.reg (to pak neni
-   // potreba instalovat Debugging Tools for Windows)
+/*
+   // test "Heap Block Corruptions: Full-page heap", see http://support.microsoft.com/kb/286470
+   // allocates all blocks (must be at least 16 bytes) with an inaccessible page behind them,
+   // so any overwrite beyond the block immediately raises an exception
+   // install Debugging Tools for Windows, in gflags.exe for "salamand.exe" enable "Enable page heap",
+   // this worked for me on W2K and XP (it should also work on Vista)
+   // OR: use the prepared sal-pageheap-register.reg and sal-pageheap-unregister.reg (then the Debugging Tools are not needed)
    //
-   // prosinec/2011: testoval jsem pod VS2008 + page heap + Win7x64 a nasledujici prepis nevyvolava exception
-   // nasel jsem popis alokace v tomto rezimu: http://msdn.microsoft.com/en-us/library/ms220938(v=VS.90).aspx
+   // December/2011: tested under VS2008 + page heap + Win7x64 and the following overwrite does not raise an exception
+   // I found the allocation description for this mode at http://msdn.microsoft.com/en-us/library/ms220938(v=VS.90).aspx
 
   char *test = (char *)malloc(16);
 //  char *test = (char *)HeapAlloc(GetProcessHeap(), 0, 16);
@@ -3568,7 +3566,7 @@ int WinMainBody(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine,
 
     char testCharValue = 129;
     int testChar = testCharValue;
-    if (testChar != 129) // pokud bude testChar zaporne, mame problem: LowerCase[testCharValue] saha mimo pole...
+    if (testChar != 129) // if testChar becomes negative, we have a problem: LowerCase[testCharValue] accesses beyond the array...
     {
         MessageBox(NULL, "Default type 'char' is not 'unsigned char', but 'signed char'. See '/J' compiler switch in MSVC.",
                    "Compilation Error", MB_OK | MB_ICONSTOP);
@@ -3578,9 +3576,9 @@ int WinMainBody(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine,
     HInstance = hInstance;
     CALL_STACK_MESSAGE4("WinMainBody(0x%p, , %s, %d)", hInstance, cmdLine, cmdShow);
 
-    // Tak za tohle ja nemuzu ... co delat, kdyz to dela konkurence, musime
-    // taky - inspirovano v Exploreru.
-    // A ja se divil, ze jim tak pekne chodi paint.
+    // I cannot help it... when the competition does this, we
+    // must do it too - inspired by Explorer.
+    // And I wondered why their painting works so well.
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
 
     SetTraceProcessName("Salamander");
@@ -3588,28 +3586,28 @@ int WinMainBody(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine,
     SetMessagesTitle(MAINWINDOW_NAME);
     TRACE_I("Begin");
 
-    // inicializace OLE
+    // initialize OLE
     if (FAILED(OleInitialize(NULL)))
     {
         TRACE_E("Error in CoInitialize.");
         return 1;
     }
 
-    //  HOldWPHookProc = SetWindowsHookEx(WH_CALLWNDPROC,     // HANDLES neumi!
+    //  HOldWPHookProc = SetWindowsHookEx(WH_CALLWNDPROC,     // HANDLES cannot handle this!
     //                                    WPMessageHookProc,
     //                                    NULL, GetCurrentThreadId());
 
     User32DLL = NOHANDLES(LoadLibrary("user32.dll"));
     if (User32DLL == NULL)
-        TRACE_E("Unable to load library user32.dll."); // neni fatalni chyba
+        TRACE_E("Unable to load library user32.dll."); // not a fatal error
 
     TurnOFFWindowGhosting();
 
     NtDLL = HANDLES(LoadLibrary("NTDLL.DLL"));
     if (NtDLL == NULL)
-        TRACE_E("Unable to load library ntdll.dll."); // neni fatalni chyba
+        TRACE_E("Unable to load library ntdll.dll."); // not a fatal error
 
-    // detekce defaultniho userova charsetu pro fonty
+    // detect the default user charset for fonts
     CHARSETINFO ci;
     memset(&ci, 0, sizeof(ci));
     char bufANSI[10];
@@ -3621,7 +3619,7 @@ int WinMainBody(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine,
         }
     }
 
-    // kvuli pouzivani souboru mapovanych do pameti je nutne ziskat granularitu alokaci
+    // because we use memory-mapped files we must retrieve that step size
     SYSTEM_INFO si;
     GetSystemInfo(&si);
     AllocationGranularity = si.dwAllocationGranularity;
@@ -3636,13 +3634,13 @@ int WinMainBody(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine,
     // Windows 7          6              1
     // Windows 8          6              2
     // Windows 8.1        6              3
-    // Windows 10         10             0             (poznamka: preview verze W10 z 2014 vracely verzi 6.4)
+    // Windows 10         10             0             (note: Windows 10 preview builds from 2014 reported version 6.4)
 
     if (!SalIsWindowsVersionOrGreater(6, 1, 0))
     {
-        // sem se to pravdepodobne nedostane, na starsich systemech budou chybet exporty staticky linkovanych
-        // knihoven a uzivatele serve nejaka nepochopitelna hlaska na urovni PE loaderu ve Windows
-        // nevolat SalMessageBox
+        // we probably never reach this: on older systems the statically linked libraries
+        // will miss exports and the user gets an obscure message from the Windows PE loader
+        // do not call SalMessageBox here
         MessageBox(NULL, "You need at least Windows 7 to run this program.",
                    SALAMANDER_TEXT_VERSION, MB_OK | MB_ICONEXCLAMATION);
     EXIT_1:
@@ -3670,7 +3668,7 @@ int WinMainBody(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine,
     if (GetProcessIntegrityLevel(&integrityLevel) && integrityLevel >= SECURITY_MANDATORY_HIGH_RID)
         RunningAsAdmin = TRUE;
 
-    // pokud je to mozne, pouzijeme GetNativeSystemInfo, jinak si nechame vysledek GetSystemInfo
+    // use GetNativeSystemInfo when possible, otherwise fall back to the result from GetSystemInfo
     typedef void(WINAPI * PGNSI)(LPSYSTEM_INFO);
     PGNSI pGNSI = (PGNSI)GetProcAddress(GetModuleHandle("kernel32.dll"), "GetNativeSystemInfo"); // Min: XP
     if (pGNSI != NULL)
@@ -3680,7 +3678,7 @@ int WinMainBody(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine,
     if (!GetWindowsDirectory(WindowsDirectory, MAX_PATH))
         WindowsDirectory[0] = 0;
 
-    // zajima nas iface ITaskbarList3, ktery MS zavedli od Windows 7 - napriklad progress v taskbar buttons
+    // we care about the ITaskbarList3 interface that Microsoft introduced with Windows 7 - for example taskbar button progress
     if (Windows7AndLater)
     {
         TaskbarBtnCreatedMsg = RegisterWindowMessage("TaskbarButtonCreated");
@@ -3691,22 +3689,22 @@ int WinMainBody(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine,
         }
     }
 
-    // mame nastavene globalni promenne, muzeme inicializovat tento mutex
+    // global variables are initialized, we can now initialize this mutex
     if (!TaskList.Init())
         TRACE_E("TaskList.Init() failed!");
 
     if (!InitializeWinLib())
-        goto EXIT_1; // musime inicializovat WinLib pred prvnim zobrazenim
-                     // wait dialogu (musi byt registrovany tridy oken)
-                     // ImportConfiguration uz muze otevrit tento dialog
+        goto EXIT_1; // WinLib must be initialized before the first wait dialog is shown
+                     // (window classes must be registered)
+                     // ImportConfiguration might already open this dialog
 
     LoadSaveToRegistryMutex.Init();
 
-    // zkusime z aktualni konfigurace vytahnout hodnotu "AutoImportConfig" -> existuje v pripade, ze provadime UPGRADE
+    // try to read the "AutoImportConfig" value from the current configuration -> present when we are performing an UPGRADE
     BOOL autoImportConfig = FALSE;
     char autoImportConfigFromKey[200];
     autoImportConfigFromKey[0] = 0;
-    if (!GetUpgradeInfo(&autoImportConfig, autoImportConfigFromKey, 200)) // user si preje exit softu
+    if (!GetUpgradeInfo(&autoImportConfig, autoImportConfigFromKey, 200)) // the user requested to exit the application
     {
         myExitCode = 0;
     EXIT_1a:
@@ -3715,22 +3713,22 @@ int WinMainBody(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine,
     }
     const char* configKey = autoImportConfig ? autoImportConfigFromKey : SalamanderConfigurationRoots[0];
 
-    // zkusime z aktualni konfigurace vytahnout klic urcujici jazyk
+    // attempt to read the key that specifies the language from the current configuration
     LoadSaveToRegistryMutex.Enter();
     HKEY hSalamander;
-    DWORD langChanged = FALSE; // TRUE = startujeme Salama poprve s jinym jazykem (naloadime vsechny pluginy, at se overi ze mame tuto jazykovou verzi i pro ne, pripadne at user vyresi jake nahradni verze chce pouzivat)
+    DWORD langChanged = FALSE; // TRUE = Salamander starts for the first time with a different language (load all plugins to verify they have this language version and let the user choose fallback languages)
     if (OpenKey(HKEY_CURRENT_USER, configKey, hSalamander))
     {
         HKEY actKey;
-        DWORD configVersion = 1; // toto je konfig od 1.52 a starsi
+        DWORD configVersion = 1; // configuration from 1.52 and older
         if (OpenKey(hSalamander, SALAMANDER_VERSION_REG, actKey))
         {
-            configVersion = 2; // toto je konfig od 1.6b1
+            configVersion = 2; // configuration from 1.6b1 onward
             GetValue(actKey, SALAMANDER_VERSIONREG_REG, REG_DWORD,
                      &configVersion, sizeof(DWORD));
             CloseKey(actKey);
         }
-        if (configVersion >= 59 /* 2.53 beta 2 */ && // pred 2.53 beta 2 byla jen anglictina, tedy cteni nema smysl, nabidneme userovi defaultni jazyk systemu nebo rucni vyber jazyku
+        if (configVersion >= 59 /* 2.53 beta 2 */ && // before 2.53 beta 2 only English existed, so reading makes no sense; offer the system default language or a manual choice
             OpenKey(hSalamander, SALAMANDER_CONFIG_REG, actKey))
         {
             GetValue(actKey, CONFIG_LANGUAGE_REG, REG_SZ,
@@ -3748,8 +3746,8 @@ int WinMainBody(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine,
 
 FIND_NEW_SLG_FILE:
 
-    // pokud klic neexistuje, zobrazime vyberovy dialog
-    BOOL newSLGFile = FALSE; // TRUE pokud byl .SLG vybran pri tomto spusteni Salamandera
+    // if the key does not exist, display a selection dialog
+    BOOL newSLGFile = FALSE; // TRUE if the .SLG file was chosen during this Salamander run
     if (Configuration.SLGName[0] == 0)
     {
         CLanguageSelectorDialog slgDialog(NULL, Configuration.SLGName, NULL);
@@ -3765,8 +3763,8 @@ FIND_NEW_SLG_FILE:
         Configuration.AltPluginSLGName[0] = 0;
 
         char prevVerSLGName[MAX_PATH];
-        if (!autoImportConfig &&                            // pri UPGRADE toto nema smysl (jazyk se cte o par radek vyse, tahle rutina by ho jen precetla znovu)
-            FindLanguageFromPrevVerOfSal(prevVerSLGName) && // importneme jazyk z predchozi verze, je dost pravdepodobne, ze ho user opet chce pouzit (jde o import stare konfigurace Salama)
+        if (!autoImportConfig &&                            // during UPGRADE this is pointless (the language was read a few lines above; this routine would just read it again)
+            FindLanguageFromPrevVerOfSal(prevVerSLGName) && // import the language from the previous version; the user likely wants to keep it (importing the old Salamander configuration)
             slgDialog.SLGNameExists(prevVerSLGName))
         {
             lstrcpy(Configuration.SLGName, prevVerSLGName);
@@ -3774,22 +3772,22 @@ FIND_NEW_SLG_FILE:
         else
         {
             int langIndex = slgDialog.GetPreferredLanguageIndex(NULL, TRUE);
-            if (langIndex == -1) // tato instalace neobsahuje jazyk souhlasici s aktualnim user-locale ve Windows
+            if (langIndex == -1) // this installation does not contain a language matching the current user locale in Windows
             {
 
-// kdyz se tohle zakomentuje, nebudeme posilat lidi tahat jazykove verze z webu (napr. kdyz tam zadne nejsou)
-// JRY: pro AS 2.53, kery jde s cestinou, nemcinou a anglictinou je pro ostatni jazyky posleme na forum do sekce
-//      "Translations" https://forum.altap.cz/viewforum.php?f=23 - treba to nekoho namotivuje a pujde svuj preklad vytvorit
+// if this is commented out, we will not send people to download language versions from the web (for example when none exist)
+// JRY: for AS 2.53, which ships with Czech, German, and English, we direct users of other languages to the discussion board section
+//      "Translations" section on the Altap community site - maybe it will motivate someone to create their own translation
 #define OFFER_OTHERLANGUAGE_VERSIONS
 
 #ifndef OFFER_OTHERLANGUAGE_VERSIONS
                 if (slgDialog.GetLanguagesCount() == 1)
-                    slgDialog.GetSLGName(Configuration.SLGName); // pokud existuje jen jeden jazyk, pouzijeme ho
+                    slgDialog.GetSLGName(Configuration.SLGName); // if only one language exists, use it
                 else
                 {
 #endif // OFFER_OTHERLANGUAGE_VERSIONS
 
-                    // otevreme dialog vyberu jazyku, aby mohl user downloadnout a nainstalovat dalsi jazyky
+                    // open the language-selection dialog so the user can download and install additional languages
                     if (slgDialog.Execute() == IDCANCEL)
                         goto EXIT_1a;
 
@@ -3799,7 +3797,7 @@ FIND_NEW_SLG_FILE:
             }
             else
             {
-                slgDialog.GetSLGName(Configuration.SLGName, langIndex); // pokud existuje jazyk odpovidajici aktualnim user-locale ve Windows, pouzijeme ho
+                slgDialog.GetSLGName(Configuration.SLGName, langIndex); // if a language matches the current Windows user locale, use it
             }
         }
         newSLGFile = TRUE;
@@ -3816,7 +3814,7 @@ FIND_NEW_SLG_FILE:
     {
         if (HLanguage != NULL)
             HANDLES(FreeLibrary(HLanguage));
-        if (!newSLGFile) // zapamatovany .SLG soubor prestal nejspis existovat, zkusime najit jiny
+        if (!newSLGFile) // the remembered .SLG file most likely disappeared; try to find another one
         {
             sprintf(errorText, "File %s was not found or is not valid language file.\nOpen Salamander "
                                "will try to search for some other language file (.SLG).",
@@ -3825,7 +3823,7 @@ FIND_NEW_SLG_FILE:
             Configuration.SLGName[0] = 0;
             goto FIND_NEW_SLG_FILE;
         }
-        else // nemelo by vubec nastat - .SLG soubor jiz byl otestovan
+        else // should never happen - the .SLG file was already verified
         {
             sprintf(errorText, "File %s was not found or is not valid language file.\n"
                                "Please run Open Salamander again and try to choose some other language file.",
@@ -3837,10 +3835,10 @@ FIND_NEW_SLG_FILE:
 
     strcpy(Configuration.LoadedSLGName, Configuration.SLGName);
 
-    // nechame jiz bezici salmon nacist zvolene SLG (zatim pouzival nejake provizorni)
+    // let the already running Salmon load the chosen SLG (it was using a temporary one so far)
     SalmonSetSLG(Configuration.SLGName);
 
-    // nastavime lokalizovane hlasky do modulu ALLOCHAN (zajistuje pri nedostatku pameti hlaseni uzivateli + Retry button + kdyz vse selze tak i Cancel pro terminate softu)
+    // configure localized messages for the ALLOCHAN module (handles low-memory notifications, Retry button, and Cancel to terminate when all else fails)
     SetAllocHandlerMessage(LoadStr(IDS_ALLOCHANDLER_MSG), SALAMANDER_TEXT_VERSION,
                            LoadStr(IDS_ALLOCHANDLER_WRNIGNORE), LoadStr(IDS_ALLOCHANDLER_WRNABORT));
 
@@ -3863,8 +3861,8 @@ FIND_NEW_SLG_FILE:
     }
 
 #ifdef USE_BETA_EXPIRATION_DATE
-    // beta verze je casove limitovana, viz BETA_EXPIRATION_DATE
-    // pokud je dnes den urceny touto promennou nebo nejaky dalsi, zobrazime okenko a koncime
+    // the beta version is time-limited, see BETA_EXPIRATION_DATE
+    // if today is the date specified by that variable or later, show a dialog and exit
     SYSTEMTIME st;
     GetLocalTime(&st);
     SYSTEMTIME* expire = &BETA_EXPIRATION_DATE;
@@ -3877,12 +3875,12 @@ FIND_NEW_SLG_FILE:
     }
 #endif // USE_BETA_EXPIRATION_DATE
 
-    // otevreme splash screen
+    // open the splash screen
 
     GetSystemDPI(NULL);
 
-    // pokud konfigurace neexistuje nebo bude nasledne pri importu ze souboru zmenena, ma uzivatel
-    // smulu a splash screen se bude ridit implicitni nebo starou hodnotou
+    // if the configuration does not exist or will be changed during import, the user
+    // has to live with the default or previous splash-screen setting
     LoadSaveToRegistryMutex.Enter();
     if (OpenKey(HKEY_CURRENT_USER, configKey, hSalamander))
     {
@@ -3900,7 +3898,7 @@ FIND_NEW_SLG_FILE:
     if (Configuration.ShowSplashScreen)
         SplashScreenOpen();
 
-    // okno pro import konfigurace obsahuje listview s checkboxama, musime inicializovat COMMON CONTROLS
+    // the configuration-import window contains a listview with checkboxes, so we must initialize the common controls
     INITCOMMONCONTROLSEX initCtrls;
     initCtrls.dwSize = sizeof(INITCOMMONCONTROLSEX);
     initCtrls.dwICC = ICC_BAR_CLASSES | ICC_LISTVIEW_CLASSES |
@@ -3915,40 +3913,39 @@ FIND_NEW_SLG_FILE:
 
     SetWinLibStrings(LoadStr(IDS_INVALIDNUMBER), MAINWINDOW_NAME); // j.r. - posunout na spravne misto
 
-    // inicializace pakovacu; drive provadeno v konstruktorech; ted presunuto sem,
-    // kdy uz je rozhodnuto o jazykovem DLL
+    // initialize the packers; previously done in constructors, now moved here
+    // once the language DLL has been chosen
     PackerFormatConfig.InitializeDefaultValues();
     ArchiverConfig.InitializeDefaultValues();
     PackerConfig.InitializeDefaultValues();
     UnpackerConfig.InitializeDefaultValues();
 
-    // pokud soubor existuje, bude importovan do registry
+    // if the file exists, import it into the registry
     BOOL importCfgFromFileWasSkipped = FALSE;
     ImportConfiguration(NULL, ConfigurationName, ConfigurationNameIgnoreIfNotExists, autoImportConfig,
                         &importCfgFromFileWasSkipped);
 
-    // obslouzime prechod ze stareho configu na novy
+    // handle the transition from the old configuration to the new one
 
-    // Zavolame funkci, ktera se pokusi najit konfiguraci odpovidajici nasi verzi programu.
-    // Pokud se ji podari najit, bude nastavena promenna 'loadConfiguration' a funkce vrati
-    // TRUE. Pokud konfigurace jeste nebude existovat, funkce postupne prohleda stare
-    // konfigurace z pole 'SalamanderConfigurationRoots' (od nejmladsich k nejstrasim).
-    // Pokud nalezne nekterou z konfiguraci, zobrazi dialog a nabidne jeji konverzi do
-    // konfigurace soucasne a smazani z registry. Po zobrazeni posledniho dialogu vrati
-    // TRUE a nastavi promenne 'deleteConfigurations' a 'loadConfiguration' dle voleb
-    // uzivatele. Pokud uzivatel zvoli ukonceni aplikace, vrati funkce FALSE.
+    // Call a function that tries to find the configuration matching our program version.
+    // If it succeeds, it sets the 'loadConfiguration' variable and returns TRUE.
+    // If the configuration does not exist yet, the function iterates through the older
+    // configurations in 'SalamanderConfigurationRoots' (from newest to oldest).
+    // If it finds one, it shows a dialog and offers converting it to the current configuration
+    // and deleting it from the registry. After the final dialog it returns TRUE and sets the
+    // 'deleteConfigurations' and 'loadConfiguration' variables according to the user's choice.
+    // If the user chooses to exit the application, the function returns FALSE.
 
-    // pole urcujici indexy konfiguraci v poli 'SalamanderConfigurationRoots',
-    // ktere maji byt smazany (0 -> zadna)
+    // array of indices in 'SalamanderConfigurationRoots' that should be deleted (0 -> none)
     BOOL deleteConfigurations[SALCFG_ROOTS_COUNT];
     ZeroMemory(deleteConfigurations, sizeof(deleteConfigurations));
 
     CALL_STACK_MESSAGE1("WinMainBody::FindLatestConfiguration");
 
-    // ukazatel do pole 'SalamanderConfigurationRoots' na konfiguraci, ktera ma byt
-    // nactena (NULL -> zadna; pouziji se default hodnoty)
+    // pointer into 'SalamanderConfigurationRoots' to the configuration to load
+    // (NULL -> none; use default values)
     if (autoImportConfig)
-        SALAMANDER_ROOT_REG = autoImportConfigFromKey; // pri UPGRADE nema hledani konfigurace smysl
+        SALAMANDER_ROOT_REG = autoImportConfigFromKey; // during UPGRADE it makes no sense to search for a configuration
     else
     {
         if (!FindLatestConfiguration(deleteConfigurations, SALAMANDER_ROOT_REG))
@@ -3958,14 +3955,13 @@ FIND_NEW_SLG_FILE:
         }
     }
 
-    InitializeShellib(); // OLE je treba inicializovat pred otevrenim HTML helpu - CSalamanderEvaluation
+    InitializeShellib(); // OLE must be initialized before opening HTML Help - CSalamanderEvaluation
 
-    // pokud jeste neexistuje novy klic konfigurace, vytvorime ho pred pripadnym smazanim
-    // starych klicu
+    // if the new configuration key does not exist yet, create it before potentially deleting the old keys
     BOOL currentCfgDoesNotExist = autoImportConfig || SALAMANDER_ROOT_REG != SalamanderConfigurationRoots[0];
     BOOL saveNewConfig = currentCfgDoesNotExist;
 
-    // pokud uzivatel nechce vic instanci, pouze aktivujeme predchozi
+    // if the user does not allow multiple instances, just activate the previous one
     if (!currentCfgDoesNotExist &&
         CheckOnlyOneInstance(&cmdLineParams))
     {
@@ -3976,10 +3972,10 @@ FIND_NEW_SLG_FILE:
         goto EXIT_2;
     }
 
-    // overim verzi CommonControlu
-    if (GetComCtlVersion(&CCVerMajor, &CCVerMinor) != S_OK) // JRYFIXME - testy kolem common controls posunout na W7+
+    // verify the Common Controls version
+    if (GetComCtlVersion(&CCVerMajor, &CCVerMinor) != S_OK) // JRYFIXME - move common controls checks to Windows 7+
     {
-        CCVerMajor = 0; // tohle asi nikdy nenastane - nemaji comctl32.dll
+        CCVerMajor = 0; // this should never happen - they would lack comctl32.dll
         CCVerMinor = 0;
     }
 
@@ -3991,7 +3987,7 @@ FIND_NEW_SLG_FILE:
     for (i = 0; i < NUMBER_OF_COLORS; i++)
         UserColors[i] = SalamanderColors[i];
 
-    //--- inicializacni cast
+    //--- initialization part
     CALL_STACK_MESSAGE1("WinMainBody::inicialization");
     IfExistSetSplashScreenText(LoadStr(IDS_STARTUP_DATA));
 
@@ -4055,25 +4051,25 @@ FIND_NEW_SLG_FILE:
         goto EXIT_9;
     }
 
-    // pripojeni OLE SPYe
-    // posunuto pod InitializeGraphics, ktere pod WinXP vyhazovala leaky (asi zase neajake cache)
-    // OleSpyRegister();    // odpojeno, protoze po updatu Windows 2000 z 02/2005 zacal pri spusteni+zavreni Salama z MSVC vylitavat debug-breakpoint: Invalid Address specified to RtlFreeHeap( 130000, 14bc74 ) - asi MS nekde zacali volat primo RtlFreeHeap misto OLE free a diky bloku informaci spye na zacatku alokovaneho bloku se to podelalo (malloc vraci pointer posunuty za blok informaci spye)
-    //OleSpySetBreak(2754); // brakne na [n-te] alokaci z dumpu
+    // attaching the OLE SPY
+    // moved below InitializeGraphics, which leaked under WinXP (probably some cache again)
+    // OleSpyRegister();    // disabled because after the Windows 2000 update from 02/2005 MSVC started throwing a debug breakpoint when launching/closing Salamander: Invalid Address specified to RtlFreeHeap( 130000, 14bc74 ) - apparently Microsoft began calling RtlFreeHeap directly instead of the OLE free, and due to the spy info block at the start of the allocation it broke (malloc returns a pointer shifted past the spy info block)
+    //OleSpySetBreak(2754); // break on the [n-th] allocation from the dump
 
-    // inicializace workera (diskove operace)
+    // initialize the worker (disk operations)
     InitWorker();
 
-    // inicializace knihovny pro komunikaci s SalShExt/SalamExt/SalExtX86/SalExtX64.DLL (shell copy hook + shell context menu)
+    // initialize the library that communicates with SalShExt/SalamExt/SalExtX86/SalExtX64.DLL (shell copy hook + shell context menu)
     InitSalShLib();
 
-    // inicializace knihovny pro praci s shell icon overlays (Tortoise SVN + CVS)
+    // initialize the library for working with shell icon overlays (Tortoise SVN + CVS)
     LoadIconOvrlsInfo(SALAMANDER_ROOT_REG);
     InitShellIconOverlays();
 
-    // inicializace funkci pro prochazeni pres next/prev soubor v panelu/Findu z vieweru
+    // initialize functions that browse next/previous files in the panel/Find from the viewer
     InitFileNamesEnumForViewers();
 
-    // nacteme seznam sharovanych adresaru
+    // load the list of shared directories
     IfExistSetSplashScreenText(LoadStr(IDS_STARTUP_SHARES));
     Shares.Refresh();
 
@@ -4096,10 +4092,10 @@ FIND_NEW_SLG_FILE:
                                         SHELLEXECUTE_CLASSNAME,
                                         NULL);
 
-    Associations.ReadAssociations(FALSE); // nacteni asociaci z Registry
+    Associations.ReadAssociations(FALSE); // load associations from the registry
 
-    // registrace shell extensions
-    // pokud najdeme v podadresari "utils" knihovnu, overime jeji registraci a pripadne ji zaregistrujeme
+    // register shell extensions
+    // if we find a library in the "utils" subdirectory, verify its registration and register it if needed
     char shellExtPath[MAX_PATH];
     GetModuleFileName(HInstance, shellExtPath, MAX_PATH);
     char* shellExtPathSlash = strrchr(shellExtPath, '\\');
@@ -4128,7 +4124,7 @@ FIND_NEW_SLG_FILE:
 #endif // _WIN64
     }
 
-    //--- vytvoreni hlavniho okna
+    //--- create the main window
     if (CMainWindow::RegisterUniversalClass(CS_DBLCLKS | CS_OWNDC,
                                             0,
                                             0,
@@ -4165,12 +4161,12 @@ FIND_NEW_SLG_FILE:
                 SetMessagesParent(MainWindow->HWindow);
                 PluginMsgBoxParent = MainWindow->HWindow;
 
-                // vytahneme z registry Group Policy
+                // load Group Policy from the registry
                 IfExistSetSplashScreenText(LoadStr(IDS_STARTUP_POLICY));
                 SystemPolicies.LoadFromRegistry();
 
                 CALL_STACK_MESSAGE1("WinMainBody::load_config");
-                BOOL setActivePanelAndPanelPaths = FALSE; // aktivni panel + cesty v panelech se nastavuji v MainWindow->LoadConfig()
+                BOOL setActivePanelAndPanelPaths = FALSE; // the active panel and panel paths are configured in MainWindow->LoadConfig()
                 if (!MainWindow->LoadConfig(currentCfgDoesNotExist, !importCfgFromFileWasSkipped ? &cmdLineParams : NULL))
                 {
                     setActivePanelAndPanelPaths = TRUE;
@@ -4187,7 +4183,7 @@ FIND_NEW_SLG_FILE:
                         MainWindow->ToggleMiddleToolBar();
                     if (Configuration.BottomToolBarVisible)
                         MainWindow->ToggleBottomToolBar();
-                    MainWindow->CreateAndInsertWorkerBand(); // na zaver vlozime workera
+                    MainWindow->CreateAndInsertWorkerBand(); // insert the worker band at the end
                     MainWindow->LeftPanel->UpdateDriveIcon(TRUE);
                     MainWindow->RightPanel->UpdateDriveIcon(TRUE);
                     MainWindow->LeftPanel->UpdateFilterSymbol();
@@ -4208,7 +4204,7 @@ FIND_NEW_SLG_FILE:
 
                 if (newSLGFile)
                 {
-                    Plugins.ClearLastSLGNames(); // aby pripadne doslo k nove volbe nahradniho jazyka u vsech pluginu
+                    Plugins.ClearLastSLGNames(); // force all plugins to pick a new fallback language if needed
                     Configuration.ShowSLGIncomplete = TRUE;
                 }
 
@@ -4222,27 +4218,27 @@ FIND_NEW_SLG_FILE:
                 }
                 else
                 {
-                    if (!importCfgFromFileWasSkipped) // jen pokud hned nedojde k exitu softu (to pak nema smysl)
+                    if (!importCfgFromFileWasSkipped) // only if the application does not immediately exit (otherwise pointless)
                         MainWindow->ApplyCommandLineParams(&cmdLineParams, setActivePanelAndPanelPaths);
 
                     if (Windows7AndLater)
                         CreateJumpList();
 
-                    IdleRefreshStates = TRUE;  // pri pristim Idle vynutime kontrolu stavovych promennych
-                    IdleCheckClipboard = TRUE; // nechame kontrolovat take clipboard
+                    IdleRefreshStates = TRUE;  // force state-variable checks on the next Idle
+                    IdleCheckClipboard = TRUE; // keep monitoring the clipboard as well
 
                     AccelTable1 = HANDLES(LoadAccelerators(HInstance, MAKEINTRESOURCE(IDA_MAINACCELS1)));
                     AccelTable2 = HANDLES(LoadAccelerators(HInstance, MAKEINTRESOURCE(IDA_MAINACCELS2)));
 
-                    MainWindow->CanClose = TRUE; // ted teprve povolime zavreni hl. okna
-                    // aby soubory nevyskakovali postupne (jak se nacitaji jejich ikony)
+                    MainWindow->CanClose = TRUE; // only now allow closing the main window
+                    // keep files from popping in one by one as their icons load
                     UpdateWindow(MainWindow->HWindow);
 
                     BOOL doNotDeleteImportedCfg = FALSE;
-                    if (autoImportConfig && // zjistime jestli nova verze nema mene pluginu nez stara a diky tomu se cast stare konfigurace neprenese
+                    if (autoImportConfig && // check whether the new version has fewer plugins and therefore part of the old configuration would be skipped
                         FindPluginsWithoutImportedCfg(&doNotDeleteImportedCfg))
-                    {                               // je potreba exit softu bez ulozeni konfigurace
-                        SALAMANDER_ROOT_REG = NULL; // tohle by melo spolehlive zamezit zapisu do konfigurace v registry
+                    {                               // need to exit without saving the configuration
+                        SALAMANDER_ROOT_REG = NULL; // this should reliably prevent writing configuration data into the registry
                         PostMessage(MainWindow->HWindow, WM_USER_FORCECLOSE_MAINWND, 0, 0);
                     }
                     else
@@ -4252,57 +4248,55 @@ FIND_NEW_SLG_FILE:
                             || Configuration.AddX86OnlyPlugins
 #endif // _WIN64
                         )
-                        {                                            // auto-install plug-inu ze standardniho plug-in-podadresare "plugins"
+                        {                                            // auto-install plug-ins from the standard "plugins" subdirectory
 #ifndef _WIN64                                                       // FIXME_X64_WINSCP
-                            Configuration.AddX86OnlyPlugins = FALSE; // jednou staci
+                            Configuration.AddX86OnlyPlugins = FALSE; // only once is necessary
 #endif                                                               // _WIN64
                             Plugins.AutoInstallStdPluginsDir(MainWindow->HWindow);
-                            Configuration.LastPluginVer = 0;   // pri prechodu na novou verzi bude zrusen soubor plugins.ver
-                            Configuration.LastPluginVerOP = 0; // pri prechodu na novou verzi bude zrusen soubor plugins.ver i pro druhou platformu
-                            saveNewConfig = TRUE;              // nova konfigurace se musi ulozit (aby se tohle pri pristim spusteni neopakovalo)
+                            Configuration.LastPluginVer = 0;   // when upgrading to a new version, remove plugins.ver
+                            Configuration.LastPluginVerOP = 0; // when upgrading, remove plugins.ver for the other platform as well
+                            saveNewConfig = TRUE;              // the new configuration must be saved (to avoid repeating this next time)
                         }
-                        // nacteni souboru plugins.ver ((re)instalace plug-inu), nutne i poprve (pro pripad
-                        // instalace plug-inu pred prvnim spustenim Salamandera)
+                        // load plugins.ver ((re)install plug-ins), required even the first time (in case
+                        // plug-ins were installed before Salamander was run)
                         if (Plugins.ReadPluginsVer(MainWindow->HWindow, Configuration.ConfigVersion < THIS_CONFIG_VERSION))
-                            saveNewConfig = TRUE; // nova konfigurace se musi ulozit (aby se tohle pri pristim spusteni neopakovalo)
-                        // load plug-inu, ktere maji nastaveny flag load-on-start
+                            saveNewConfig = TRUE; // the new configuration must be saved (to avoid repeating this next time)
+                        // load plug-ins that have the load-on-start flag
                         Plugins.HandleLoadOnStartFlag(MainWindow->HWindow);
-                        // pokud startujeme poprve se zmenenym jazykem, naloadime vsechny pluginy, aby se ukazalo,
-                        // jestli maji tuto jazykovou verzi + pripadne aby si user vybrat nahradni jazyky
+                        // if we start for the first time with a different language, load all plug-ins to check
+                        // whether they have this language and optionally let the user choose fallback languages
                         if (langChanged)
                             Plugins.LoadAll(MainWindow->HWindow);
 
-                        // pluginy FTP a WinSCP nove volaji SalamanderGeneral->SetPluginUsesPasswordManager() aby se prihlasily k odberu eventu z password managera
-                        // zavedeno s verzi kofigurace 45 -- dame vsem pluginum moznost se prihlasit
-                        if (Configuration.ConfigVersion < 45) // zavedeni password manageru
+                        // FTP and WinSCP plug-ins now call SalamanderGeneral->SetPluginUsesPasswordManager() to subscribe to password manager events
+                        // introduced with configuration version 45 -- give all plug-ins a chance to subscribe
+                        if (Configuration.ConfigVersion < 45) // introduction of the password manager
                             Plugins.LoadAll(MainWindow->HWindow);
 
-                        // save uz pujde do nejnovejsiho klice
+                        // future saves will go into the newest key
                         SALAMANDER_ROOT_REG = SalamanderConfigurationRoots[0];
-                        // konfiguraci ulozime hned, dokud je to cista konverze stare verze -- user muze
-                        // mit vypnuty "Save Cfg on Exit" a pokud behem chodu Salamandera neco zmeni, nechce to na zaver ulozit
+                        // store the configuration immediately while it is still a clean conversion of the old version -- the user may
+                        // have "Save Cfg on Exit" disabled and might not want to save end-of-session changes
                         if (saveNewConfig)
                         {
                             MainWindow->SaveConfig();
                         }
-                        // prohleda pole a pokud je nektery z rootu oznaceny pro smazani, smaze ho + smaze starou konfiguraci
-                        // po UPGRADE a tez smazne hodnotu "AutoImportConfig" v klici konfigurace teto verze Salama
+                        // scan the array; if any root is marked for deletion, remove it together with the old configuration
+                        // after UPGRADE it also clears the "AutoImportConfig" value in this version's configuration key
                         MainWindow->DeleteOldConfigurations(deleteConfigurations, autoImportConfig, autoImportConfigFromKey,
                                                             doNotDeleteImportedCfg);
 
-                        // jen prvni instance Salamandera: podivame se, jestli neni potreba vycistit
-                        // TEMP od zbytecnych souboru disk-cache (pri padu nebo zamknuti jinou aplikaci
-                        // muzou soubory v TEMPu zustat)
-                        // musime testoval na globalni (skrz vsechny sessions) promennou, aby se videly dve
-                        // instance Salamanderu spustene pod FastUserSwitching
-                        // Problem nahlasen na foru: https://forum.altap.cz/viewtopic.php?t=2643
+                        // only the first Salamander instance: check whether TEMP needs cleaning from leftover disk-cache files
+                        // (after a crash or another application locking them the files may remain)
+                        // we must test a global (cross-session) variable so two Salamander instances launched via Fast User Switching see each other
+                        // problem reported on the message board (Altap community topic 2643)
                         if (FirstInstance_3_or_later)
                         {
                             DiskCache.ClearTEMPIfNeeded(MainWindow->HWindow, MainWindow->GetActivePanelHWND());
                         }
 
-                        if (importCfgFromFileWasSkipped) // pokud jsme preskocili import config.reg nebo jineho .reg souboru (parametr -C)
-                        {                                // informujeme usera o nutnosti noveho startu Salama a nechame ho exitnout soft
+                        if (importCfgFromFileWasSkipped) // if we skipped importing config.reg or another .reg file (the -C parameter)
+                        {                                // inform the user that Salamander must be restarted and let them exit
                             MSGBOXEX_PARAMS params;
                             memset(&params, 0, sizeof(params));
                             params.HParent = MainWindow->HWindow;
@@ -4310,9 +4304,9 @@ FIND_NEW_SLG_FILE:
                             params.Caption = SALAMANDER_TEXT_VERSION;
                             params.Text = LoadStr(IDS_IMPORTCFGFROMFILESKIPPED);
                             char aliasBtnNames[200];
-                            /* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-   nechame pro tlacitka msgboxu resit kolize hotkeys tim, ze simulujeme, ze jde o menu
-MENU_TEMPLATE_ITEM MsgBoxButtons[] = 
+                            /* used by the export_mnu.py script that generates salmenu.mnu for the Translator
+   we let the message-box buttons resolve hotkey collisions by simulating a menu
+MENU_TEMPLATE_ITEM MsgBoxButtons[] =
 {
   {MNTT_PB, 0
   {MNTT_IT, IDS_SELLANGEXITBUTTON
@@ -4325,42 +4319,42 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                             PostMessage(MainWindow->HWindow, WM_USER_FORCECLOSE_MAINWND, 0, 0);
                         }
                         /*
-            // je-li treba, vyvolame zobrazeni dialogu Tip of the Day
-            // 0xffffffff = open quiet - pokud to nedopadne, neserveme usera
+            // trigger the Tip of the Day dialog if needed
+            // 0xffffffff = open quietly - if it fails, do not bother the user
             if (Configuration.ShowTipOfTheDay)
               PostMessage(MainWindow->HWindow, WM_COMMAND, CM_HELP_TIP, 0xffffffff);
   */
                     }
 
-                    // odted se uz budou pamatovat zavirane cesty
+                    // from now on closed paths will be remembered
                     MainWindow->CanAddToDirHistory = TRUE;
 
-                    // uzivatele chteji mit start-up cestu v historii i v pripade, ze ji neuspinili
+                    // users want the start-up path in the history even if they have not touched it
                     MainWindow->LeftPanel->UserWorkedOnThisPath = TRUE;
                     MainWindow->RightPanel->UserWorkedOnThisPath = TRUE;
 
-                    // dame seznamu procesu vedet, ze bezime a mame hlavni okno (je mozne nas aktivovat pri OnlyOneInstance)
+                    // notify the process list that we are running and have a main window (OnlyOneInstance can now activate us)
                     TaskList.SetProcessState(PROCESS_STATE_RUNNING, MainWindow->HWindow);
 
-                    // pozadame Salmon o kontrolu, zda na disku nejsou stare bug reporty, ktere by bylo potreba odeslat
+                    // ask Salmon to check whether there are old bug reports on disk that need to be sent
                     SalmonCheckBugs();
 
                     if (IsSLGIncomplete[0] != 0 && Configuration.ShowSLGIncomplete)
                         PostMessage(MainWindow->HWindow, WM_USER_SLGINCOMPLETE, 0, 0);
 
-                    //--- aplikacni smycka
+                    //--- application loop
                     CALL_STACK_MESSAGE1("WinMainBody::message_loop");
                     DWORD activateParamsRequestUID = 0;
                     BOOL skipMenuBar;
                     MSG msg;
-                    BOOL haveMSG = FALSE; // FALSE pokud se ma volat GetMessage() v podmince cyklu
+                    BOOL haveMSG = FALSE; // FALSE when GetMessage() should be called in the loop condition
                     while (haveMSG || GetMessage(&msg, NULL, 0, 0))
                     {
                         haveMSG = FALSE;
                         if (msg.message != WM_USER_SHOWWINDOW && msg.message != WM_USER_WAKEUP_FROM_IDLE && /*msg.message != WM_USER_SETPATHS &&*/
                             msg.message != WM_QUERYENDSESSION && msg.message != WM_USER_SALSHEXT_PASTE &&
                             msg.message != WM_USER_CLOSE_MAINWND && msg.message != WM_USER_FORCECLOSE_MAINWND)
-                        { // krom "connect", "shutdown", "do-paste" a "close-main-wnd" messages jsou vsechny zacatkem BUSY rezimu
+                        { // apart from "connect", "shutdown", "do-paste", and "close-main-wnd", every message starts the BUSY mode
                             SalamanderBusy = TRUE;
                             LastSalamanderIdleTime = GetTickCount();
                         }
@@ -4368,22 +4362,22 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                         if ((msg.message == WM_SYSKEYDOWN || msg.message == WM_KEYDOWN) &&
                             msg.wParam != VK_MENU && msg.wParam != VK_CONTROL && msg.wParam != VK_SHIFT)
                         {
-                            SetCurrentToolTip(NULL, 0); // zhasneme tooltip
+                            SetCurrentToolTip(NULL, 0); // hide the tooltip
                         }
 
                         skipMenuBar = FALSE;
                         if (Configuration.QuickSearchEnterAlt && msg.message == WM_SYSCHAR)
                             skipMenuBar = TRUE;
 
-                        // zajistime zaslani zprav do naseho menu (obchazime tim potrebu hooku pro klavesnici)
+                        // ensure messages reach our menu (avoids the need for a keyboard hook)
                         if (MainWindow == NULL || MainWindow->MenuBar == NULL || !MainWindow->CaptionIsActive ||
                             MainWindow->QuickRenameWindowActive() ||
-                            skipMenuBar || GetCapture() != NULL || // je-li captured mouse - mohli bychom zpusobit vizualni problemy
+                            skipMenuBar || GetCapture() != NULL || // if the mouse is captured we could cause visual glitches
                             !MainWindow->MenuBar->IsMenuBarMessage(&msg))
                         {
                             CWindowsObject* wnd = WindowsManager.GetWindowPtr(GetActiveWindow());
 
-                            // Bottom Toolbar - zmena textu podle VK_CTRL, VK_MENU a VK_SHIFT
+                            // Bottom Toolbar - update text based on VK_CTRL, VK_MENU, and VK_SHIFT
                             if ((msg.message == WM_SYSKEYDOWN || msg.message == WM_KEYDOWN ||
                                  msg.message == WM_SYSKEYUP || msg.message == WM_KEYUP) &&
                                 MainWindow != NULL)
@@ -4391,7 +4385,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
 
                             if ((wnd == NULL || !wnd->Is(otDialog) ||
                                  !IsDialogMessage(wnd->HWindow, &msg)) &&
-                                (MainWindow == NULL || !MainWindow->CaptionIsActive || // pridano "!MainWindow->CaptionIsActive", aby se v nemodalnich oknech pluginu neprekladaly akceleratory (F7 v "FTP Logs" neni nic moc)
+                                (MainWindow == NULL || !MainWindow->CaptionIsActive || // added "!MainWindow->CaptionIsActive" so accelerators are not translated in plug-in modeless windows (F7 in "FTP Logs" would be odd)
                                  MainWindow->QuickRenameWindowActive() ||
                                  !TranslateAccelerator(MainWindow->HWindow, AccelTable1, &msg) &&
                                      (MainWindow->EditMode || !TranslateAccelerator(MainWindow->HWindow, AccelTable2, &msg))))
@@ -4402,7 +4396,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                         }
 
                         if (MainWindow != NULL && MainWindow->CanClose)
-                        { // je-li Salamander nastartovany, muzeme ho prohlasit za NE BUSY
+                        { // if Salamander is running, we can declare it NOT BUSY
                             SalamanderBusy = FALSE;
                         }
 
@@ -4410,16 +4404,16 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                         if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
                         {
                             if (msg.message == WM_QUIT)
-                                break;      // ekvivalent situace, kdy GetMessage() vraci FALSE
-                            haveMSG = TRUE; // mame zpravu, jdeme ji zpracovat (bez volani GetMessage())
+                                break;      // equivalent to GetMessage() returning FALSE
+                            haveMSG = TRUE; // we already have a message, process it without calling GetMessage()
                         }
-                        else // pokud ve fronte neni zadna message, provedeme Idle processing
+                        else // if there is no message in the queue, perform Idle processing
                         {
 #ifdef _DEBUG
-                            // jednou za tri vteriny osetrime konzistenci heapu
+                            // check heap consistency every three seconds
                             if (_CrtSetDbgFlag(_CRTDBG_REPORT_FLAG) & _CRTDBG_ALLOC_MEM_DF)
                             {
-                                if (GetTickCount() - LastCrtCheckMemoryTime > 3000) // kazde tri vteriny
+                                if (GetTickCount() - LastCrtCheckMemoryTime > 3000) // every three seconds
                                 {
                                     if (!_CrtCheckMemory())
                                     {
@@ -4435,40 +4429,40 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
 
                             if (MainWindow != NULL)
                             {
-                                CannotCloseSalMainWnd = TRUE; // musime zamezit zavreni hlavniho okna Salamandera behem provadeni nasledujicich rutin
+                                CannotCloseSalMainWnd = TRUE; // prevent the main window from closing while we run the following routines
                                 MainWindow->OnEnterIdle();
 
-                                // na pusteni ESC cekame jen pokud refresh listingu v panelu primo
-                                // navazuje (coz pres IDLE nehrozi)
+                                // wait for ESC to be released only when a panel refresh follows immediately
+                                // (which does not happen during IDLE)
                                 if (WaitForESCReleaseBeforeTestingESC)
                                     WaitForESCReleaseBeforeTestingESC = FALSE;
 
-                                // zjistime, zda nas nezada cizi "OnlyOneInstance" Salamander o aktivaci a nastaveni cest v panelech?
-                                // FControlThread by v takovem pripade nastavil parametry do globalni CommandLineParams a zvysil RequestUID
-                                // pokud byl hlavni thread v IDLE, probral se diky postnute WM_USER_WAKEUP_FROM_IDLE
+                                // check whether another "OnlyOneInstance" Salamander asked us to activate and set panel paths
+                                // in that case FControlThread stores the parameters into the global CommandLineParams and increments RequestUID
+                                // if the main thread was in IDLE it was woken up by the posted WM_USER_WAKEUP_FROM_IDLE
                                 if (!SalamanderBusy && CommandLineParams.RequestUID > activateParamsRequestUID)
                                 {
                                     CCommandLineParams paramsCopy;
                                     BOOL applyParams = FALSE;
 
                                     NOHANDLES(EnterCriticalSection(&CommandLineParamsCS));
-                                    // tesne pred vstupem do kriticke sekce mohlo dojit k timeoutu v control threadu, overime ze jeste stoji o vysledek
-                                    // zaroven overime, ze pozadavak neexpiroval (volajici vlakno ceka pouze do TASKLIST_TODO_TIMEOUT a potom cekani
-                                    // vzda a spusti novou instanci Salamander; nechceme v takovem pripade pozadavek vyplnit)
+                                    // just before entering the critical section the control thread may have timed out; verify it still wants the result
+                                    // also confirm the request has not expired (the caller waits only TASKLIST_TODO_TIMEOUT before
+                                    // giving up and launching a new Salamander instance; we do not want to fulfill the request in that case)
                                     DWORD tickCount = GetTickCount();
                                     if (CommandLineParams.RequestUID != 0 && tickCount - CommandLineParams.RequestTimestamp < TASKLIST_TODO_TIMEOUT)
                                     {
                                         memcpy(&paramsCopy, &CommandLineParams, sizeof(CCommandLineParams));
                                         applyParams = TRUE;
 
-                                        // ulozime UID, ktere jsme jiz odbavili, abychom necyklili
+                                        // remember the UID we already handled so we do not loop
                                         activateParamsRequestUID = CommandLineParams.RequestUID;
-                                        // dame control threadu zpravu, ze jsme cesty prijali
+                                        // notify the control thread that we accepted the paths
                                         SetEvent(CommandLineParamsProcessed);
                                     }
                                     NOHANDLES(LeaveCriticalSection(&CommandLineParamsCS));
 
-                                    // uvolnili jsme sdilene prostredky, muzeme se jit parat s cestama
+                                    // shared resources released; we can now deal with the paths
                                     if (applyParams && MainWindow != NULL)
                                     {
                                         SendMessage(MainWindow->HWindow, WM_USER_SHOWWINDOW, 0, 0);
@@ -4476,7 +4470,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                                     }
                                 }
 
-                                // zajistime unik z odstranenych drivu na fixed drive (po vysunuti device - USB flash disk, atd.)
+                                // ensure we escape removed drives to a fixed drive (after ejecting a device such as a USB flash disk)
                                 if (!SalamanderBusy && ChangeLeftPanelToFixedWhenIdle)
                                 {
                                     ChangeLeftPanelToFixedWhenIdle = FALSE;
@@ -4500,35 +4494,35 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                                         PostMessage(MainWindow->HWindow, WM_USER_CONFIGURATION, 6, 0);
                                 }
 
-                                // pokud nejaky plug-in chtel unload nebo rebuild menu, provedeme ho... (jen neni-li "busy")
+                                // if any plug-in requested an unload or menu rebuild, perform it (only when not "busy")
                                 if (!SalamanderBusy && ExecCmdsOrUnloadMarkedPlugins)
                                 {
                                     int cmd;
                                     CPluginData* data;
                                     Plugins.GetCmdAndUnloadMarkedPlugins(MainWindow->HWindow, &cmd, &data);
                                     ExecCmdsOrUnloadMarkedPlugins = (cmd != -1);
-                                    if (cmd >= 0 && cmd < 500) // spusteni prikazu Salamandera na zadost plug-inu
+                                    if (cmd >= 0 && cmd < 500) // run a Salamander command requested by a plug-in
                                     {
                                         int wmCmd = GetWMCommandFromSalCmd(cmd);
                                         if (wmCmd != -1)
                                         {
-                                            // vygenerujeme WM_COMMAND a nechame ho hned zpracovat
+                                            // generate WM_COMMAND and process it immediately
                                             msg.hwnd = MainWindow->HWindow;
                                             msg.message = WM_COMMAND;
-                                            msg.wParam = (DWORD)LOWORD(wmCmd); // radsi orizneme horni WORD (0 - cmd z menu)
+                                            msg.wParam = (DWORD)LOWORD(wmCmd); // trim the upper WORD just in case (0 - command from menu)
                                             msg.lParam = 0;
                                             msg.time = GetTickCount();
                                             GetCursorPos(&msg.pt);
 
-                                            haveMSG = TRUE; // mame zpravu, jdeme ji zpracovat (bez volani GetMessage())
+                                            haveMSG = TRUE; // we already have a message, process it without calling GetMessage()
                                         }
                                     }
                                     else
                                     {
-                                        if (cmd >= 500 && cmd < 1000500) // spusteni prikazu menuExt na zadost plug-inu
+                                        if (cmd >= 500 && cmd < 1000500) // run a menuExt command requested by a plug-in
                                         {
                                             int id = cmd - 500;
-                                            SalamanderBusy = TRUE; // jdeme provest prikaz menu - uz jsme zase "busy"
+                                            SalamanderBusy = TRUE; // executing a menu command, we are "busy" again
                                             LastSalamanderIdleTime = GetTickCount();
                                             if (data != NULL && data->GetLoaded())
                                             {
@@ -4537,13 +4531,13 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                                                     CALL_STACK_MESSAGE4("CPluginInterfaceForMenuExt::ExecuteMenuItem(, , %d,) (%s v. %s)",
                                                                         id, data->DLLName, data->Version);
 
-                                                    // snizime prioritu threadu na "normal" (aby operace prilis nezatezovaly stroj)
+                                                    // temporarily lower thread priority to "normal" (so the operation does not overload the machine)
                                                     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
 
                                                     CSalamanderForOperations sm(MainWindow->GetActivePanel());
                                                     data->GetPluginInterfaceForMenuExt()->ExecuteMenuItem(&sm, MainWindow->HWindow, id, 0);
 
-                                                    // opet zvysime prioritu threadu, operace dobehla
+                                                    // restore the higher thread priority after the operation completes
                                                     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
                                                 }
                                                 else
@@ -4554,16 +4548,16 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                                             }
                                             else
                                             {
-                                                // nemusi byt naloaden, staci aby se PostMenuExtCommand zavolal z Release pluginu,
-                                                // ktery je vyvolany postnutym unloadem
+                                                // it may not be loaded; PostMenuExtCommand could have been called from a Release plug-in
+                                                // triggered by a posted unload
                                                 // TRACE_E("Unexpected situation during call of menu command in \"sal-idle\".");
                                             }
-                                            if (MainWindow != NULL && MainWindow->CanClose) // konec provadeni prikazu menu
-                                            {                                               // je-li Salamander nastartovany, muzeme ho prohlasit za NE BUSY
+                                            if (MainWindow != NULL && MainWindow->CanClose) // menu command finished
+                                            {                                               // if Salamander is running, we can declare it NOT BUSY
                                                 SalamanderBusy = FALSE;
                                             }
                                             CannotCloseSalMainWnd = FALSE;
-                                            goto TEST_IDLE; // zkusime znovu "idle" (napr. aby se mohl zpracovat dalsi postnuty prikaz/unload)
+                                            goto TEST_IDLE; // re-enter IDLE (e.g., to process another posted command/unload)
                                         }
                                     }
                                 }
@@ -4573,18 +4567,18 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                                     int pluginIndex;
                                     Plugins.OpenPackOrUnpackDlgForMarkedPlugins(&data, &pluginIndex);
                                     OpenPackOrUnpackDlgForMarkedPlugins = (data != NULL);
-                                    if (data != NULL) // otevreni Pack/Unpack dialogu na zadost plug-inu
+                                    if (data != NULL) // open the Pack/Unpack dialog as requested by a plug-in
                                     {
-                                        SalamanderBusy = TRUE; // jdeme provest prikaz menu - uz jsme zase "busy"
+                                        SalamanderBusy = TRUE; // executing a menu command, we are "busy" again
                                         LastSalamanderIdleTime = GetTickCount();
                                         if (data->OpenPackDlg)
                                         {
                                             CFilesWindow* activePanel = MainWindow->GetActivePanel();
                                             if (activePanel != NULL && activePanel->Is(ptDisk))
-                                            { // otevreni Pack dialogu
+                                            { // open the Pack dialog
                                                 MainWindow->CancelPanelsUI();
                                                 activePanel->UserWorkedOnThisPath = TRUE;
-                                                activePanel->StoreSelection(); // ulozime selection pro prikaz Restore Selection
+                                                activePanel->StoreSelection(); // save the selection for the Restore Selection command
                                                 activePanel->Pack(MainWindow->GetNonActivePanel(), pluginIndex,
                                                                   data->Name, data->PackDlgDelFilesAfterPacking);
                                             }
@@ -4599,10 +4593,10 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                                             {
                                                 CFilesWindow* activePanel = MainWindow->GetActivePanel();
                                                 if (activePanel != NULL && activePanel->Is(ptDisk))
-                                                { // otevreni Unpack dialogu
+                                                { // open the Unpack dialog
                                                     MainWindow->CancelPanelsUI();
                                                     activePanel->UserWorkedOnThisPath = TRUE;
-                                                    activePanel->StoreSelection(); // ulozime selection pro prikaz Restore Selection
+                                                    activePanel->StoreSelection(); // save the selection for the Restore Selection command
                                                     activePanel->Unpack(MainWindow->GetNonActivePanel(), pluginIndex,
                                                                         data->Name, data->UnpackDlgUnpackMask);
                                                 }
@@ -4614,16 +4608,16 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                                                 data->UnpackDlgUnpackMask = NULL;
                                             }
                                         }
-                                        if (MainWindow != NULL && MainWindow->CanClose) // konec otevirani Pack/Unpack dialogu
-                                        {                                               // je-li Salamander nastartovany, muzeme ho prohlasit za NE BUSY
+                                        if (MainWindow != NULL && MainWindow->CanClose) // finished opening the Pack/Unpack dialog
+                                        {                                               // if Salamander is running we can mark it as NOT BUSY
                                             SalamanderBusy = FALSE;
                                         }
                                         CannotCloseSalMainWnd = FALSE;
-                                        goto TEST_IDLE; // zkusime znovu "idle" (napr. aby se mohl zpracovat dalsi postnuty prikaz/unload/Pack/Unpack)
+                                        goto TEST_IDLE; // return to "idle" (e.g., to process another posted command/unload/Pack/Unpack)
                                     }
                                 }
                                 if (!SalamanderBusy && OpenReadmeInNotepad[0] != 0)
-                                { // spustime notepad se souborem 'OpenReadmeInNotepad' pro instalak pod Vista+
+                                { // launch Notepad with the 'OpenReadmeInNotepad' file for the Vista+ installer
                                     StartNotepad(OpenReadmeInNotepad);
                                     OpenReadmeInNotepad[0] = 0;
                                 }
@@ -4643,35 +4637,35 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
     else
         TRACE_E("Unable to register main window class.");
 
-    // pro pripad chyby zkusim zavrit dialog
+    // in case of an error try to close the dialog
     SplashScreenCloseIfExist();
 
-    // vratime prioritu do puvodniho stavu
+    // restore the original thread priority
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
 
-    //--- vsem oknum dame 1 sekundu na to, aby se uzavreli, pak je nechame odpojit
+    //--- give all windows one second to close, then disconnect them
     int timeOut = 10;
     int winsCount = WindowsManager.GetCount();
     while (timeOut-- && winsCount > 0)
     {
         Sleep(100);
         int c = WindowsManager.GetCount();
-        if (winsCount > c) // zatim jeste ubyvaji okna, budeme cekat dale aspon 1 sekundu
+        if (winsCount > c) // windows are still disappearing, keep waiting at least one more second
         {
             winsCount = c;
             timeOut = 10;
         }
     }
 
-//--- informace
+//--- information
 #ifdef __DEBUG_WINLIB
     TRACE_I("WindowsManager: " << WindowsManager.maxWndCount << " windows, " << WindowsManager.search << " searches, " << WindowsManager.cache << " cached searches.");
 #endif
     //---
-    DestroySafeWaitWindow(TRUE); // povel "terminate" safe-wait-message threadu
-    Sleep(1000);                 // nechame vsem threadum viewru cas, aby se ukoncili
-    NBWNetAC3Thread.Close(TRUE); // bezici thread nechame zabit (presun do AuxThreads), dalsi akce zablokujeme
-    TerminateAuxThreads();       // zbytek nasilne terminujeme
+    DestroySafeWaitWindow(TRUE); // send "terminate" to the safe-wait-message thread
+    Sleep(1000);                 // allow all viewer threads time to finish
+    NBWNetAC3Thread.Close(TRUE); // terminate the running thread (move to AuxThreads) and block further actions
+    TerminateAuxThreads();       // forcibly end the rest
                                  //---
     TerminateThread();
     ReleaseFileNamesEnumForViewers();
@@ -4691,7 +4685,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
     HANDLES(FreeLibrary(HLanguage));
     HLanguage = NULL;
 
-    // pro jistotu zavreme az jako posledni, ale asi zbytecne obavy
+    // close this last just to be safe, although the concern is probably unnecessary
     ReleaseSalOpen();
 
     if (NtDLL != NULL)
@@ -4706,9 +4700,9 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
     }
 
     //OleSpyStressTest(); // multi-threaded stress test
-    // OleSpyRevoke();     // odpojime OLESPY
-    OleUninitialize(); // deinicializace OLE
-    // OleSpyDump();       // vypiseme leaky
+    // OleSpyRevoke();     // detach OLESPY
+    OleUninitialize(); // deinitialize OLE
+    // OleSpyDump();       // dump any leaks
 
     TRACE_I("End");
     return 0;
@@ -4735,7 +4729,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR cmdLine, int cmdShow
     {
         TRACE_I("Thread Main: calling ExitProcess(1).");
         //    ExitProcess(1);
-        TerminateProcess(GetCurrentProcess(), 1); // tvrdsi exit (tenhle jeste neco vola)
+        TerminateProcess(GetCurrentProcess(), 1); // harder exit (this one still performs some calls)
         return 1;
     }
 #endif // CALLSTK_DISABLE
