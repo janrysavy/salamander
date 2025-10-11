@@ -1500,59 +1500,59 @@ public:
                         if ((l != 2 || Buffer[0] != '\\' || Buffer[1] != '\\') && // Not the path "\\\\" (Nethood root)
                             l > 0 && Buffer[l - 1] == '\\')
                             Buffer[--l] = 0;             // A trailing \\ is not welcome
-                        if (l == 2 && Buffer[0] != '\\') // A non-UNC root path must end with \\
+                        if (l == 2 && Buffer[0] != '\\') // A non-UNC root path must end with '\\'
                         {
                             Buffer[l++] = '\\';
+                            Buffer[l] = 0;
+                        }
+                        if (l == 6 && Buffer[0] == '\\' && Buffer[1] == '\\' && Buffer[2] == '.' && Buffer[3] == '\\' &&
+                            Buffer[4] != 0 && Buffer[5] == ':') // The "\\.\C:\" root path must end with '\\'
+                        {
+                            Buffer[l++] = '\\';
+                            Buffer[l] = 0;
+                        }
+                    }
+
+                    PostMessage(FilesWindow->HWindow, WM_USER_CHANGEDIR, TRUE, (LPARAM)Buffer);
+                    if (UseUnicode)
+                        free(path);
+                }
+                HANDLES(GlobalUnlock(stgMedium.hGlobal));
+            }
+        }
+        else
+        {
+            char path[MAX_PATH];
+            if (GetDirFromDataObject(pDataObject, path))
+            {
+                // Adjust the path
+                strcpy(Buffer, path);
+
+                if (!IsPluginFSPath(Buffer))
+                {
+                    int l = (int)strlen(Buffer);
+                    if (l > 0 && Buffer[l - 1] == '\\')
+                        Buffer[--l] = 0;             // A trailing '\\' is not welcome
+                    if (l == 2 && Buffer[0] != '\\') // A non-UNC root path must end with '\\'
+                    {
+                        Buffer[l++] = '\\';
                         Buffer[l] = 0;
                     }
-                    if (l == 6 && Buffer[0] == '\\' && Buffer[1] == '\\' && Buffer[2] == '.' && Buffer[3] == '\\' &&
-                        Buffer[4] != 0 && Buffer[5] == ':') // The "\\.\C:\" root path must end with \\
-                        {
-                        Buffer[l++] = '\\';
-                    Buffer[l] = 0;
                 }
+
+                PostMessage(FilesWindow->HWindow, WM_USER_CHANGEDIR, FALSE, (LPARAM)Buffer);
             }
-
-            PostMessage(FilesWindow->HWindow, WM_USER_CHANGEDIR, TRUE, (LPARAM)Buffer);
-            if (UseUnicode)
-                free(path);
         }
-        HANDLES(GlobalUnlock(stgMedium.hGlobal));
-    }
-} else
-{
-    char path[MAX_PATH];
-    if (GetDirFromDataObject(pDataObject, path))
-    {
-        // Adjust the path
-        strcpy(Buffer, path);
 
-        if (!IsPluginFSPath(Buffer))
+        if (DataObject != NULL)
         {
-            int l = (int)strlen(Buffer);
-            if (l > 0 && Buffer[l - 1] == '\\')
-                Buffer[--l] = 0;             // A trailing \\ is not welcome
-            if (l == 2 && Buffer[0] != '\\') // A non-UNC root path must end with \\
-                    {
-                Buffer[l++] = '\\';
-            Buffer[l] = 0;
+            DataObject->Release();
+            DataObject = NULL;
         }
+        *pdwEffect = DROPEFFECT_NONE;
+        return S_OK;
     }
-
-    PostMessage(FilesWindow->HWindow, WM_USER_CHANGEDIR, FALSE, (LPARAM)Buffer);
-}
-}
-
-if (DataObject != NULL)
-{
-    DataObject->Release();
-    DataObject = NULL;
-}
-*pdwEffect = DROPEFFECT_NONE;
-return S_OK;
-}
-}
-;
+};
 
 void CStatusWindow::RegisterDragDrop()
 {

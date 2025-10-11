@@ -4257,8 +4257,7 @@ void DoCopyFileLoopAsync(CAsyncCopyParams* asyncPar, HANDLE& in, HANDLE& out, vo
                     }
                 }
                 if (!doCopy || retryCopy)
-                    if (!doCopy || retryCopy)
-                        break;
+                    break;
             }
             if (!doCopy || retryCopy)
                 break;
