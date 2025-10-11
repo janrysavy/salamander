@@ -739,7 +739,7 @@ void ChangeDirectory(CFilesWindow* win, const char* newPath, BOOL registerDevNot
             }
             break;
         }
-        //---  not found -> add it
+    //---  not found -> add it
     if (i == WindowArray.Count)
     {
         // if the path ends with a space or dot we must append '\\', otherwise FindFirstChangeNotification

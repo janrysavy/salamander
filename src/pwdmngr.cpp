@@ -556,7 +556,7 @@ BOOL CPasswordManager::EncryptPassword(const char* plainPassword, BYTE** encrypt
         memcpy(*encryptedPassword + 1 + 16, scrambledPassword, scrambledPasswordLen); // copy the scrambled password without the terminator
 
         CSalAES aes;
-        WORD dummy; // unnecessary weakness; ignore it
+        WORD dummy;                                                                                                                                            // unnecessary weakness; ignore it
         int ret = SalamanderCrypt->AESInit(&aes, PASSWORD_MANAGER_AES_MODE, PlainMasterPassword, strlen(PlainMasterPassword), *encryptedPassword + 1, &dummy); // the salt follows the signature in 16 bytes
         if (ret != SAL_AES_ERR_GOOD_RETURN)
             TRACE_E("CPasswordManager::EncryptPassword(): unexpected state, ret=" << ret);       // should not happen

@@ -3545,7 +3545,7 @@ int WinMainBody(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine,
 //  strcpy( p1 , "Oops" );
 #endif //_DEBUG
 
-/*
+    /*
    // test "Heap Block Corruptions: Full-page heap", see http://support.microsoft.com/kb/286470
    // allocates all blocks (must be at least 16 bytes) with an inaccessible page behind them,
    // so any overwrite beyond the block immediately raises an exception

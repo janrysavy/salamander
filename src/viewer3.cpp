@@ -2385,7 +2385,7 @@ CViewerWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                             {
                                 if (firstLineEndOff != -1 &&  // -1 = unknown offset of the first line's end (can happen when the file changes)
                                     firstLineCharLen != -1 && // -1 = unknown length of the first line in characters
-                                SeekY <= firstLineEndOff) // just to be safe
+                                    SeekY <= firstLineEndOff) // just to be safe
                                 {
                                     if (!GetOffsetFromXInText(&curX, &curOff, EndSelectionPrefX, -1, SeekY, firstLineCharLen,
                                                               firstLineEndOff))

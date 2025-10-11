@@ -4201,7 +4201,7 @@ void DoCopyFileLoopAsync(CAsyncCopyParams* asyncPar, HANDLE& in, HANDLE& out, vo
                                 ctx.BlockState[i] = cbsRead;
                             }
                         }
-                    else // error
+                        else // error
                         {
                             if (!ctx.HandleReadingErr(i, GetLastError(), &copyError, &skipCopy, &copyAgain))
                                 return;       // cancel/skip(skip-all)/retry-complete
@@ -4256,9 +4256,9 @@ void DoCopyFileLoopAsync(CAsyncCopyParams* asyncPar, HANDLE& in, HANDLE& out, vo
                     }
                     }
                 }
-        if (!doCopy || retryCopy)
                 if (!doCopy || retryCopy)
-                    break;
+                    if (!doCopy || retryCopy)
+                        break;
             }
             if (!doCopy || retryCopy)
                 break;
@@ -4355,14 +4355,14 @@ void DoCopyFileLoopAsync(CAsyncCopyParams* asyncPar, HANDLE& in, HANDLE& out, vo
                     !SetEndOfFile(out))
                 {
                     DWORD err2 = GetLastError();
-                if ((off.LoDWord != INVALID_SET_FILE_POINTER || err2 == NO_ERROR) && off != ctx.WriteOffset)
-                    err2 = ERROR_INVALID_FUNCTION; // successful SetFilePointer, but off != ctx.WriteOffset: probably never happens, included for completeness
+                    if ((off.LoDWord != INVALID_SET_FILE_POINTER || err2 == NO_ERROR) && off != ctx.WriteOffset)
+                        err2 = ERROR_INVALID_FUNCTION; // successful SetFilePointer, but off != ctx.WriteOffset: probably never happens, included for completeness
                     if (!ctx.HandleWritingErr(-1, err2, &copyError, &skipCopy, &copyAgain, allocFileSize, CQuadWord(0, 0)))
                         return; // cancel/skip(skip-all)/retry-complete
                                 // retry-resume
                 }
-            else
-                break; // success
+                else
+                    break; // success
             }
         }
 
@@ -4497,7 +4497,7 @@ BOOL DoCopyFile(COperation* op, HWND hProgressDlg, void* buffer,
     // - with the old algorithm, copying on Win7 over the network is easily 2x-3x slower for downloads,
     //   almost 2x slower for uploads, and about 30% slower for network-to-network copies
     BOOL useAsyncAlg = Windows7AndLater && Configuration.UseAsyncCopyAlg &&
-                         op->FileSize.Value > 0 && // empty files are copied synchronously (no data)
+                       op->FileSize.Value > 0 && // empty files are copied synchronously (no data)
                        ((op->OpFlags & OPFL_SRCPATH_IS_NET) && ((op->OpFlags & OPFL_TGTPATH_IS_NET) ||
                                                                 (op->OpFlags & OPFL_TGTPATH_IS_FAST)) ||
                         (op->OpFlags & OPFL_TGTPATH_IS_NET) && (op->OpFlags & OPFL_SRCPATH_IS_FAST));
@@ -4866,39 +4866,39 @@ COPY_AGAIN:
                     HANDLES(CloseHandle(in));
                     in = NULL;
 
-        if (operationDone < COPY_MIN_FILE_SIZE) // zero/small files take at least as long as files of size COPY_MIN_FILE_SIZE
-            script->AddBytesToSpeedMetersAndTFSandPS((DWORD)(COPY_MIN_FILE_SIZE - operationDone).Value, TRUE, 0, NULL, MAX_OP_FILESIZE);
+                    if (operationDone < COPY_MIN_FILE_SIZE) // zero/small files take at least as long as files of size COPY_MIN_FILE_SIZE
+                        script->AddBytesToSpeedMetersAndTFSandPS((DWORD)(COPY_MIN_FILE_SIZE - operationDone).Value, TRUE, 0, NULL, MAX_OP_FILESIZE);
 
                     DWORD attr = op->Attr & clearReadonlyMask;
-        if (copyADS) // copy ADS streams if needed
-        {
-            SetFileAttributes(op->TargetName, FILE_ATTRIBUTE_ARCHIVE); // probably unnecessary, but it hardly slows copying; reason: the file must not be read-only to work with it
-            CQuadWord operDone = operationDone;                        // the file is already copied
-            if (operDone < COPY_MIN_FILE_SIZE)
-                operDone = COPY_MIN_FILE_SIZE; // zero/small files take at least as long as files of size COPY_MIN_FILE_SIZE
-            BOOL adsSkip = FALSE;
-            if (!DoCopyADS(hProgressDlg, op->SourceName, FALSE, op->TargetName, totalDone,
-                           operDone, op->Size, dlgData, script, &adsSkip, buffer) ||
-                adsSkip) // user hit cancel or skipped at least one ADS
-            {
-                if (out != NULL)
-                    HANDLES(CloseHandle(out));
-                out = NULL;
-                if (DeleteFile(op->TargetName) == 0)
-                {
-                    DWORD err = GetLastError();
-                    TRACE_E("DoCopyFile(): Unable to remove newly created file: " << op->TargetName << ", error: " << GetErrorText(err));
-                }
-                if (!adsSkip)
-                    return FALSE; // cancel the entire operation
-                if (skip != NULL)
-                    *skip = TRUE; // it is a Skip, must report higher up (Move must not delete the source file)
-            }
-        }
+                    if (copyADS) // copy ADS streams if needed
+                    {
+                        SetFileAttributes(op->TargetName, FILE_ATTRIBUTE_ARCHIVE); // probably unnecessary, but it hardly slows copying; reason: the file must not be read-only to work with it
+                        CQuadWord operDone = operationDone;                        // the file is already copied
+                        if (operDone < COPY_MIN_FILE_SIZE)
+                            operDone = COPY_MIN_FILE_SIZE; // zero/small files take at least as long as files of size COPY_MIN_FILE_SIZE
+                        BOOL adsSkip = FALSE;
+                        if (!DoCopyADS(hProgressDlg, op->SourceName, FALSE, op->TargetName, totalDone,
+                                       operDone, op->Size, dlgData, script, &adsSkip, buffer) ||
+                            adsSkip) // user hit cancel or skipped at least one ADS
+                        {
+                            if (out != NULL)
+                                HANDLES(CloseHandle(out));
+                            out = NULL;
+                            if (DeleteFile(op->TargetName) == 0)
+                            {
+                                DWORD err = GetLastError();
+                                TRACE_E("DoCopyFile(): Unable to remove newly created file: " << op->TargetName << ", error: " << GetErrorText(err));
+                            }
+                            if (!adsSkip)
+                                return FALSE; // cancel the entire operation
+                            if (skip != NULL)
+                                *skip = TRUE; // it is a Skip, must report higher up (Move must not delete the source file)
+                        }
+                    }
 
-        if (out != NULL)
-        {
-            if (!ignoreGetFileTimeErr) // only if we did not ignore the error while reading the file time (nothing to set otherwise)
+                    if (out != NULL)
+                    {
+                        if (!ignoreGetFileTimeErr) // only if we did not ignore the error while reading the file time (nothing to set otherwise)
                         {
                             BOOL ignoreSetFileTimeErr = FALSE;
                             while (!ignoreSetFileTimeErr &&
@@ -4929,8 +4929,8 @@ COPY_AGAIN:
                                 case IDRETRY:
                                     break;
 
-                            case IDB_IGNOREALL:
-                                dlgData.IgnoreAllSetFileTimeErr = TRUE; // the break; is intentionally missing here
+                                case IDB_IGNOREALL:
+                                    dlgData.IgnoreAllSetFileTimeErr = TRUE; // the break; is intentionally missing here
                                 case IDB_IGNORE:
                                 {
                                 IGNORE_SETFILETIME:
@@ -4992,12 +4992,12 @@ COPY_AGAIN:
                         SetFileAttributes(op->TargetName, script->CopyAttrs ? attr : (attr | FILE_ATTRIBUTE_ARCHIVE));
                     }
 
-            if (script->CopyAttrs) // verify whether the source file attributes were preserved
+                    if (script->CopyAttrs) // verify whether the source file attributes were preserved
                     {
                         DWORD curAttrs;
                         curAttrs = SalGetFileAttributes(op->TargetName);
-            if (curAttrs == INVALID_FILE_ATTRIBUTES || (curAttrs & DISPLAYED_ATTRIBUTES) != (attr & DISPLAYED_ATTRIBUTES))
-            {                                                              // attributes probably were not preserved, warn the user
+                        if (curAttrs == INVALID_FILE_ATTRIBUTES || (curAttrs & DISPLAYED_ATTRIBUTES) != (attr & DISPLAYED_ATTRIBUTES))
+                        {                                                              // attributes probably were not preserved, warn the user
                             WaitForSingleObject(dlgData.WorkerNotSuspended, INFINITE); // if we should be in suspend mode, wait ...
                             if (*dlgData.CancelWorker)
                                 goto COPY_ERROR_2;
@@ -5034,7 +5034,7 @@ COPY_AGAIN:
                         }
                     }
 
-        if (script->CopySecurity) // should we copy NTFS security permissions?
+                    if (script->CopySecurity) // should we copy NTFS security permissions?
                     {
                         DWORD err;
                         if (!DoCopySecurity(op->SourceName, op->TargetName, &err, NULL))
@@ -5491,7 +5491,7 @@ COPY_AGAIN:
             if (invalidSrcName)
                 err = ERROR_INVALID_NAME;
             if (asyncPar->Failed())
-        err = ERROR_NOT_ENOUGH_MEMORY;                         // cannot create the synchronization event = lack of resources (probably never happens, so we do not bother)
+                err = ERROR_NOT_ENOUGH_MEMORY;                         // cannot create the synchronization event = lack of resources (probably never happens, so we do not bother)
             WaitForSingleObject(dlgData.WorkerNotSuspended, INFINITE); // if we should be in suspend mode, wait ...
             if (*dlgData.CancelWorker)
                 return FALSE;
@@ -5567,7 +5567,7 @@ BOOL DoMoveFile(COperation* op, HWND hProgressDlg, void* buffer,
         int autoRetryAttempts = 0;
         CSrcSecurity srcSecurity;
         BOOL srcSecurityErr = FALSE;
-    if (!invalidName && script->CopySecurity) // should we copy NTFS security permissions?
+        if (!invalidName && script->CopySecurity) // should we copy NTFS security permissions?
         {
             srcSecurity.SrcError = GetNamedSecurityInfo(sourceNameMvDir, SE_FILE_OBJECT,
                                                         DACL_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | OWNER_SECURITY_INFORMATION,
@@ -5607,7 +5607,7 @@ BOOL DoMoveFile(COperation* op, HWND hProgressDlg, void* buffer,
         }
         FILETIME dirTimeModified;
         BOOL dirTimeModifiedIsValid = FALSE;
-    if (!invalidName && dir && !*novellRenamePatch && *setDirTimeAfterMove != 2 /* no */) // the issue apparently does not apply to Novell Netware, so ignore it there (affects e.g. Samba)
+        if (!invalidName && dir && !*novellRenamePatch && *setDirTimeAfterMove != 2 /* no */) // the issue apparently does not apply to Novell Netware, so ignore it there (affects e.g. Samba)
             dirTimeModifiedIsValid = GetDirTime(sourceNameMvDir, &dirTimeModified);
         while (1)
         {
@@ -5622,8 +5622,8 @@ BOOL DoMoveFile(COperation* op, HWND hProgressDlg, void* buffer,
                 {
                     DWORD curAttrs;
                     curAttrs = SalGetFileAttributes(targetNameMvDir);
-                if (curAttrs == INVALID_FILE_ATTRIBUTES || (curAttrs & DISPLAYED_ATTRIBUTES) != (op->Attr & DISPLAYED_ATTRIBUTES))
-                {                                                              // attributes probably were not preserved, warn the user
+                    if (curAttrs == INVALID_FILE_ATTRIBUTES || (curAttrs & DISPLAYED_ATTRIBUTES) != (op->Attr & DISPLAYED_ATTRIBUTES))
+                    {                                                              // attributes probably were not preserved, warn the user
                         WaitForSingleObject(dlgData.WorkerNotSuspended, INFINITE); // if we should be in suspend mode, wait ...
                         if (*dlgData.CancelWorker)
                             goto MOVE_ERROR_2;
@@ -5799,7 +5799,7 @@ BOOL DoMoveFile(COperation* op, HWND hProgressDlg, void* buffer,
                                     else
                                     {
                                         if ((origFullNameAttr & FILE_ATTRIBUTE_ARCHIVE) == 0)
-                                        SetFileAttributes(origFullName, origFullNameAttr); // leave without handling or retry, not important (it normally toggles chaotically)
+                                            SetFileAttributes(origFullName, origFullNameAttr); // leave without handling or retry, not important (it normally toggles chaotically)
                                     }
 
                                     if (moveDone)

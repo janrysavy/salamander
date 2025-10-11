@@ -404,7 +404,7 @@ BOOL IsPathOnVolumeSupADS(const char* path, BOOL* isFAT32)
     if (isFAT32 != NULL)
         *isFAT32 = StrICmp(fileSystemNameBuffer, "FAT32") == 0;
     return (fileSystemFlags & FILE_NAMED_STREAMS) != 0 && StrICmp(fileSystemNameBuffer, "FAT") != 0 || // flag for ADS support (+ not a FAT volume—incorrect ADS support reported on a Windows DFS server) or
-            StrICmp(fileSystemNameBuffer, "NTFS") == 0 && fileSystemFlags == 0x1F;                      // NTFS from NT 4.0
+           StrICmp(fileSystemNameBuffer, "NTFS") == 0 && fileSystemFlags == 0x1F;                      // NTFS from NT 4.0
 }
 
 //******************************************************************************
@@ -1458,7 +1458,7 @@ HWND CShellExecuteWnd::Create(HWND hParent, const char* format, ...)
         char buff[2 * MAX_PATH];
         _vsnprintf_s(buff, _TRUNCATE, format, args);
 
-// adopt the size of the parent window because some users complained that emails
+        // adopt the size of the parent window because some users complained that emails
         // opened from SS (via Mozilla) are displayed in a tiny window; some shell extensions probably
         // take the size of CMINVOKECOMMANDINFOEX::hwnd into account when constructing their window, and 1x1 pixel was not
         // an optimal size
@@ -2196,7 +2196,7 @@ LONG SalRegQueryValue(HKEY hKey, LPCSTR lpSubKey, LPSTR lpData, PLONG lpcbData)
     if (lpcbData != NULL &&
         (ret == ERROR_MORE_DATA || lpData == NULL && ret == ERROR_SUCCESS))
     {
-            (*lpcbData)++; // proactively ask for a possible extra null terminator
+        (*lpcbData)++; // proactively ask for a possible extra null terminator
     }
     if (ret == ERROR_SUCCESS && lpData != NULL)
     {

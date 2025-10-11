@@ -278,7 +278,7 @@ void CToolTip::MessageLoop()
             }
         }
     }
-      //IsModal = FALSE; // too late here; switching between two tooltips stops working, e.g. Config > Change Drive Menu dialog
+    //IsModal = FALSE; // too late here; switching between two tooltips stops working, e.g. Config > Change Drive Menu dialog
     HNotifyWindow = NULL;
     LastID = 0;
     Hide(); // IsModal is already FALSE, we can call Hide()
@@ -532,20 +532,20 @@ void CToolTip::OnTimer()
         POINT p;
         GetCursorPos(&p);
         HWND hWnd = WindowFromPoint(p);
-          if (hWnd == HNotifyWindow) // we must still be on the notify window
+        if (hWnd == HNotifyWindow) // we must still be on the notify window
         {
-              if (HasActiveParent(hWnd)) // and its root must be active
+            if (HasActiveParent(hWnd)) // and its root must be active
             {
                 if (Show(p.x, p.y, TRUE, FALSE, HNotifyWindow))
                 {
-                      // if the text was displayed, start waiting for it to fade
+                    // if the text was displayed, start waiting for it to fade
                     WaitingMode = ttmWaitingClose;
                     MySetTimer(GetTime(FALSE));
                     HideCounter = 0;
                 }
                 else
                 {
-                      // text was not delivered - start the wait for KILL
+                    // text was not delivered - start the wait for KILL
                     WaitingMode = ttmWaitingKill;
                     MySetTimer(TOOLTIP_KILLDELAY);
                 }
@@ -561,7 +561,7 @@ void CToolTip::OnTimer()
 
     case ttmWaitingClose:
     {
-          // check whether it is time to hide the tooltip
+        // check whether it is time to hide the tooltip
         POINT p;
         GetCursorPos(&p);
         HWND hWnd = WindowFromPoint(p);
@@ -570,8 +570,8 @@ void CToolTip::OnTimer()
         if (hWnd != HNotifyWindow || HideCounter == HideCounterMax)
         {
             Hide();
-              // if it was hidden due to a timeout, keep the timer running
-              // until the mouse leaves the window or SetCurrentToolTip is called
+            // if it was hidden due to a timeout, keep the timer running
+            // until the mouse leaves the window or SetCurrentToolTip is called
             if (hWnd != HNotifyWindow)
             {
                 WaitingMode = ttmNone;
@@ -617,7 +617,7 @@ CToolTip::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         if (GetText())
         {
             SIZE sz;
-              GetNeededWindowSize(&sz); // ignore handling for climbing off the screen
+            GetNeededWindowSize(&sz); // ignore handling for climbing off the screen
             SetWindowPos(HWindow, NULL, 0, 0, sz.cx, sz.cy, SWP_NOACTIVATE | SWP_NOMOVE);
             InvalidateRect(HWindow, NULL, TRUE);
             UpdateWindow(HWindow);

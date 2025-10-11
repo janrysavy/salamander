@@ -6431,7 +6431,7 @@ CSalamanderDirectory::GetSalamanderDir(const char* path, BOOL readOnly)
                     {
                         if (readOnly)
                             return &GlobalEmptySalDir; // read-only - return the global empty directory
-                    else                           // for writing
+                        else                           // for writing
                         {
                             if ((salDir = AllocSalamDir(i)) != NULL) // we must allocate a new object
                             {

@@ -158,9 +158,9 @@ protected:
     void CallCopyConstructor(DATA_TYPE* placement, const DATA_TYPE& member)
     {
 #ifdef new
-//#pragma push_macro("new")  // push_macro/pop_macro do not work here: the memory-leak test below
-                             // would be reported with an incorrect module and line because we do
-                             // not redefine 'new' with a simple macro as MFC does ("#define new DEBUG_NEW")
+        //#pragma push_macro("new")  // push_macro/pop_macro do not work here: the memory-leak test below
+        // would be reported with an incorrect module and line because we do
+        // not redefine 'new' with a simple macro as MFC does ("#define new DEBUG_NEW")
 #define __ARRAY_REDEF_NEW
 #undef new
 #endif

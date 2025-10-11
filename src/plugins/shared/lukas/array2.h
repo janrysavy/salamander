@@ -40,7 +40,7 @@ public:
     CDynamicArray * const &operator[](float index); // the function is never called, but when it
                                                     // is not here MSVC does terrible things
 */
-    DATA_TYPE& operator[](int index) // returns the element at the specified index
+    DATA_TYPE& operator[](int index)   // returns the element at the specified index
     {
         return Blocks[index / BlockSize][index % BlockSize];
     }

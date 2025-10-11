@@ -297,7 +297,7 @@ void ConvertHexToString(char* text, char* hex, int& len)
         {
             if (*s != ' ')
             {
-                    if (*s == 0)
+                if (*s == 0)
                     break; // end of string
                 else
                 {

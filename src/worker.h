@@ -29,7 +29,7 @@
 
 // WARNING: HIGH_SPEED_LIMIT must be >= the largest value in the previous group (OPERATION_BUFFER,
 //        REMOVABLE_DISK_COPY_BUFFER, ASYNC_COPY_BUF_SIZE)
-#define HIGH_SPEED_LIMIT (1024 * 1024) // when the speed-limit >= this number we throttle by inserting a braking
+#define HIGH_SPEED_LIMIT (1024 * 1024) // when the speed-limit >= this number we throttle by inserting a braking \
                                        // Sleep after (speed-limit / HIGH_SPEED_LIMIT_BRAKE_DIV) bytes, if needed
 #define HIGH_SPEED_LIMIT_BRAKE_DIV 10  // see HIGH_SPEED_LIMIT for details
 

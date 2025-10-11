@@ -747,7 +747,7 @@ BOOL CTaskList::RemoveKilledItems(BOOL* changed)
     }
     ProcessList->ItemsCount = c;
 
-/*
+    /*
 // does not work on XP if processes within one session run under different users
 // we do not have permission to open another process's handle
 //---  remove killed processes

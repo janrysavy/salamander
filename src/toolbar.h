@@ -81,7 +81,7 @@ protected:
     CBitmap* MonoBitmap;  // Used to render grayed icons.
     int CacheWidth;       // Width of the cache bitmap.
     int CacheHeight;      // Height of the cache bitmap.
-    int HotIndex; // -1 = none.
+    int HotIndex;         // -1 = none.
     int DownIndex;
     BOOL DropPressed;
     BOOL MonitorCapture;

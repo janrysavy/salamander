@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 Open Salamander Authors
+﻿// SPDX-FileCopyrightText: 2023 Open Salamander Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 //****************************************************************************
@@ -86,24 +86,24 @@ struct SAFE_FILE
 
 // bits of the silentMask mask
 // skip section
-#define SILENT_SKIP_FILE_NAMEUSED 0x00000001 // skips files that cannot be created because a directory with the
+#define SILENT_SKIP_FILE_NAMEUSED 0x00000001 // skips files that cannot be created because a directory with the \
                                              // same name already exists (old CNFRM_MASK_NAMEUSED)
-#define SILENT_SKIP_DIR_NAMEUSED 0x00000002  // skips directories that cannot be created because a file with the
+#define SILENT_SKIP_DIR_NAMEUSED 0x00000002  // skips directories that cannot be created because a file with the \
                                              // same name already exists (old CNFRM_MASK_NAMEUSED)
 #define SILENT_SKIP_FILE_CREATE 0x00000004   // skips files that cannot be created for another reason (old CNFRM_MASK_ERRCREATEFILE)
 #define SILENT_SKIP_DIR_CREATE 0x00000008    // skips directories that cannot be created for another reason (old CNFRM_MASK_ERRCREATEDIR)
-#define SILENT_SKIP_FILE_EXIST 0x00000010    // skips files that already exist (old CNFRM_MASK_FILEOVERSKIP)
+#define SILENT_SKIP_FILE_EXIST 0x00000010    // skips files that already exist (old CNFRM_MASK_FILEOVERSKIP) \
                                              // mutually exclusive with SILENT_OVERWRITE_FILE_EXIST
-#define SILENT_SKIP_FILE_SYSHID 0x00000020   // skips System/Hidden files that already exist (old CNFRM_MASK_SHFILEOVERSKIP)
+#define SILENT_SKIP_FILE_SYSHID 0x00000020   // skips System/Hidden files that already exist (old CNFRM_MASK_SHFILEOVERSKIP) \
                                              // mutually exclusive with SILENT_OVERWRITE_FILE_SYSHID
 #define SILENT_SKIP_FILE_READ 0x00000040     // skips files whose reading failed
 #define SILENT_SKIP_FILE_WRITE 0x00000080    // skips files whose writing failed
 #define SILENT_SKIP_FILE_OPEN 0x00000100     // skips files that cannot be opened
 
 // overwrite section
-#define SILENT_OVERWRITE_FILE_EXIST 0x00001000  // overwrites files that already exist (old CNFRM_MASK_FILEOVERYES)
+#define SILENT_OVERWRITE_FILE_EXIST 0x00001000  // overwrites files that already exist (old CNFRM_MASK_FILEOVERYES) \
                                                 // mutually exclusive with SILENT_SKIP_FILE_EXIST
-#define SILENT_OVERWRITE_FILE_SYSHID 0x00002000 // overwrites System/Hidden files that already exist (old CNFRM_MASK_SHFILEOVERYES)
+#define SILENT_OVERWRITE_FILE_SYSHID 0x00002000 // overwrites System/Hidden files that already exist (old CNFRM_MASK_SHFILEOVERYES) \
                                                 // mutually exclusive with SILENT_SKIP_FILE_SYSHID
 #define SILENT_RESERVED_FOR_PLUGINS 0xFFFF0000  // this space is available to plugins for their own flags
 

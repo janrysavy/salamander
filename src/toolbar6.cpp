@@ -153,7 +153,7 @@ void CDriveBar::Execute(DWORD id)
                 panel->ChangePathToDrvType(HWindow, DriveType, DriveType == drvtOneDriveBus ? (const char*)DriveTypeParam : NULL);
                 if (DriveType == drvtOneDriveBus)
                     free((char*)DriveTypeParam);
-        if ((DriveType == drvtOneDrive || DriveType == drvtOneDriveBus) &&
+                if ((DriveType == drvtOneDrive || DriveType == drvtOneDriveBus) &&
                     !fromDropDown && GetOneDriveStorages() > 1)
                 { // OneDrive should once again be a drop-down; refresh both drive bars so the button is updated
                     if (MainWindow != NULL && MainWindow->HWindow != NULL)
@@ -212,7 +212,7 @@ void CDriveBar::SetCheckedDrive(CFilesWindow* panel, BOOL force)
     if (isDiskOrArchive)
         lstrcpyn(CheckedDrive, panel->GetPath(), 3);
     else
-          CheckedDrive[0] = 0; // this cache does not work for file systems
+        CheckedDrive[0] = 0; // this cache does not work for file systems
     DWORD index;
     if (List == NULL || !List->FindPanelPathIndex(panel, &index))
         index = -1;
@@ -231,7 +231,7 @@ void CDriveBar::SetCheckedDrive(CFilesWindow* panel, BOOL force)
                 if (indexInList >= CM_DRIVEBAR2_MIN && indexInList <= CM_DRIVEBAR2_MAX)
                     indexInList -= CM_DRIVEBAR2_MIN;
                 else
-                      indexInList = -2; // should not happen
+                    indexInList = -2; // should not happen
             }
             CheckItem(i, TRUE, index == indexInList);
         }
@@ -280,7 +280,7 @@ BOOL CDriveBar::OnContextMenu()
                 if (indexInList >= CM_DRIVEBAR2_MIN && indexInList <= CM_DRIVEBAR2_MAX)
                     indexInList -= CM_DRIVEBAR2_MIN;
                 else
-                      return FALSE; // should not happen
+                    return FALSE; // should not happen
             }
             CFilesWindow* panel;
             BOOL bar2 = this == MainWindow->DriveBar2;

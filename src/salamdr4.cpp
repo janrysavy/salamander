@@ -399,7 +399,7 @@ int ExpandPluralString(char* lpOut, int nOutMax, const char* lpFmt, int nParCoun
                         {
                             if (*input == '\\' &&
                                 (*(input + 1) == '|' || *(input + 1) == '\\' || *(input + 1) == ':' ||
-                                *(input + 1) == '{' || *(input + 1) == '}')) // escape sequence
+                                 *(input + 1) == '{' || *(input + 1) == '}')) // escape sequence
                                 input++;
                             subStrLen++;
                             input++;
@@ -415,7 +415,7 @@ int ExpandPluralString(char* lpOut, int nOutMax, const char* lpFmt, int nParCoun
                         {
                             if (*input == '\\' &&
                                 (*(input + 1) == '|' || *(input + 1) == '\\' || *(input + 1) == ':' ||
-                                *(input + 1) == '{' || *(input + 1) == '}')) // escape sequence
+                                 *(input + 1) == '{' || *(input + 1) == '}')) // escape sequence
                                 input++;
                             numStrLen++;
                             input++;

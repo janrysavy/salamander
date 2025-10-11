@@ -189,9 +189,9 @@ BOOL CImpDropTarget::ProcessClipboardData(BOOL copy, const DROPFILES* data,
     CCopyMoveData* array = new CCopyMoveData(100, 50);
     if (array != NULL)
     {
-                // array->MakeCopyOfName will be TRUE if it is our own copy & paste from the clipboard
-                // (copying with the rule that if the destination already exists, "Copy of ..." will be created)
-                //    array->MakeCopyOfName = copy && OurClipDataObject && mapA == NULL && mapW == NULL;  // to make it work even through drag&drop
+        // array->MakeCopyOfName will be TRUE if it is our own copy & paste from the clipboard
+        // (copying with the rule that if the destination already exists, "Copy of ..." will be created)
+        //    array->MakeCopyOfName = copy && OurClipDataObject && mapA == NULL && mapW == NULL;  // to make it work even through drag&drop
         array->MakeCopyOfName = copy && mapA == NULL && mapW == NULL; // only our data object arrives here
 
         if (data->fWide)
