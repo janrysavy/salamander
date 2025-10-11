@@ -5,43 +5,43 @@
 
 #pragma warning(3 : 4706) // warning C4706: assignment within conditional expression
 
-// #define ENABLE_SH_MENU_EXT     // je-li toto makro definovano, pripoji se i kontextove menu (nejen "copy hook")
+// #define ENABLE_SH_MENU_EXT     // define this macro to add the context menu as well (not just the "copy hook")
 
 //
 // Shell Extensions Configuration
 //
 
 //
-// ============================================= spolecna cast
+// ============================================= shared part
 //
 
 //
-// je soucasti Open Salamandera - pro ucely konfigurace + vzajemne komunikace
-// a zaroven je soucasti SHELLEXT.DLL - pro ucely prezentace + vzajemne komunikace
+// part of Open Salamander - used for configuration and mutual communication
+// and at the same time part of SHELLEXT.DLL - used for presentation and mutual communication
 //
 
 //
-// The class ID of this Shell extension class.
+// Class ID of this shell extension.
 //
 // salshext.dll (Servant Salamander 2.5 beta 1) class id:        c78b6130-f3ea-11d2-94a1-00e0292a01e3
-// salexten.dll (Servant Salamander 2.5 beta 2 az RC1) class id: c78b6131-f3ea-11d2-94a1-00e0292a01e3 (kopirovane do TEMP adresare, sdilene mezi vice verzemi Salama)
-// salamext.dll (Servant Salamander 2.5 RC2) class id:           c78b6132-f3ea-11d2-94a1-00e0292a01e3 (prvni verze, ktera zustava v instalaci Salama + kazda verze Salama ma svoji vlastni shell-extensionu)
+// salexten.dll (Servant Salamander 2.5 beta 2 through RC1) class id: c78b6131-f3ea-11d2-94a1-00e0292a01e3 (copied into the TEMP directory, shared across multiple Salamander versions)
+// salamext.dll (Servant Salamander 2.5 RC2) class id:           c78b6132-f3ea-11d2-94a1-00e0292a01e3 (first version that stays in the Salamander installation + every Salamander version has its own shell extension)
 // salamext.dll (Servant Salamander 2.5 RC3) class id:           c78b6133-f3ea-11d2-94a1-00e0292a01e3
 // salamext.dll (Altap Salamander 2.5 RC3) class id:             c78b6134-f3ea-11d2-94a1-00e0292a01e3
 // salamext.dll (Altap Salamander 2.5) class id:                 c78b6135-f3ea-11d2-94a1-00e0292a01e3
 // salamext.dll (Altap Salamander 2.51) class id:                c78b6136-f3ea-11d2-94a1-00e0292a01e3
 // salamext.dll (Altap Salamander 2.52 beta 1) class id:         c78b6137-f3ea-11d2-94a1-00e0292a01e3
-// salamext.dll (Altap Salamander 2.52 beta 1) class id:         c78b6138-f3ea-11d2-94a1-00e0292a01e3 (zmena vytvareni/otevirani mutexu vedla k nekompatibilite se starsima verzema)
-// salamext.dll (Altap Salamander 2.52 beta 1) class id:         c78b6139-f3ea-11d2-94a1-00e0292a01e3 (vytvareni mutexu s omezenymi pravy vedlo k tomu, ze starsi verze Salamandera (napr. 2.51) mutex vubec neotevrely, takze jsem zmenil jmena mutexu, pameti, atd.)
+// salamext.dll (Altap Salamander 2.52 beta 1) class id:         c78b6138-f3ea-11d2-94a1-00e0292a01e3 (changing how the mutex is created/opened led to incompatibility with older versions)
+// salamext.dll (Altap Salamander 2.52 beta 1) class id:         c78b6139-f3ea-11d2-94a1-00e0292a01e3 (creating the mutex with restricted rights caused older Salamander versions (e.g. 2.51) not to open the mutex at all, so I changed the mutex, memory, etc. names)
 // salamext.dll (Altap Salamander 2.52 beta 2) class id:         c78b613a-f3ea-11d2-94a1-00e0292a01e3
 // salamext.dll (Altap Salamander 2.52) class id:                c78b613b-f3ea-11d2-94a1-00e0292a01e3
 // salamext.dll (Altap Salamander 2.53 beta 1) class id:         c78b613c-f3ea-11d2-94a1-00e0292a01e3
-// salamext.dll (Altap Salamander 2.53) class id:                c78b613d-f3ea-11d2-94a1-00e0292a01e3 (nepouzilo se, vydali jsme nakonec 2.53 beta 2)
+// salamext.dll (Altap Salamander 2.53) class id:                c78b613d-f3ea-11d2-94a1-00e0292a01e3 (unused, we eventually released 2.53 beta 2)
 // salamext.dll (Altap Salamander 2.53 beta 2) class id:         c78b613e-f3ea-11d2-94a1-00e0292a01e3
 // salamext.dll (Altap Salamander 2.53) class id:                c78b613f-f3ea-11d2-94a1-00e0292a01e3
 // salamext.dll (Altap Salamander 2.54) class id:                c78b6140-f3ea-11d2-94a1-00e0292a01e3
 // salamext.dll (Altap Salamander 2.55 beta 1) class id:         c78b6141-f3ea-11d2-94a1-00e0292a01e3
-// salextx86.dll+salextx64.dll (Salamander 3.0 beta 1) class id: c78b6142-f3ea-11d2-94a1-00e0292a01e3 (prvni verze, kde se pouzivaji x86+x64 verze soucasne)
+// salextx86.dll+salextx64.dll (Salamander 3.0 beta 1) class id: c78b6142-f3ea-11d2-94a1-00e0292a01e3 (first version that uses the x86+x64 builds simultaneously)
 // salextx86.dll+salextx64.dll (Salamander 3.0 beta 2) class id: c78b6143-f3ea-11d2-94a1-00e0292a01e3
 // salextx86.dll+salextx64.dll (Salamander 3.0 beta 3) class id: c78b6144-f3ea-11d2-94a1-00e0292a01e3
 // salextx86.dll+salextx64.dll (Salamander 3.0 beta 4) class id: c78b6145-f3ea-11d2-94a1-00e0292a01e3
@@ -60,7 +60,7 @@
 DEFINE_GUID(CLSID_ShellExtension, 0xc78b614fL, 0xf3ea, 0x11d2, 0x94, 0xa1, 0x00, 0xe0, 0x29, 0x2a, 0x01, 0xe3);
 
 //
-// pripojovany retezec pro zajisteni unikatnosti jmena shell extensiony v registry (SHEXREG_OPENSALAMANDER)
+// string appended to guarantee a unique shell extension name in the registry (SHEXREG_OPENSALAMANDER)
 //
 // Servant Salamander 2.5 RC2                - 25RC2
 // Servant Salamander 2.5 RC3                - 25RC3
@@ -68,38 +68,38 @@ DEFINE_GUID(CLSID_ShellExtension, 0xc78b614fL, 0xf3ea, 0x11d2, 0x94, 0xa1, 0x00,
 // Altap Salamander 2.5                      - 25
 // Altap Salamander 2.51                     - 251
 // Altap Salamander 2.52 beta 1              - 252B1
-// Altap Salamander 2.52 beta 1              - 252B1a  (zmena vytvareni/otevirani mutexu vedla k nekompatibilite se starsima verzema)
-// Altap Salamander 2.52 beta 1              - 252B1b  (vytvareni mutexu s omezenymi pravy vedlo k tomu, ze starsi verze Salamandera (napr. 2.51) mutex vubec neotevrely, takze jsem zmenil jmena mutexu, pameti, atd.)
+// Altap Salamander 2.52 beta 1              - 252B1a  (changing how the mutex was created/opened made it incompatible with older versions)
+// Altap Salamander 2.52 beta 1              - 252B1b  (creating the mutex with restricted rights caused older Salamander versions (e.g. 2.51) not to open the mutex at all, so I changed the mutex, memory, etc. names)
 // Altap Salamander 2.52 beta 2              - 252B2
 // Altap Salamander 2.52                     - 252
 // Altap Salamander 2.53 beta 1              - 253B1
-// Altap Salamander 2.53                     - 253     (nepouzilo se, vydali jsme nakonec 2.53 beta 2)
+// Altap Salamander 2.53                     - 253     (unused, we eventually released 2.53 beta 2)
 // Altap Salamander 2.53 beta 2              - 253B2
 // Altap Salamander 2.53                     - 253R
 // Altap Salamander 2.54                     - 254
-// Altap Salamander 2.55 beta 1              - 255B1   (nepouzilo se, vydali jsme nakonec 3.0 beta 1)
+// Altap Salamander 2.55 beta 1              - 255B1   (unused, we eventually released 3.0 beta 1)
 // Altap Salamander 3.0 beta 1               - 300B1
 // Altap Salamander 3.0 beta 2               - 300B2
 // Altap Salamander 3.0 beta 3               - 300B3
 // Altap Salamander 3.0 beta 4               - 300B4
-// Altap Salamander 3.0                      - 300B5   (omylem zustalo "3.0 beta 5", misto ktere jsme vydali 3.0)
-// Altap Salamander 3.1 beta 1 (nevydana)    - 310B1
+// Altap Salamander 3.0                      - 300B5   (accidentally kept as "3.0 beta 5"; we released 3.0 instead)
+// Altap Salamander 3.1 beta 1 (unreleased)  - 310B1
 // Altap Salamander 3.01                     - 301
-// Altap Salamander 3.1 beta 1 (nevydana)    - 310B1_2 (2. pokus o vydani "3.1 beta 1")
+// Altap Salamander 3.1 beta 1 (unreleased)  - 310B1_2 (second attempt to ship "3.1 beta 1")
 // Altap Salamander 3.02                     - 302
-// Altap Salamander 3.1 beta 1 (nevydana)    - 310B1_3 (3. pokus o vydani "3.1 beta 1")
+// Altap Salamander 3.1 beta 1 (unreleased)  - 310B1_3 (third attempt to ship "3.1 beta 1")
 // Altap Salamander 3.03                     - 303
-// Altap Salamander 3.1 beta 1 (nevydana)    - 310B1_4 (4. pokus o vydani "3.1 beta 1")
+// Altap Salamander 3.1 beta 1 (unreleased)  - 310B1_4 (fourth attempt to ship "3.1 beta 1")
 // Altap Salamander 3.04                     - 304
-// Altap Salamander 3.1 beta 1               - 310B1_5 (5. pokus o vydani "3.1 beta 1")
+// Altap Salamander 3.1 beta 1               - 310B1_5 (fifth attempt to ship "3.1 beta 1")
 // Altap Salamander 3.05                     - 305
-// Altap Salamander 3.1 beta 1               - 310B1_6 (6. pokus o vydani "3.1 beta 1")
+// Altap Salamander 3.1 beta 1               - 310B1_6 (sixth attempt to ship "3.1 beta 1")
 // Altap Salamander 3.06                     - 306
-// Altap Salamander 3.1 beta 1               - 310B1_7 (7. pokus o vydani "3.1 beta 1")
+// Altap Salamander 3.1 beta 1               - 310B1_7 (seventh attempt to ship "3.1 beta 1")
 // Altap Salamander 3.07                     - 307
 // Altap Salamander 4.0 beta 1               - 400B1
 // Altap Salamander 3.08                     - 308
-// Altap Salamander 4.0 beta 1               - 400B1_2 (2. pokus o vydani "4.0 beta 1")
+// Altap Salamander 4.0 beta 1               - 400B1_2 (second attempt to ship "4.0 beta 1")
 // Altap Salamander 4.0                      - 400
 // Open Salamander 5.0                       - 500
 
@@ -113,142 +113,141 @@ DEFINE_GUID(CLSID_ShellExtension, 0xc78b614fL, 0xf3ea, 0x11d2, 0x94, 0xa1, 0x00,
 
 typedef struct CShellExtConfigItem CShellExtConfigItem;
 
-// zakladni polozka reprezentujici jeden radek v kontextovem menu
-// tyto polozky jsou drzeny v jednosmerne svazanem seznamu
+// basic item representing a row in the context menu
+// these items are stored in a singly linked list
 struct CShellExtConfigItem
 {
-    char Name[SEC_NAMEMAX]; // text, pod ktery polozka vystupuje v kontextovem menu
-    // podminky, kdy se tato polozka zobrazi v kontextovem menu
+    char Name[SEC_NAMEMAX]; // text shown for the item in the context menu
+    // conditions under which this item appears in the context menu
     BOOL OneFile;
     BOOL OneDirectory;
     BOOL MoreFiles;
     BOOL MoreDirectories;
     BOOL LogicalAnd;
 
-    // neukladana data
-    CShellExtConfigItem* Next; // dalsi polozka; je-li rovna NULL, je toto posledni
-    UINT Cmd;                  // slouzi pro zpetne nalezeni polozky pri InvokeCommand
+    // non-persisted data
+    CShellExtConfigItem* Next; // next item; if NULL, this is the last one
+    UINT Cmd;                  // used to look up the item again during InvokeCommand
 };
 
-// nuluje polozku
+// zeroes the item
 void SECClearItem(CShellExtConfigItem* item);
 
-// zacatek seznamu
+// head of the list
 extern CShellExtConfigItem* ShellExtConfigFirst;
 
-// polozky z konfigurace
+// configuration items
 extern BOOL ShellExtConfigSubmenu;
 extern char ShellExtConfigSubmenuName[SEC_SUBMENUNAME_MAX];
 
-// aktualni cislo verze konfigurace
-// pri ukladani konfigurace je potreba toto cislo zvetsit o jednicku
-// pri nacitani je potreba provest kontrolu verze a je-li jina nez prave
-// pouzivana, je potreba znovu reloudnout registry
+// current configuration version number
+// when storing the configuration this number must be incremented by one
+// when loading the configuration the version must be checked and, if it differs from the one currently
+// used, the registry needs to be reloaded
 extern DWORD ShellExtConfigVersion;
 
-// vrati polozku s danym indexem
+// return the item at the given index
 CShellExtConfigItem* SECGetItem(int index);
 
-// pokud najde polozku se shodnym Cmd, naplni index a vrati TRUE; jinak vrati FALSE
+// if it finds an item with the same Cmd, fill the index and return TRUE; otherwise return FALSE
 BOOL SECGetItemIndex(UINT cmd, int* index);
 
 BOOL SECLoadRegistry();
 
-// vytahne nazev polozky
+// read the item name
 const char* SECGetName(int index);
 
-// vyhodi ze seznamu vsechny polozky
+// remove all items from the list
 void SECDeleteAllItems();
 
-// vrati index zalozene polozky nebo -1 pri chybe
-// refItem vraci ukazatel na pridanou plozku, muze byt == NULL
+// return the index of the created item or -1 on failure
+// refItem receives a pointer to the added item; it may remain NULL
 int SECAddItem(CShellExtConfigItem** refItem);
 
 #endif // ENABLE_SH_MENU_EXT
 
 //
-// Data a konstanty pro vzajemnou komunikaci mezi Salamanderem a SalamExt
+// Data and constants used for communication between Salamander and SalamExt
 //
 
-// jmeno mutexu pro pristup do sdilene pameti (pouziva se pri otevirani mutextu pres OpenMutex,
-// drive vytvoreneho pres CreateMutex)
+// name of the mutex used to access the shared memory (opened via OpenMutex,
+// originally created via CreateMutex)
 extern const char* SALSHEXT_SHAREDMEMMUTEXNAME;
-// jmeno sdilene pameti (pouziva se pri otevirani sdilene pameti pres OpenFileMapping, drive
-// vytvorene pres CreateFileMapping)
+// name of the shared memory (opened via OpenFileMapping, originally
+// created via CreateFileMapping)
 extern const char* SALSHEXT_SHAREDMEMNAME;
-// jmeno eventu pro zaslani zadosti o provedeni Paste ve zdrojovem Salamanderovi, pouziva se jen pod
-// Vista+ (pro starsi OS staci postnout message WM_USER_SALSHEXT_PASTE primo z copy-hooku; pod Vista+
-// tento post nefunguje pro "as admin" spusteneho Salamandera)
+// name of the event used to request execution of Paste in the source Salamander, used only on
+// Vista+ (for older OS it is enough to post the WM_USER_SALSHEXT_PASTE message directly from the copy hook; on Vista+
+// this post does not work for Salamander launched "as admin")
 extern const char* SALSHEXT_DOPASTEEVENTNAME;
 
-// POZOR: konstanty se nesmi zmenit (stare verze musi byt kompatibilni)
-#define WM_USER_SALSHEXT_PASTE WM_APP + 139      // [postMsgIndex, 0] - SalamExt zada o provedeni prikazu Paste
-#define WM_USER_SALSHEXT_TRYRELDATA WM_APP + 143 // [0, 0] - SalamExt hlasi odblokovani paste-dat (viz CSalShExtSharedMem::BlockPasteDataRelease), nejsou-li data dale chranena, nechame je zrusit
+// NOTE: these constants must not change (older versions must remain compatible)
+#define WM_USER_SALSHEXT_PASTE WM_APP + 139      // [postMsgIndex, 0] - SalamExt requests execution of the Paste command
+#define WM_USER_SALSHEXT_TRYRELDATA WM_APP + 143 // [0, 0] - SalamExt reports unblocking of the paste data (see CSalShExtSharedMem::BlockPasteDataRelease); if the data are no longer protected, allow them to be destroyed
 
 #define SALSHEXT_NONE 0
 #define SALSHEXT_COPY 1
 #define SALSHEXT_MOVE 2
 
-// struktura sdilene pameti
+// shared memory structure
 #pragma pack(push)
 #pragma pack(4)
 struct CSalShExtSharedMem
 {
-    int Size; // velikost struktury (pro urceni verze + opatreni proti prepisum pameti)
+    int Size; // size of the structure (for version detection + protection against memory overwrites)
 
-    // sekce pro drag&drop
-    BOOL DoDragDropFromSalamander;      // TRUE = DoDragDrop spusteny ze Salamandera (jen s "fake" adresarem)
-    char DragDropFakeDirName[MAX_PATH]; // plne jmeno "fake" adresare pouzivaneho pro drag&drop
-    BOOL DropDone;                      // TRUE = doslo k dropu, operace spustena, TargetPath+Operation jsou platne
+    // drag & drop section
+    BOOL DoDragDropFromSalamander;      // TRUE = DoDragDrop launched from Salamander (only with the "fake" directory)
+    char DragDropFakeDirName[MAX_PATH]; // full name of the "fake" directory used for drag & drop
+    BOOL DropDone;                      // TRUE = a drop occurred, the operation started, TargetPath + Operation are valid
 
-    // sekce pro copy/cut + paste
-    BOOL DoPasteFromSalamander;       // TRUE = paste data objektu ze Salamandera (jen s "fake" adresarem)
-    DWORD ClipDataObjLastGetDataTime; // cas posledniho volani GetData data-objektu na clipboardu
-    char PasteFakeDirName[MAX_PATH];  // plne jmeno "fake" adresare pouzivaneho pro paste
-    DWORD SalamanderMainWndPID;       // process ID hl. okna Salamandera, ktery dal na clipboard pasted data objekt (SalamExt mu musi poslat prikaz k provedeni operace paste)
-    DWORD SalamanderMainWndTID;       // thread ID hl. okna Salamandera, ktery dal na clipboard pasted data objekt (SalamExt mu musi poslat prikaz k provedeni operace paste)
-    UINT64 SalamanderMainWnd;         // hl. okno Salamandera, ktery dal na clipboard pasted data objekt (SalamExt mu musi poslat prikaz k provedeni operace paste) - HWND je 64-bit na x64 (i kdyz udajne z nej pouzivaji jen spodnich 32-bitu), x86 verze hornich 32-bitu nuluje
-    int PostMsgIndex;                 // index postnute zpravy WM_USER_SALSHEXT_PASTE, na jejiz zpracovani SalamExt ceka (po timeoutu cekani dojde ke zvyseni indexu -> Salamander pak zpravu (az dojde) preskoci)
-    BOOL BlockPasteDataRelease;       // od W2K+ uz asi neni potreba: je-li TRUE, fakedataobj->Release() nezrusi paste-data v Salamanderovi
-    int SalBusyState;                 // 0 = zjistuje se jestli Salamander neni "busy"; 1 = Salamander neni "busy" a uz ceka na zadani operace paste; 2 = Salamander je "busy", paste odlozime na pozdeji
-    DWORD PastedDataID;               // identifikace pasted dat (slouzi k identifikaci dat pro paste uvnitr Salamandera - co se ma vlastne pastnout vi jen Salamander, zde je jen ID techto dat)
-    BOOL PasteDone;                   // TRUE = paste operace spustena, TargetPath+Operation jsou platne
-    char ArcUnableToPaste1[300];      // pripravena hlaska pro copy-hook pro chybu pri Paste (viz IDS_ARCUNABLETOPASTE1)
-    char ArcUnableToPaste2[300];      // pripravena hlaska pro copy-hook pro chybu pri Paste (viz IDS_ARCUNABLETOPASTE2)
+    // copy/cut + paste section
+    BOOL DoPasteFromSalamander;       // TRUE = data object pasted from Salamander (only with the "fake" directory)
+    DWORD ClipDataObjLastGetDataTime; // time of the last GetData call on the data object on the clipboard
+    char PasteFakeDirName[MAX_PATH];  // full name of the "fake" directory used for paste
+    DWORD SalamanderMainWndPID;       // process ID of Salamander's main window that put the pasted data object on the clipboard (SalamExt must send it the command to perform the paste)
+    DWORD SalamanderMainWndTID;       // thread ID of Salamander's main window that put the pasted data object on the clipboard (SalamExt must send it the command to perform the paste)
+    UINT64 SalamanderMainWnd;         // main window of Salamander that put the pasted data object on the clipboard (SalamExt must send it the command to perform the paste) - HWND is 64-bit on x64 (even though reportedly only the lower 32 bits are used); the x86 build zeroes the upper 32 bits
+    int PostMsgIndex;                 // index of the posted WM_USER_SALSHEXT_PASTE message that SalamExt is waiting for (after the wait timeout expires the index increments -> Salamander then skips the message when it finally arrives)
+    BOOL BlockPasteDataRelease;       // probably redundant since W2K+: if TRUE, fakedataobj->Release() does not discard the paste data in Salamander
+    int SalBusyState;                 // 0 = checking whether Salamander is "busy"; 1 = Salamander is not "busy" and is already waiting for the paste request; 2 = Salamander is "busy", postpone the paste
+    DWORD PastedDataID;               // identifier of the pasted data (used to identify the data for paste inside Salamander - only Salamander knows what should actually be pasted; this stores just the ID)
+    BOOL PasteDone;                   // TRUE = paste operation started, TargetPath + Operation are valid
+    char ArcUnableToPaste1[300];      // prepared message for the copy hook for Paste errors (see IDS_ARCUNABLETOPASTE1)
+    char ArcUnableToPaste2[300];      // prepared message for the copy hook for Paste errors (see IDS_ARCUNABLETOPASTE2)
 
-    // vysledna operace
-    char TargetPath[2 * MAX_PATH]; // cilova cesta (kam vybalit soubory/adresare z archivu nebo nakopirovat soubory/adresare z file-systemu)
-    int Operation;                 // SALSHEXT_COPY nebo SALSHEXT_MOVE (nebo SALSHEXT_NONE po inicializaci struktury)
+    // resulting operation
+    char TargetPath[2 * MAX_PATH]; // target path (where to unpack files/directories from the archive or copy files/directories from the file system)
+    int Operation;                 // SALSHEXT_COPY or SALSHEXT_MOVE (or SALSHEXT_NONE after the structure is initialized)
 };
 typedef struct CSalShExtSharedMem CSalShExtSharedMem;
 #pragma pack(pop)
 
 //
-// ============================================= pouze Altap Salamander
+// ============================================= Altap Salamander only
 //
 
 #ifdef INSIDE_SALAMANDER
 
-// zanese do registry polozky potrebne pro chod knihovny
-// parametry jsou cesta ke knihovne, FALSE/TRUE testovat/netestovat verzi DLL tim, ze ho
-// loadneme, 0 nebo do jake casti registry (32-bit nebo 64-bit) se ma zapisovat
+// write the registry entries required for the library to operate
+// parameters: library path; FALSE/TRUE to skip/test the DLL version by loading it; 0 or the registry view (32-bit or 64-bit) to write into
 BOOL SECRegisterToRegistry(const char* shellExtensionPath, BOOL doNotLoadDLL, REGSAM regView);
 
 #ifdef ENABLE_SH_MENU_EXT
 
-// ulozi data do registry
+// store data into the registry
 BOOL SECSaveRegistry();
 
-// vrati pocet polozek v seznamu
+// return the number of items in the list
 int SECGetCount();
 
-// vyhodi ze seznamu polozku
+// remove an item from the list
 BOOL SECDeleteItem(int index);
 
-// prohodi dve polozky v seznamu
+// swap two items in the list
 BOOL SECSwapItems(int index1, int index2);
 
-// nastavi nazev polozky
+// set the item name
 BOOL SECSetName(int index, const char* name);
 
 #endif // ENABLE_SH_MENU_EXT
