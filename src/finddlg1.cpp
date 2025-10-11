@@ -34,7 +34,7 @@ void CFindOptions::InitMenu(CMenuPopup* popup, BOOL enabled, int originalCount)
     int count = popup->GetItemCount();
     if (count > originalCount)
     {
-        // sestrelim drive nabouchane polozky
+        // remove any previously inserted items
         popup->RemoveItemsRange(originalCount, count - 1);
     }
 
@@ -42,12 +42,12 @@ void CFindOptions::InitMenu(CMenuPopup* popup, BOOL enabled, int originalCount)
     {
         MENU_ITEM_INFO mii;
 
-        // pokud mame co pridavat, pridam separator
+        // if there are items to append, insert a separator first
         mii.Mask = MENU_MASK_TYPE;
         mii.Type = MENU_TYPE_SEPARATOR;
         popup->InsertItem(-1, TRUE, &mii);
 
-        // a pripojim zobrazovanou cast polozek
+        // append the visible portion of the items
         int maxCount = CM_FIND_OPTIONS_LAST - CM_FIND_OPTIONS_FIRST;
         int i;
         for (i = 0; i < min(Items.Count, maxCount); i++)
@@ -90,7 +90,7 @@ BOOL CFoundFilesData::Set(const char* path, const char* name, const CQuadWord& s
 
 char* CFoundFilesData::GetText(int i, char* text, int fileNameFormat)
 {
-    // protoze FIND oken muze bezet nekolik, mohlo dochazet k prepisu statickeho bufferu
+    // several FIND windows may run in parallel, which could overwrite this static buffer
     //  static char text[50];
     switch (i)
     {
@@ -162,13 +162,13 @@ CFoundFilesListView::CFoundFilesListView(HWND dlg, int ctrlID, CFindDialog* find
     FindDialog = findDialog;
     HANDLES(InitializeCriticalSection(&DataCriticalSection));
 
-    // pridani tohoto panelu do pole zdroju pro enumeraci souboru ve viewerech
+    // add this panel to the array of sources for enumerating files in viewers
     EnumFileNamesAddSourceUID(HWindow, &EnumFileNamesSourceUID);
 }
 
 CFoundFilesListView::~CFoundFilesListView()
 {
-    // zruseni tohoto panelu z pole zdroju pro enumeraci souboru ve viewerech
+    // remove this panel from the array of sources for enumerating files in viewers
     EnumFileNamesRemoveSourceUID(HWindow);
 
     HANDLES(DeleteCriticalSection(&DataCriticalSection));
@@ -256,7 +256,7 @@ CFoundFilesListView::GetDataForRefine(int index)
 DWORD
 CFoundFilesListView::GetSelectedListSize()
 {
-    // tato metoda je volana pouze z hlavniho threadu
+    // this method is invoked only from the main thread
     DWORD size = 0;
     int index = -1;
     do
@@ -267,9 +267,9 @@ CFoundFilesListView::GetSelectedListSize()
             CFoundFilesData* ptr = Data[index];
             int pathLen = lstrlen(ptr->Path);
             if (ptr->Path[pathLen - 1] != '\\')
-                pathLen++; // pokud path neobsahuje zpetne lomitko, vyhradime pro nej prostor
+                pathLen++; // reserve space if the path does not end with a backslash
             int nameLen = lstrlen(ptr->Name);
-            size += pathLen + nameLen + 1; // vyhradime prostor na terminator
+            size += pathLen + nameLen + 1; // reserve space for the terminator
         }
     } while (index != -1);
     if (size == 0)
@@ -292,7 +292,7 @@ BOOL CFoundFilesListView::GetSelectedList(char* list, DWORD maxSize)
             CFoundFilesData* ptr = Data[index];
             int pathLen = lstrlen(ptr->Path);
             if (ptr->Path[pathLen - 1] != '\\')
-                size++; // pokud path neobsahuje zpetne lomitko, vyhradime pro nej prostor
+                size++; // reserve space if the path does not end with a backslash
             size += pathLen;
             if (size > maxSize)
             {
@@ -304,7 +304,7 @@ BOOL CFoundFilesListView::GetSelectedList(char* list, DWORD maxSize)
             if (ptr->Path[pathLen - 1] != '\\')
                 *list++ = '\\';
             int nameLen = lstrlen(ptr->Name);
-            size += nameLen + 1; // vyhradime prostor na terminator
+            size += nameLen + 1; // reserve space for the terminator
             if (size > maxSize)
             {
                 TRACE_E("Buffer is too short");
@@ -370,15 +370,15 @@ void CFoundFilesListView::CheckAndRemoveSelectedItems(BOOL forceRemove, int last
     }
     if (removedItems > 0)
     {
-        // reknu listview novy pocet polozek
+        // inform the listview about the new item count
         totalCount = totalCount - removedItems;
         ListView_SetItemCount(HWindow, totalCount);
         if (totalCount > 0)
         {
-            // zahodim select vsech polozek
+            // clear selection of all items
             ListView_SetItemState(HWindow, -1, 0, LVIS_SELECTED);
 
-            // pokusime se dohledat, zda drive vybrana polozka jeste existuje a vybrat ji
+            // try to locate the previously selected item and select it again if it still exists
             int selectIndex = -1;
             if (lastFocusedIndex != -1)
             {
@@ -394,9 +394,9 @@ void CFoundFilesListView::CheckAndRemoveSelectedItems(BOOL forceRemove, int last
                     }
                 }
                 if (selectIndex == -1)
-                    selectIndex = min(lastFocusedIndex, totalCount - 1); // pokud jsme ji nenasli, nechame stat kurzor na sve pozici, ale maximalne do poctu polozek
+                    selectIndex = min(lastFocusedIndex, totalCount - 1); // if not found, keep the cursor in place but within item count
             }
-            if (selectIndex == -1) // zachrana -- nulta polozka
+            if (selectIndex == -1) // fallback -- first item
                 selectIndex = 0;
             ListView_SetItemState(HWindow, selectIndex, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
             ListView_EnsureVisible(HWindow, selectIndex, FALSE);
@@ -453,15 +453,15 @@ void CFoundFilesListView::RestoreItemsState()
 void CFoundFilesListView::SortItems(int sortBy)
 {
     if (sortBy == 5)
-        return; // podle atributu neumime radit
+        return; // sorting by attributes is unsupported
 
     BOOL enabledNameSize = TRUE;
     BOOL enabledPathTime = TRUE;
     if (FindDialog->GrepData.FindDuplicates)
     {
-        enabledPathTime = FALSE; // v pripade duplikatu nema vyznam
-        // radit podle jmena a velikosti lze v pripade duplicatu pouze
-        // pokud bylo hledano podle stejneho jmena i velikosti
+        enabledPathTime = FALSE; // path and time are irrelevant for duplicates
+        // sorting by name and size works for duplicates only
+        // when searching for identical name and size
         enabledNameSize = (FindDialog->GrepData.FindDupFlags & FIND_DUPLICATES_NAME) &&
                           (FindDialog->GrepData.FindDupFlags & FIND_DUPLICATES_SIZE);
     }
@@ -474,17 +474,17 @@ void CFoundFilesListView::SortItems(int sortBy)
     HCURSOR hCursor = SetCursor(LoadCursor(NULL, IDC_WAIT));
     HANDLES(EnterCriticalSection(&DataCriticalSection));
 
-    //   EnumFileNamesChangeSourceUID(HWindow, &EnumFileNamesSourceUID);  // zakomentovano, nevim proc to tu je: Petr
+    //   EnumFileNamesChangeSourceUID(HWindow, &EnumFileNamesSourceUID);  // commented out, not sure why it is here: Petr
 
-    // pokud mame nejake polozky v datech a nejsou v listview, preneseme je
+    // if some items are still in data but not in the listview, transfer them
     FindDialog->UpdateListViewItems();
 
     if (Data.Count > 0)
     {
-        // ulozime stav slected a focused polozek
+        // save the selected and focused item state
         StoreItemsState();
 
-        // seradim pole podle pozadovaneho kriteria
+        // sort the array by the requested criterion
         QuickSort(0, Data.Count - 1, sortBy);
         if (FindDialog->GrepData.FindDuplicates)
         {
@@ -496,7 +496,7 @@ void CFoundFilesListView::SortItems(int sortBy)
             QuickSort(0, Data.Count - 1, sortBy);
         }
 
-        // obnovime stavy polozek
+        // restore the item states
         RestoreItemsState();
 
         int focusIndex = ListView_GetNextItem(HWindow, -1, LVNI_FOCUSED);
@@ -563,7 +563,7 @@ LABEL_QuickSort2:
         }
     } while (i <= j);
 
-    // nasledujici "hezky" kod jsme nahradili kodem podstatne setricim stack (max. log(N) zanoreni rekurze)
+    // the following "nice" code was replaced by a stack-friendlier version (max. log(N) recursion depth)
     //  if (left < j) QuickSort(left, j, sortBy);
     //  if (i < right) QuickSort(i, right, sortBy);
 
@@ -571,7 +571,7 @@ LABEL_QuickSort2:
     {
         if (i < right)
         {
-            if (j - left < right - i) // je potreba seradit obe "poloviny", tedy do rekurze posleme tu mensi, tu druhou zpracujeme pres "goto"
+            if (j - left < right - i) // both halves need sorting: recurse on the smaller one and process the other via 'goto'
             {
                 QuickSort(left, j, sortBy);
                 left = i;
@@ -606,7 +606,7 @@ int CFoundFilesListView::CompareFunc(CFoundFilesData* f1, CFoundFilesData* f2, i
     int next = sortBy;
     do
     {
-        if (f1->IsDir == f2->IsDir) // jde o polozky ze stejne skupiny (adresare/soubory)?
+        if (f1->IsDir == f2->IsDir) // are the items from the same group (directories/files)?
         {
             switch (next)
             {
@@ -663,7 +663,7 @@ int CFoundFilesListView::CompareFunc(CFoundFilesData* f1, CFoundFilesData* f2, i
     return res;
 }
 
-// quick sort pro rezim duplikatu; vola specialni compare
+// quick sort routine for duplicate mode; it uses a special comparator
 void CFoundFilesListView::QuickSortDuplicates(int left, int right, BOOL byName)
 {
 
@@ -689,7 +689,7 @@ LABEL_QuickSortDuplicates:
         }
     } while (i <= j);
 
-    // nasledujici "hezky" kod jsme nahradili kodem podstatne setricim stack (max. log(N) zanoreni rekurze)
+    // the following "nice" code was replaced by a stack-friendlier version (max. log(N) recursion depth)
     //  if (left < j) QuickSortDuplicates(left, j, byName);
     //  if (i < right) QuickSortDuplicates(i, right, byName);
 
@@ -697,7 +697,7 @@ LABEL_QuickSortDuplicates:
     {
         if (i < right)
         {
-            if (j - left < right - i) // je potreba seradit obe "poloviny", tedy do rekurze posleme tu mensi, tu druhou zpracujeme pres "goto"
+            if (j - left < right - i) // both halves need sorting: recurse on the smaller one and use 'goto' for the other
             {
                 QuickSortDuplicates(left, j, byName);
                 left = i;
@@ -726,7 +726,7 @@ LABEL_QuickSortDuplicates:
     }
 }
 
-// compare pro rezim zobrazenych duplikatu; pokud je 'byName', radi se primarne podle jmena, jinak podle velikost
+// comparator for displayed duplicates; if 'byName', sorting is primarily by name, otherwise by size
 int CFoundFilesListView::CompareDuplicatesFunc(CFoundFilesData* f1, CFoundFilesData* f2, BOOL byName)
 {
     int res;
@@ -812,7 +812,7 @@ struct CUMDataFromFind
     }
 };
 
-// popis viz mainwnd.h
+// description -- see mainwnd.h
 BOOL GetNextItemFromFind(int index, char* path, char* name, void* param)
 {
     CALL_STACK_MESSAGE2("GetNextItemFromFind(%d, , ,)", index);
@@ -835,7 +835,7 @@ BOOL GetNextItemFromFind(int index, char* path, char* name, void* param)
             return FALSE;
         data->Index = new int[data->Count];
         if (data->Index == NULL)
-            return FALSE; // chyba
+            return FALSE; // error
         int i = 0;
         int findItem = -1;
         while (i < data->Count)
@@ -870,7 +870,7 @@ CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         if (lParam != NULL)
         {
-            // pokud jde o Enter, tak ho chceme zpracovat (jinak se Enter nedoruci)
+            // if it is the Enter key we want to handle it, otherwise the Enter would not be delivered
             MSG* msg = (LPMSG)lParam;
             if (msg->message == WM_KEYDOWN && msg->wParam == VK_RETURN &&
                 ListView_GetItemCount(HWindow) > 0)
@@ -884,7 +884,7 @@ CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         BOOL altPressed = (GetKeyState(VK_MENU) & 0x8000) != 0;
         BOOL shiftPressed = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-        /* vypada to, ze tenhle kod uz je zbytecnej, resime to ve wndproc dialogu
+        /* it seems this code is no longer needed; handled in the dialog wndproc
       if (wParam == VK_RETURN)
       {
         if (altPressed)
@@ -909,8 +909,7 @@ CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_MOUSEACTIVATE:
     {
-        // pokud je Find neaktivni a uzivatel chce pres drag&drop odtahnout
-        // nekterou z polozek, nesmi Find vyskocit nahoru
+        // if Find is inactive and the user drags an item away, the dialog must not jump to the foreground
         return MA_NOACTIVATE;
     }
 
@@ -927,7 +926,7 @@ CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         if (next != NULL)
         {
             char className[30];
-            WORD wl = LOWORD(GetWindowLongPtr(next, GWL_STYLE)); // jen BS_...
+            WORD wl = LOWORD(GetWindowLongPtr(next, GWL_STYLE)); // only BS_ styles
             nextIsButton = (GetClassName(next, className, 30) != 0 &&
                             StrICmp(className, "BUTTON") == 0 &&
                             (wl == BS_PUSHBUTTON || wl == BS_DEFPUSHBUTTON));
@@ -938,20 +937,20 @@ CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         break;
     }
 
-    case WM_USER_ENUMFILENAMES: // hledani dalsiho/predchoziho jmena pro viewer
+    case WM_USER_ENUMFILENAMES: // searching for the next/previous name for the viewer
     {
         HANDLES(EnterCriticalSection(&FileNamesEnumDataSect));
-        if ((int)wParam /* reqUID */ == FileNamesEnumData.RequestUID && // nedoslo k zadani dalsiho pozadaku (tento by pak byl k nicemu)
-            EnumFileNamesSourceUID == FileNamesEnumData.SrcUID &&       // nedoslo ke zmene zdroje
-            !FileNamesEnumData.TimedOut)                                // na vysledek jeste nekdo ceka
+        if ((int)wParam /* reqUID */ == FileNamesEnumData.RequestUID && // no further request was issued (this one would be pointless)
+            EnumFileNamesSourceUID == FileNamesEnumData.SrcUID &&       // the source hasn't changed
+            !FileNamesEnumData.TimedOut)                                // someone is still waiting for the result
         {
             HANDLES(EnterCriticalSection(&DataCriticalSection));
 
             BOOL selExists = FALSE;
-            if (FileNamesEnumData.PreferSelected) // je-li to treba, zjistime jestli existuje selectiona
+            if (FileNamesEnumData.PreferSelected) // if needed, check whether there is a selection
             {
                 int i = -1;
-                int selCount = 0; // musime ignorovat stav, kdy je jedina oznacena polozka fokus (to logicky nelze povazovat za oznacene polozky)
+                int selCount = 0; // ignore the state where the only marked item is the focus; that doesn't count as a selection
                 while (1)
                 {
                     i = ListView_GetNextItem(HWindow, i, LVNI_SELECTED);
@@ -973,15 +972,15 @@ CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             int index = FileNamesEnumData.LastFileIndex;
             int count = Data.Count;
             BOOL indexNotFound = TRUE;
-            if (index == -1) // hledame od prvniho nebo od posledniho
+            if (index == -1) // searching from the first or last item
             {
                 if (FileNamesEnumData.RequestType == fnertFindPrevious)
-                    index = count; // hledame predchozi + mame zacit na poslednim
-                                   // else  // hledame nasledujici + mame zacit na prvnim
+                    index = count; // looking for the previous item, start at the end
+                                   // else  // looking for the next item, start at the beginning
             }
             else
             {
-                if (FileNamesEnumData.LastFileName[0] != 0) // zname plne jmeno souboru na 'index', zkontrolujeme jestli nedoslo k rozesunuti/sesunuti pole + pripadne dohledame novy index
+                if (FileNamesEnumData.LastFileName[0] != 0) // the full name at 'index' is known; check for shifts and search for a new index if needed
                 {
                     BOOL ok = FALSE;
                     CFoundFilesData* f = (index >= 0 && index < count) ? Data[index] : NULL;
@@ -997,7 +996,7 @@ CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                         }
                     }
                     if (!ok)
-                    { // jmeno na indexu 'index' neni FileNamesEnumData.LastFileName, zkusime najit novy index tohoto jmena
+                    { // the name at index 'index' isn't FileNamesEnumData.LastFileName, try to find a new index for that name
                         int i;
                         for (i = 0; i < count; i++)
                         {
@@ -1010,7 +1009,7 @@ CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                                     break;
                             }
                         }
-                        if (i != count) // novy index nalezen
+                        if (i != count) // new index found
                         {
                             index = i;
                             indexNotFound = FALSE;
@@ -1030,9 +1029,9 @@ CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
             int wantedViewerType = 0;
             BOOL onlyAssociatedExtensions = FALSE;
-            if (FileNamesEnumData.OnlyAssociatedExtensions) // preje si viewer filtrovani podle asociovanych pripon?
+            if (FileNamesEnumData.OnlyAssociatedExtensions) // does the viewer request filtering by associated extensions?
             {
-                if (FileNamesEnumData.Plugin != NULL) // viewer z pluginu
+                if (FileNamesEnumData.Plugin != NULL) // viewer from a plugin
                 {
                     int pluginIndex = Plugins.GetIndex(FileNamesEnumData.Plugin);
                     if (pluginIndex != -1) // "always true"
@@ -1041,7 +1040,7 @@ CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                         onlyAssociatedExtensions = TRUE;
                     }
                 }
-                else // interni viewer
+                else // internal viewer
                 {
                     wantedViewerType = VIEWER_INTERNAL;
                     onlyAssociatedExtensions = TRUE;
@@ -1051,7 +1050,7 @@ CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             BOOL preferSelected = selExists && FileNamesEnumData.PreferSelected;
             switch (FileNamesEnumData.RequestType)
             {
-            case fnertFindNext: // dalsi
+            case fnertFindNext: // next
             {
                 CDynString strViewerMasks;
                 if (MainWindow->GetViewersAssoc(wantedViewerType, &strViewerMasks))
@@ -1069,7 +1068,7 @@ CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                                 if (i != -1)
                                 {
                                     index = i;
-                                    if (!Data[index]->IsDir) // hledame jen soubory
+                                    if (!Data[index]->IsDir) // searching only files
                                     {
                                         if (!onlyAssociatedExtensions || masks.AgreeMasks(Data[index]->Name, NULL))
                                         {
@@ -1100,7 +1099,7 @@ CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 break;
             }
 
-            case fnertFindPrevious: // predchozi
+            case fnertFindPrevious: // previous
             {
                 CDynString strViewerMasks;
                 if (MainWindow->GetViewersAssoc(wantedViewerType, &strViewerMasks))
@@ -1130,7 +1129,7 @@ CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 break;
             }
 
-            case fnertIsSelected: // zjisteni oznaceni
+            case fnertIsSelected: // check selection state
             {
                 if (!indexNotFound && index >= 0 && index < Data.Count)
                 {
@@ -1140,7 +1139,7 @@ CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 break;
             }
 
-            case fnertSetSelection: // nastaveni oznaceni
+            case fnertSetSelection: // change selection
             {
                 if (!indexNotFound && index >= 0 && index < Data.Count)
                 {
@@ -1160,7 +1159,7 @@ CFoundFilesListView::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                     SalPathAppend(FileNamesEnumData.FileName, f->Name, MAX_PATH);
                     FileNamesEnumData.LastFileIndex = index;
                 }
-                else // nikdy by nemelo nastat
+                else // should never happen
                 {
                     TRACE_E("Unexpected situation in CFoundFilesListView::WindowProc(): handling of WM_USER_ENUMFILENAMES");
                     FileNamesEnumData.Found = FALSE;
@@ -1192,7 +1191,7 @@ BOOL CFoundFilesListView::InitColumns()
     lvc.mask = LVCF_FMT | LVCF_TEXT | LVCF_SUBITEM;
     lvc.fmt = LVCFMT_LEFT;
     int i;
-    for (i = 0; header[i] != -1; i++) // vytvorim sloupce
+    for (i = 0; header[i] != -1; i++) // create columns
     {
         if (i == 2)
             lvc.fmt = LVCFMT_RIGHT;
@@ -1211,15 +1210,15 @@ BOOL CFoundFilesListView::InitColumns()
     char format2[200];
     SYSTEMTIME st;
     ZeroMemory(&st, sizeof(st));
-    st.wYear = 2000; // nejdelsi mozna hodnota
-    st.wMonth = 12;  // nejdelsi mozna hodnota
-    st.wDay = 30;    // nejdelsi mozna hodnota
-    st.wHour = 10;   // dopoledne (nevime, zda bude kratsi zapis dopoledne nebo odpoledne, zkusime oba)
-    st.wMinute = 59; // nejdelsi mozna hodnota
-    st.wSecond = 59; // nejdelsi mozna hodnota
+    st.wYear = 2000; // longest possible value
+    st.wMonth = 12;  // longest possible value
+    st.wDay = 30;    // longest possible value
+    st.wHour = 10;   // morning (not sure whether AM or PM will be shorter, so try both)
+    st.wMinute = 59; // longest possible value
+    st.wSecond = 59; // longest possible value
     if (GetTimeFormat(LOCALE_USER_DEFAULT, 0, &st, NULL, format1, 200) == 0)
         sprintf(format1, "%u:%02u:%02u", st.wHour, st.wMinute, st.wSecond);
-    st.wHour = 20; // odpoledne
+    st.wHour = 20; // afternoon
     if (GetTimeFormat(LOCALE_USER_DEFAULT, 0, &st, NULL, format2, 200) == 0)
         sprintf(format2, "%u:%02u:%02u", st.wHour, st.wMinute, st.wSecond);
 
@@ -1234,17 +1233,17 @@ BOOL CFoundFilesListView::InitColumns()
         sprintf(format1, "%u.%u.%u", st.wDay, st.wMonth, st.wYear);
     else
     {
-        // overime, ze kratky format datumu neobsahuje alpha znaky
+        // verify that the short date format does not contain alphabetic characters
         const char* p = format1;
         while (*p != 0 && !IsAlpha[*p])
             p++;
         if (IsAlpha[*p])
         {
-            // obsahuje alpha znaky -- musime dohledat nejdelsi zapis mesice a dne
+            // contains alphabetic characters -- we must find the longest month and day text
             int maxMonth = 0;
             int sats[] = {1, 5, 4, 1, 6, 3, 1, 5, 2, 7, 4, 2};
             int mo;
-            for (mo = 0; mo < 12; mo++) // projdeme vsechny mesice pocinaje lednem, den v tydnu bude shodny, aby se neprojevila jeho sire, wDay bude jednociferny ze stejneho duvodu
+            for (mo = 0; mo < 12; mo++) // iterate over all months starting from January; the weekday stays the same so its width doesn't influence the result, wDay is single digit for the same reason
             {
                 st.wDay = sats[mo];
                 st.wMonth = 1 + mo;
@@ -1261,7 +1260,7 @@ BOOL CFoundFilesListView::InitColumns()
             if (maxWidth > 0)
             {
                 st.wMonth = maxMonth;
-                for (st.wDay = 21; st.wDay < 28; st.wDay++) // vsechny mozne dny v tydnu (nemusi zacinat od pondeli)
+                for (st.wDay = 21; st.wDay < 28; st.wDay++) // all possible weekdays (doesn't have to start on Monday)
                 {
                     if (GetDateFormat(LOCALE_USER_DEFAULT, DATE_SHORTDATE, &st, NULL, format1, 200) != 0)
                     {
@@ -1277,7 +1276,7 @@ BOOL CFoundFilesListView::InitColumns()
     }
 
     ListView_SetColumnWidth(HWindow, 3, (maxWidth > 0 ? maxWidth : ListView_GetStringWidth(HWindow, format1)) + 20);
-    ListView_SetColumnWidth(HWindow, 2, ListView_GetStringWidth(HWindow, "000 000 000 000") + 20); // do 1TB se vejdeme
+    ListView_SetColumnWidth(HWindow, 2, ListView_GetStringWidth(HWindow, "000 000 000 000") + 20); // up to 1TB fits here
     int width;
     if (Configuration.FindColNameWidth != -1)
         width = Configuration.FindColNameWidth;
@@ -1302,7 +1301,7 @@ CFindDialog::CFindDialog(HWND hCenterAgainst, const char* initPath)
     : CCommonDialog(HLanguage, IDD_FIND, NULL, ooStandard, hCenterAgainst),
       SearchForData(50, 10)
 {
-    // data potrebna pro layoutovani dialogu
+    // data needed to lay out the dialog
     FirstWMSize = TRUE;
     VMargin = 0;
     HMargin = 0;
@@ -1323,11 +1322,11 @@ CFindDialog::CFindDialog(HWND hCenterAgainst, const char* initPath)
     BrowseY = 0;
     Line2X = 0;
     FindNowY = 0;
-    Expanded = TRUE; // persistentni
+    Expanded = TRUE; // persistent
     MinDlgW = 0;
     MinDlgH = 0;
 
-    // dalsi data
+    // additional data
     DlgFailed = FALSE;
     MainMenu = NULL;
     TBHeader = NULL;
@@ -1359,7 +1358,7 @@ CFindDialog::CFindDialog(HWND hCenterAgainst, const char* initPath)
 
     FindNowText[0] = 0;
 
-    // pokud ma nektery z options nastavany AutoLoad, nahraju ho
+    // if any option has AutoLoad set, load it now
     int i;
     for (i = 0; i < FindOptions.GetCount(); i++)
         if (FindOptions.At(i)->AutoLoad)
@@ -1369,14 +1368,14 @@ CFindDialog::CFindDialog(HWND hCenterAgainst, const char* initPath)
             break;
         }
 
-    // data pro controly
+    // data for controls
     if (Data.NamedText[0] == 0)
         lstrcpy(Data.NamedText, "*.*");
     if (Data.LookInText[0] == 0)
     {
         const char* s = initPath;
         char* d = Data.LookInText;
-        char* end = Data.LookInText + LOOKIN_TEXT_LEN - 1; // -1 je prostor na null na konci retezce
+        char* end = Data.LookInText + LOOKIN_TEXT_LEN - 1; // -1 leaves room for the terminating null
         while (*s != 0 && d < end)
         {
             if (*s == ';')
@@ -1470,7 +1469,7 @@ void CFindDialog::SetTwoStatusParts(BOOL two, BOOL force)
     int progressHeight = 0;
     if (two)
     {
-        progressWidth = 104; // 100 + ramecek
+        progressWidth = 104; // 100 plus the border
         if (HProgressBar == NULL)
         {
             HProgressBar = CreateWindowEx(0, PROGRESS_CLASS, NULL,
@@ -1494,7 +1493,7 @@ void CFindDialog::SetTwoStatusParts(BOOL two, BOOL force)
 
     if (HProgressBar != NULL)
     {
-        parts[1] -= 10; // zvetsime odstup od progress bary
+        parts[1] -= 10; // increase spacing from the progress bar
         SetWindowPos(HProgressBar, NULL,
                      r.right - progressWidth - gripWidth, 2, 0, 0,
                      SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW);
@@ -1503,7 +1502,7 @@ void CFindDialog::SetTwoStatusParts(BOOL two, BOOL force)
     if (TwoParts != two || force)
     {
         TwoParts = two;
-        SendMessage(HStatusBar, WM_SETREDRAW, FALSE, 0); // pokud je povolene prekreslovani, na konci statusbary nam zustava parazitni ramecek
+        SendMessage(HStatusBar, WM_SETREDRAW, FALSE, 0); // when redraw is enabled the status bar ends up with a stray frame
         SendMessage(HStatusBar, SB_SETPARTS, 3, (LPARAM)parts);
         SendMessage(HStatusBar, SB_SETTEXT, 0 | SBT_NOBORDERS, (LPARAM) "");
         SendMessage(HStatusBar, SB_SETTEXT, 2 | SBT_NOBORDERS, (LPARAM) "");
@@ -1532,72 +1531,72 @@ void CFindDialog::LayoutControls()
     HDWP hdwp = HANDLES(BeginDeferWindowPos(14));
     if (hdwp != NULL)
     {
-        // prostor mezi tlacitky
+        // spacing between buttons
         int buttonMargin = ButtonH / 3;
 
-        // umistim MenuBar
+        // position the MenuBar
         hdwp = HANDLES(DeferWindowPos(hdwp, MenuBar->HWindow, NULL,
                                       0, -1, clientRect.right, MenuBarHeight,
                                       SWP_NOZORDER));
 
-        // umistim Status Bar
+        // position the Status Bar
         hdwp = HANDLES(DeferWindowPos(hdwp, HStatusBar, NULL,
                                       0, clientRect.bottom, clientRect.right, StatusHeight,
                                       SWP_NOZORDER));
 
-        // umistim tlacitko Advanced
+        // position the Advanced button
         hdwp = HANDLES(DeferWindowPos(hdwp, GetDlgItem(HWindow, IDC_FIND_ADVANCED), NULL,
                                       HMargin, AdvancedY, 0, 0, SWP_NOSIZE | SWP_NOZORDER));
 
-        // umitstim a natahnu editlajnu Advanced
+        // place and stretch the Advanced edit line
         hdwp = HANDLES(DeferWindowPos(hdwp, GetDlgItem(HWindow, IDC_FIND_ADVANCED_TEXT), NULL,
                                       AdvancedTextX, AdvancedTextY, clientRect.right - AdvancedTextX - HMargin, CombosH,
                                       SWP_NOZORDER));
 
-        // umistim text Found files
+        // position the "Found files" label
         hdwp = HANDLES(DeferWindowPos(hdwp, TBHeader->HWindow /*GetDlgItem(HWindow, IDC_FIND_FOUND_FILES)*/, NULL,
                                       HMargin, FindTextY, clientRect.right - 2 * HMargin, FindTextH, SWP_NOZORDER));
 
-        // umistim a natahnu list view
+        // place and stretch the list view
         hdwp = HANDLES(DeferWindowPos(hdwp, GetDlgItem(HWindow, IDC_FIND_RESULTS), NULL,
                                       HMargin, ResultsY, clientRect.right - 2 * HMargin,
                                       clientRect.bottom - ResultsY /*- VMargin*/, SWP_NOZORDER));
 
-        // umistim a natahnu oddelovaci caru pod menu
+        // place and stretch the separator under the menu
         hdwp = HANDLES(DeferWindowPos(hdwp, GetDlgItem(HWindow, IDC_FIND_LINE1), NULL,
                                       0, MenuBarHeight - 1, clientRect.right, 2, SWP_NOZORDER));
 
-        // natahnu combobox Named
+        // stretch the "Named" combo box
         hdwp = HANDLES(DeferWindowPos(hdwp, GetDlgItem(HWindow, IDC_FIND_NAMED), NULL,
                                       0, 0, clientRect.right - CombosX - HMargin - ButtonW - buttonMargin, CombosH,
                                       SWP_NOMOVE | SWP_NOZORDER));
 
-        // umistim tlacitko Find Now
+        // position the "Find Now" button
         hdwp = HANDLES(DeferWindowPos(hdwp, GetDlgItem(HWindow, IDOK), NULL, //IDC_FIND_FINDNOW
                                       clientRect.right - HMargin - ButtonW, FindNowY, 0, 0,
                                       SWP_NOSIZE | SWP_NOZORDER));
 
-        // natahnu combobox Look in
+        // stretch the "Look in" combo box
         hdwp = HANDLES(DeferWindowPos(hdwp, GetDlgItem(HWindow, IDC_FIND_LOOKIN), NULL,
                                       0, 0, clientRect.right - CombosX - HMargin - ButtonW - buttonMargin, CombosH,
                                       SWP_NOMOVE | SWP_NOZORDER));
 
-        // umistim tlacitko Browse
+        // position the Browse button
         hdwp = HANDLES(DeferWindowPos(hdwp, GetDlgItem(HWindow, IDC_FIND_LOOKIN_BROWSE), NULL,
                                       clientRect.right - HMargin - ButtonW, BrowseY, 0, 0,
                                       SWP_NOSIZE | SWP_NOZORDER));
 
-        // natahnu combobox Containing
+        // stretch the "Containing" combo box
         hdwp = HANDLES(DeferWindowPos(hdwp, GetDlgItem(HWindow, IDC_FIND_CONTAINING), NULL,
                                       0, 0, clientRect.right - CombosX - HMargin - RegExpButtonW - buttonMargin, CombosH,
                                       SWP_NOMOVE | SWP_NOZORDER));
 
-        // umistim tlacitko Regular Expression Browse
+        // position the Regular Expression Browse button
         hdwp = HANDLES(DeferWindowPos(hdwp, GetDlgItem(HWindow, IDC_FIND_REGEXP_BROWSE), NULL,
                                       clientRect.right - HMargin - RegExpButtonW, RegExpButtonY, 0, 0,
                                       SWP_NOSIZE | SWP_NOZORDER));
 
-        // natahnu oddelovaci caru u Search file content
+        // stretch the separator next to "Search file content"
         hdwp = HANDLES(DeferWindowPos(hdwp, GetDlgItem(HWindow, IDC_FIND_LINE2), NULL,
                                       0, 0, clientRect.right - Line2X - HMargin, 2,
                                       SWP_NOMOVE | SWP_NOZORDER));
@@ -1632,7 +1631,7 @@ void CFindDialog::SetContentVisible(BOOL visible)
             }
         }
 
-        // pokud se polozky zjevuji, musim je povolit
+        // when items appear we must enable them
         Expanded = visible;
         if (visible)
         {
@@ -1681,7 +1680,7 @@ void CFindDialog::Validate(CTransferInfo& ti)
     if (ti.GetControl(hNamesWnd, IDC_FIND_NAMED) &&
         ti.GetControl(hLookInWnd, IDC_FIND_LOOKIN))
     {
-        // zaloha dat
+        // back up the data
         char bufNamed[NAMED_TEXT_LEN];
         char bufLookIn[LOOKIN_TEXT_LEN];
         strcpy(bufNamed, Data.NamedText);
@@ -1694,7 +1693,7 @@ void CFindDialog::Validate(CTransferInfo& ti)
         {
             SalMessageBox(HWindow, LoadStr(IDS_INCORRECTSYNTAX), LoadStr(IDS_ERRORTITLE),
                           MB_OK | MB_ICONEXCLAMATION);
-            SetFocus(hNamesWnd); // aby korektne probehla message CB_SETEDITSEL
+            SetFocus(hNamesWnd); // ensure the CB_SETEDITSEL message works correctly
             SendMessage(hNamesWnd, CB_SETEDITSEL, 0, MAKELPARAM(errorPos, errorPos + 1));
             ti.ErrorOn(IDC_FIND_NAMED);
         }
@@ -1712,7 +1711,7 @@ void CFindDialog::Validate(CTransferInfo& ti)
             }
         }
 
-        // obnovime data ze zalohy
+        // restore data from the backup
         strcpy(Data.LookInText, bufLookIn);
         strcpy(Data.NamedText, bufNamed);
     }
@@ -1749,7 +1748,7 @@ void CFindDialog::LoadControls(int index)
     CALL_STACK_MESSAGE2("CFindDialog::LoadControls(0x%X)", index);
     Data = *FindOptions.At(index);
 
-    // pokud je nektera z editlajn prazdna, zachovame puvodni hodnotu
+    // if any edit line is empty, keep its previous value
     if (Data.NamedText[0] == 0)
         GetDlgItemText(HWindow, IDC_FIND_NAMED, Data.NamedText, NAMED_TEXT_LEN);
     if (Data.LookInText[0] == 0)
@@ -1759,7 +1758,7 @@ void CFindDialog::LoadControls(int index)
 
     TransferData(ttDataToWindow);
 
-    // pokud je neco v grepu a dialog neni expanded, roztahnu ho
+    // if Grep contains text and the dialog isn't expanded, expand it
     if (Data.GrepText[0] != 0 && !Expanded)
     {
         CheckDlgButton(HWindow, IDC_FIND_GREP, TRUE);
@@ -1776,9 +1775,9 @@ void CFindDialog::BuildSerchForData()
     char* begin;
     char* end;
 
-    // Lide chteji v maskach zadavat pouze "jsem_pako", aby nasli soubory "*jsem_pako*".
-    // Proto musime prohledat kazdou polozku z mask group a pokud neobsahuje nejaky
-    // wildcard nebo znak '.', oblozime ho hvezdickama.
+    // Users often enter just "i_am_dummy" to search for "*i_am_dummy*".
+    // Therefore we must inspect each item from the mask group and, if it lacks
+    // any wildcard or '.', surround it with asterisks.
     char* iterator = named;
     begin = Data.NamedText;
     while (1)
@@ -1798,13 +1797,13 @@ void CFindDialog::BuildSerchForData()
             end++;
         }
         while (*begin != 0 && *begin <= ' ')
-            begin++; // preskoceni mezer na zacatku
+            begin++; // skip spaces at the beginning
         char* tmpEnd = end;
         while (tmpEnd > begin && *(tmpEnd - 1) <= ' ')
-            tmpEnd--; // preskoceni mezer na konci
+            tmpEnd--; // skip spaces at the end
         if (tmpEnd > begin)
         {
-            // zjistime, jestli substring obsahuje wildcard '*', '?', '.'
+            // check whether the substring contains a wildcard '*', '?', or '.'
             BOOL wildcard = FALSE;
             char* tmp = begin;
             while (tmp < tmpEnd)
@@ -1818,13 +1817,13 @@ void CFindDialog::BuildSerchForData()
             }
 
             if (!wildcard)
-                *iterator++ = '*'; // zadny wildcard - oblozime zleva hvezdickou
+                *iterator++ = '*'; // no wildcard - prepend an asterisk
 
             memcpy(iterator, begin, tmpEnd - begin);
             iterator += tmpEnd - begin;
 
             if (!wildcard)
-                *iterator++ = '*'; // zadny wildcard - oblozime zprava hvezdickou
+                *iterator++ = '*'; // no wildcard - append an asterisk
         }
         *iterator++ = *end;
         if (*end != 0)
@@ -1834,7 +1833,7 @@ void CFindDialog::BuildSerchForData()
     }
 
     if (named[0] == 0)
-        strcpy(named, "*"); // prazdny retezec nahradime znakem '*'
+        strcpy(named, "*"); // replace empty string with '*'
 
     SearchForData.DestroyMembers();
 
@@ -1851,7 +1850,7 @@ void CFindDialog::BuildSerchForData()
                 if (*(end + 1) != ';')
                     break;
                 else
-                    memmove(end, end + 1, strlen(end + 1) + 1); // provedeme sesun (";;" -> ";")
+                    memmove(end, end + 1, strlen(end + 1) + 1); // shift left (";;" -> ";")
             }
             end++;
         }
@@ -1861,26 +1860,26 @@ void CFindDialog::BuildSerchForData()
             *end = 0;
             end++;
         }
-        // while (*end == ';') end++;   // je "always-false", protoze ";;" -> ";" a jde o normalni znak a ne oddelovac
+        // while (*end == ';') end++;   // always false because ";;" -> ";" and it's a regular character, not a separator
 
-        // odriznu mezery pred cestou
+        // remove spaces before the path
         while (*begin == ' ')
             begin++;
-        // odriznu mezery za cestou
+        // remove spaces after the path
         if (tmp > begin)
         {
             while (tmp > begin && *tmp <= ' ')
                 tmp--;
-            *(tmp + 1) = 0; // bud uz tam '\0' je nebo ji tam dame
+            *(tmp + 1) = 0; // there might already be '\0'; otherwise add it
         }
-        // odriznu prebytecne slashe+backslashe na konci cesty (necham tam max. jeden)
+        // remove redundant slashes/backslashes at the end of the path (keep at most one)
         if (tmp > begin)
         {
             while (tmp > begin && (*tmp == '/' || *tmp == '\\'))
                 tmp--;
             if (*(tmp + 1) == '/' || *(tmp + 1) == '\\')
-                tmp++;      // jeden tam nechame
-            *(tmp + 1) = 0; // bud uz tam '\0' je nebo ji tam dame
+                tmp++;      // leave one
+            *(tmp + 1) = 0; // there might already be '\0'; otherwise add it
         }
 
         if (*begin != 0)
@@ -1908,14 +1907,14 @@ void CFindDialog::StartSearch(WORD command)
     if (FoundFilesListView == NULL || GrepThread != NULL)
         return;
 
-    // pokud mame hledat duplikaty, doptame se na options
+    // if we are searching for duplicates, ask for additional options
     CFindDuplicatesDialog findDupDlg(HWindow);
     if (command == CM_FIND_DUPLICATES)
     {
         if (findDupDlg.Execute() != IDOK)
             return;
 
-        // radeji zkontrolujeme vystupni promenne
+        // better verify the output variables
         if (!findDupDlg.SameName && !findDupDlg.SameSize)
         {
             TRACE_E("Invalid output from CFindDuplicatesDialog dialog.");
@@ -1931,7 +1930,7 @@ void CFindDialog::StartSearch(WORD command)
     ListView_SetItemCount(FoundFilesListView->HWindow, 0);
     UpdateWindow(FoundFilesListView->HWindow);
 
-    // pokud jsme drzeli nejake chyby ze stareho hledani, ted je uvolnime
+    // release any errors held from the previous search
     Log.Clean();
 
     GrepData.FindDuplicates = FALSE;
@@ -1950,7 +1949,7 @@ void CFindDialog::StartSearch(WORD command)
 
     case CM_FIND_INTERSECT:
     {
-        // pokud jde o refine, prevezmeme data do pole DataForRefine
+        // if this is a refine operation, copy data to the DataForRefine array
         FoundFilesListView->TakeDataForRefine();
         GrepData.Refine = 1;
         break;
@@ -1958,7 +1957,7 @@ void CFindDialog::StartSearch(WORD command)
 
     case CM_FIND_SUBTRACT:
     {
-        // pokud jde o refine, prevezmeme data do pole DataForRefine
+        // if this is a refine operation, copy data to the DataForRefine array
         FoundFilesListView->TakeDataForRefine();
         GrepData.Refine = 2;
         break;
@@ -1993,7 +1992,7 @@ void CFindDialog::StartSearch(WORD command)
         GrepData.EOL_CRLF = Configuration.EOL_CRLF;
         GrepData.EOL_CR = Configuration.EOL_CR;
         GrepData.EOL_LF = Configuration.EOL_LF;
-        //    GrepData.EOL_NULL = Configuration.EOL_NULL;   // na to nemam regexp :(
+        //    GrepData.EOL_NULL = Configuration.EOL_NULL;   // unsupported by our regexp engine :(
         GrepData.Regular = Data.RegularExpresions;
         GrepData.WholeWords = Data.WholeWords;
         if (Data.RegularExpresions)
@@ -2055,7 +2054,7 @@ void CFindDialog::StartSearch(WORD command)
         return;
     }
 
-    if (OKButton != NULL) // shodime dropdown
+    if (OKButton != NULL) // hide the drop-down arrow
     {
         DWORD flags = OKButton->GetFlags();
         flags &= ~BTF_DROPDOWN;
@@ -2065,10 +2064,10 @@ void CFindDialog::StartSearch(WORD command)
 
     SearchInProgress = TRUE;
 
-    // rozjedeme timer pro aktualizaci Dirty textu
+    // start a timer to update the dirty text
     SetTimer(HWindow, IDT_REPAINT, 100, NULL);
 
-    // vynutime si prvni refresh status-bary
+    // force the first status bar refresh
     SearchingText.SetDirty(TRUE);
     PostMessage(HWindow, WM_TIMER, IDT_REPAINT, 0);
 
@@ -2087,17 +2086,17 @@ void CFindDialog::StopSearch()
     while (1)
     {
         BOOL oldCanClose = CanClose;
-        CanClose = FALSE; // nenechame se zavrit, jsme uvnitr metody
+        CanClose = FALSE; // don't allow closing while inside this method
 
         if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
-        { // message loopa pro message od grep-threadu
+        { // message loop for messages from the grep thread
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
 
         CanClose = oldCanClose;
         if (GrepThread == NULL)
-            return; // DispatchMessage nas muze zavolat znovu a zavirani uz jsme provedli
+            return; // DispatchMessage may call us again and we've already handled closing
         if (WaitForSingleObject(GrepThread, 100) != WAIT_TIMEOUT)
             break;
     }
@@ -2106,7 +2105,7 @@ void CFindDialog::StopSearch()
     GrepThread = NULL;
 
     SearchInProgress = FALSE;
-    if (OKButton != NULL) // nahodime dropdown
+    if (OKButton != NULL) // show the drop-down arrow
     {
         DWORD flags = OKButton->GetFlags();
         flags |= BTF_DROPDOWN;
@@ -2114,10 +2113,10 @@ void CFindDialog::StopSearch()
     }
     SetDlgItemText(HWindow, IDOK, FindNowText);
 
-    // stopneme timer pro aktualizaci textu
+    // stop the timer used for updating the text
     KillTimer(HWindow, IDT_REPAINT);
 
-    // pokud behem hledani doslo k zobrazeni druheho textu, je cas ho schovat
+    // if the second text appeared during search, it's time to hide it
     if (TwoParts)
     {
         SearchingText2.Set("");
@@ -2255,7 +2254,7 @@ void CFindDialog::EnableControls(BOOL nextIsButton)
     int defID;
     if (focus == FoundFilesListView->HWindow &&
         ListView_GetItemCount(FoundFilesListView->HWindow) > 0)
-    { // bez def-push buttonu
+    { // without the default push button
         defID = (int)SendMessage(HWindow, DM_GETDEFID, 0, 0);
         if (HIWORD(defID) == DC_HASDEFID)
             defID = LOWORD(defID);
@@ -2266,7 +2265,7 @@ void CFindDialog::EnableControls(BOOL nextIsButton)
             SendMessage(GetDlgItem(HWindow, defID), BM_SETSTYLE,
                         BS_PUSHBUTTON, MAKELPARAM(TRUE, 0));
     }
-    else // vyber def-push buttonu
+    else // select the default push button
     {
         if (nextIsButton)
         {
@@ -2279,11 +2278,11 @@ void CFindDialog::EnableControls(BOOL nextIsButton)
             }
         }
         defID = IDOK;
-        // nasleduici kod zpusoboval poblikavani Find Now tlacitka behem prohledavani
-        // pokud na nej clovek postavil mysi Focus; odpojenim se nezda, ze bych neco porusil, uvidime...
+        // the following code caused the Find Now button to flicker during search
+        // when the mouse focus rested on it; removing it doesn't seem to break anything, we'll see...
         /*
     char className[30];
-    WORD wl = LOWORD(GetWindowLongPtr(focus, GWL_STYLE));  // jen BS_...
+    WORD wl = LOWORD(GetWindowLongPtr(focus, GWL_STYLE));  // only BS_ styles
     if (GetClassName(focus, className, 30) != 0 &&
         StrICmp(className, "BUTTON") == 0 &&
         (wl == BS_PUSHBUTTON || wl == BS_DEFPUSHBUTTON))
@@ -2305,20 +2304,20 @@ void CFindDialog::UpdateListViewItems()
     {
         int count = FoundFilesListView->GetCount();
 
-        // reknu listview novy pocet polozek
+        // inform the list view about the new item count
         ListView_SetItemCountEx(FoundFilesListView->HWindow,
                                 count,
                                 LVSICF_NOINVALIDATEALL | LVSICF_NOSCROLL);
-        // pokud jde o prvni pridana data, nultou polozku vyberu
+        // for the first added data, select the first item
         if (GrepData.FoundVisibleCount == 0 && count > 0)
             ListView_SetItemState(FoundFilesListView->HWindow, 0,
                                   LVIS_FOCUSED | LVIS_SELECTED, LVIS_FOCUSED | LVIS_SELECTED)
 
-                // napisu pocet polozek nad listview
+                // show the number of items above the list view
                 TBHeader->SetFoundCount(count);
         TBHeader->SetErrorsInfosCount(Log.GetErrorCount(), Log.GetInfoCount());
 
-        // pokud jsme minimalizovany, zobrazim pocet polozek do hlavicky
+        // when minimized, display the item count in the title
         if (IsIconic(HWindow))
         {
             char buf[MAX_PATH + 100];
@@ -2332,7 +2331,7 @@ void CFindDialog::UpdateListViewItems()
             SetWindowText(HWindow, buf);
         }
 
-        // slouzi pro hledaci thread - aby vedel, kdy nas ma priste upozornit
+        // used by the search thread to know when to notify us next
         GrepData.FoundVisibleCount = count;
         GrepData.FoundVisibleTick = GetTickCount();
 
@@ -2350,8 +2349,7 @@ void CFindDialog::OnFocusFile()
 
     if (SalamanderBusy)
     {
-        Sleep(200); // dame Salamu cas - pokud slo o prepnuti z hlavniho okna, mohla
-                    // by jeste dobihat message queue od menu
+        Sleep(200); // give Salamander time-if we switched from the main window the menu's message queue might still be running
         if (SalamanderBusy)
         {
             SalMessageBox(HWindow, LoadStr(IDS_SALAMANDBUSY2),
@@ -2388,9 +2386,9 @@ BOOL CFindDialog::GetFocusedFile(char* buffer, int bufferLen, int* viewedIndex)
 
 void CFindDialog::UpdateInternalViewerData()
 {
-    // kopie find textu do interniho viewru
+    // copy the find text to the internal viewer
     if (Configuration.CopyFindText)
-    { // alt+F3 sem proste nechodi, takze zadny alternate viewer...
+    { // Alt+F3 never reaches here, so no alternate viewer...
         CFindSetDialog oldGlobalFindDialog = GlobalFindDialog;
 
         GlobalFindDialog.Forward = TRUE;
@@ -2406,7 +2404,7 @@ void CFindDialog::UpdateInternalViewerData()
                         !GlobalFindDialog.Regular && GlobalFindDialog.HexMode,
                         VIEWER_HISTORY_SIZE,
                         ViewerHistory, TRUE);
-        if (!dummyTI.IsGood()) // neco neni o.k. (hexmode)
+        if (!dummyTI.IsGood()) // something went wrong (hex mode)
             GlobalFindDialog = oldGlobalFindDialog;
     }
 }
@@ -2421,8 +2419,8 @@ void CFindDialog::OnViewFile(BOOL alternate)
 
     if (SalamanderBusy)
     {
-        Sleep(200); // dame Salamu cas - pokud slo o prepnuti z hlavniho okna, mohla
-                    // by jeste dobihat message queue od menu
+        Sleep(200); // give Salamander time-if we switched from the main window
+                    // the menu's message queue might still be running
         if (SalamanderBusy)
         {
             SalMessageBox(HWindow, LoadStr(IDS_SALAMANDBUSY2),
@@ -2447,8 +2445,8 @@ void CFindDialog::OnEditFile()
 
     if (SalamanderBusy)
     {
-        Sleep(200); // dame Salamu cas - pokud slo o prepnuti z hlavniho okna, mohla
-                    // by jeste dobihat message queue od menu
+        Sleep(200); // give Salamander time-if we switched from the main window
+                    // the menu's message queue might still be running
         if (SalamanderBusy)
         {
             SalMessageBox(HWindow, LoadStr(IDS_SALAMANDBUSY2),
@@ -2469,8 +2467,8 @@ void CFindDialog::OnViewFileWith()
 
     if (SalamanderBusy)
     {
-        Sleep(200); // dame Salamu cas - pokud slo o prepnuti z hlavniho okna, mohla
-                    // by jeste dobihat message queue od menu
+        Sleep(200); // give Salamander time-if we switched from the main window
+                    // the menu's message queue might still be running
         if (SalamanderBusy)
         {
             SalMessageBox(HWindow, LoadStr(IDS_SALAMANDBUSY2),
@@ -2482,16 +2480,16 @@ void CFindDialog::OnViewFileWith()
     POINT menuPoint;
     GetListViewContextMenuPos(FoundFilesListView->HWindow, &menuPoint);
     DWORD handlerID;
-    // volani neni uplne v poradku, protoze ViewFileWith nema kriticke sekce pro praci s konfiguraci
-    // predpokladem spravne funkce je, ze user dela jen jednu vec (nemeni konfiguraci a zaroven nedela
-    // ve Find okne) - snad temer 100%
+    // this call isn't entirely correct because ViewFileWith lacks critical sections
+    // for configuration access. It assumes the user performs only one action
+    // (doesn't edit configuration while working in the Find window) -- hopefully almost always true
     MainWindow->GetActivePanel()->ViewFileWith(longName, FoundFilesListView->HWindow, &menuPoint, &handlerID, -1, -1);
     if (handlerID != 0xFFFFFFFF)
     {
-        if (SalamanderBusy) // asi temer nerealne, ale nekdo mohl Salama zamestnat
+        if (SalamanderBusy) // almost impossible, but Salamander could be busy
         {
-            Sleep(200); // dame Salamu cas - pokud slo o prepnuti z hlavniho okna, mohla
-                        // by jeste dobihat message queue od menu
+            Sleep(200); // give Salamander time-if we switched from the main window
+                        // the menu's message queue might still be running
             if (SalamanderBusy)
             {
                 SalMessageBox(HWindow, LoadStr(IDS_SALAMANDBUSY2),
@@ -2517,8 +2515,8 @@ void CFindDialog::OnEditFileWith()
 
     if (SalamanderBusy)
     {
-        Sleep(200); // dame Salamu cas - pokud slo o prepnuti z hlavniho okna, mohla
-                    // by jeste dobihat message queue od menu
+        Sleep(200); // give Salamander time-if we switched from the main window
+                    // the menu's message queue might still be running
         if (SalamanderBusy)
         {
             SalMessageBox(HWindow, LoadStr(IDS_SALAMANDBUSY2),
@@ -2529,16 +2527,16 @@ void CFindDialog::OnEditFileWith()
     POINT menuPoint;
     GetListViewContextMenuPos(FoundFilesListView->HWindow, &menuPoint);
     DWORD handlerID;
-    // volani neni uplne v poradku, protoze EditFileWith nema kriticke sekce pro praci s konfiguraci
-    // predpokladem spravne funkce je, ze user dela jen jednu vec (nemeni konfiguraci a zaroven nedela
-    // ve Find okne) - snad temer 100%
+    // this call isn't completely safe because EditFileWith lacks critical sections
+    // for configuration access. The assumption is that the user does only one thing
+    // (doesn't change configuration while using the Find window) -- hopefully almost always true
     MainWindow->GetActivePanel()->EditFileWith(longName, FoundFilesListView->HWindow, &menuPoint, &handlerID);
     if (handlerID != 0xFFFFFFFF)
     {
-        if (SalamanderBusy) // asi temer nerealne, ale nekdo mohl Salama zamestnat
+        if (SalamanderBusy) // almost impossible, but Salamander could be busy
         {
-            Sleep(200); // dame Salamu cas - pokud slo o prepnuti z hlavniho okna, mohla
-                        // by jeste dobihat message queue od menu
+            Sleep(200); // give Salamander time-if we switched from the main window
+                        // the menu's message queue might still be running
             if (SalamanderBusy)
             {
                 SalMessageBox(HWindow, LoadStr(IDS_SALAMANDBUSY2),
@@ -2560,12 +2558,12 @@ void CFindDialog::OnUserMenu()
 
     UserMenuIconBkgndReader.BeginUserMenuIconsInUse();
     CMenuPopup menu;
-    MainWindow->FillUserMenu(&menu, FALSE); // zatlucu customize
+    MainWindow->FillUserMenu(&menu, FALSE); // keep customization disabled
     POINT p;
     GetListViewContextMenuPos(FoundFilesListView->HWindow, &p);
-    // dalsi kolo zamykani (BeginUserMenuIconsInUse+EndUserMenuIconsInUse) bude
-    // v WM_USER_ENTERMENULOOP+WM_USER_LEAVEMENULOOP, ale to uz je vnorene, zadna rezie,
-    // takze ignorujeme, nebudeme proti tomu nijak bojovat
+    // another locking round (BeginUserMenuIconsInUse+EndUserMenuIconsInUse) will happen
+    // inside WM_USER_ENTERMENULOOP and WM_USER_LEAVEMENULOOP; it's nested and has no overhead,
+    // so we ignore it and don't try to fight it
     DWORD cmd = menu.Track(MENU_TRACK_RETURNCMD, p.x, p.y, HWindow, NULL);
     UserMenuIconBkgndReader.EndUserMenuIconsInUse();
 
@@ -2577,7 +2575,7 @@ void CFindDialog::OnUserMenu()
         char* listEnd = list + USRMNUARGS_MAXLEN - 1;
         int findItem = -1;
         DWORD i;
-        for (i = 0; i < selectedCount; i++) // naplnime seznam vybranych jmen
+        for (i = 0; i < selectedCount; i++) // fill the list of selected names
         {
             findItem = ListView_GetNextItem(FoundFilesListView->HWindow, findItem, LVNI_SELECTED);
             if (findItem != -1)
@@ -2595,15 +2593,15 @@ void CFindDialog::OnUserMenu()
             }
         }
         if (i < selectedCount)
-            userMenuAdvancedData.ListOfSelNames[0] = 0; // maly buffer pro seznam vybranych jmen
+            userMenuAdvancedData.ListOfSelNames[0] = 0; // small buffer for the list of selected names
         else
             *list = 0;
-        userMenuAdvancedData.ListOfSelNamesIsEmpty = FALSE; // to u Findu nehrozi (jinak se User Menu vubec neotevre)
+        userMenuAdvancedData.ListOfSelNamesIsEmpty = FALSE; // not a concern for Find (otherwise the User Menu would not open)
 
         char* listFull = userMenuAdvancedData.ListOfSelFullNames;
         char* listFullEnd = listFull + USRMNUARGS_MAXLEN - 1;
         findItem = -1;
-        for (i = 0; i < selectedCount; i++) // naplnime seznam vybranych jmen
+        for (i = 0; i < selectedCount; i++) // fill the list of selected names
         {
             findItem = ListView_GetNextItem(FoundFilesListView->HWindow, findItem, LVNI_SELECTED);
             if (findItem != -1)
@@ -2624,10 +2622,10 @@ void CFindDialog::OnUserMenu()
             }
         }
         if (i < selectedCount)
-            userMenuAdvancedData.ListOfSelFullNames[0] = 0; // maly buffer pro seznam vybranych plnych jmen
+            userMenuAdvancedData.ListOfSelFullNames[0] = 0; // small buffer for the list of selected full names
         else
             *listFull = 0;
-        userMenuAdvancedData.ListOfSelFullNamesIsEmpty = FALSE; // to u Findu nehrozi (jinak se User Menu vubec neotevre)
+        userMenuAdvancedData.ListOfSelFullNamesIsEmpty = FALSE; // not a concern for Find (otherwise the User Menu would not open)
 
         userMenuAdvancedData.FullPathLeft[0] = 0;
         userMenuAdvancedData.FullPathRight[0] = 0;
@@ -2747,7 +2745,7 @@ void CFindDialog::InsertDrives(HWND hEdit, BOOL network)
     int i = 1;
     while (i != 0)
     {
-        if (mask & i) // disk je pristupny
+        if (mask & i) // the drive is accessible
         {
             root[0] = drive;
             DWORD driveType = GetDriveType(root);
@@ -2772,28 +2770,28 @@ void CFindDialog::InsertDrives(HWND hEdit, BOOL network)
 
 BOOL CFindDialog::CanCloseWindow()
 {
-    // chodily bug reporty s pady v CFindDialog::StopSearch()
-    // pravdepodobne dochazelo k destrukci okna jeste v metode
-    // nasledujici test na promennou CanClose nam od verze 1.52 nejak vypadnul
+    // crash reports indicated failures in CFindDialog::StopSearch()
+    // likely because the window was destroyed while still inside the method
+    // this check on CanClose disappeared after version 1.52
     if (!CanClose)
         return FALSE;
 
-    // pokud existuji okna CShellExecuteWnd, nabidneme preruseni zavirani nebo zaslani bug reportu + terminate
-    char reason[BUG_REPORT_REASON_MAX]; // pricina problemu + seznam oken (multiline)
+    // if CShellExecuteWnd windows exist, offer to cancel closing or send a bug report and terminate
+    char reason[BUG_REPORT_REASON_MAX]; // cause of the problem + list of windows (multiline)
     strcpy(reason, "Some faulty shell extension has locked our find window.");
     if (EnumCShellExecuteWnd(HWindow, reason + (int)strlen(reason), BUG_REPORT_REASON_MAX - ((int)strlen(reason) + 1)) > 0)
     {
-        // zeptame se, zda ma Salamander pokracovat nebo jestli ma vygenerovat bug report
+        // ask whether Salamander should continue or generate a bug report
         if (SalMessageBox(HWindow, LoadStr(IDS_SHELLEXTBREAK3), SALAMANDER_TEXT_VERSION,
                           MSGBOXEX_CONTINUEABORT | MB_ICONINFORMATION | MSGBOXEX_SETFOREGROUND) != IDABORT)
         {
-            return FALSE; // mame pokracovat
+            return FALSE; // continue
         }
 
-        // breakneme se
+        // break into the debugger
         strcpy(BugReportReasonBreak, reason);
         TaskList.FireEvent(TASKLIST_TODO_BREAK, GetCurrentProcessId());
-        // zamrazime tento thread
+        // freeze this thread
         while (1)
             Sleep(1000);
     }
@@ -2821,8 +2819,8 @@ BOOL CFindDialog::DoYouWantToStopSearching()
     return (ret == IDYES);
 }
 
-// z controlu vytahne text a hleda horkou klavesu;
-// pokud ji najde, vrati jeji znak (UPCASE), jinak vrati 0
+// pull the text from the control and search for a hot key;
+// if found, return its character (uppercase), otherwise return 0
 char GetControlHotKey(HWND hWnd, int resID)
 {
     char buff[500];
@@ -2847,35 +2845,35 @@ BOOL CFindDialog::ManageHiddenShortcuts(const MSG* msg)
         BOOL shiftPressed = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
         if (!controlPressed && altPressed && !shiftPressed)
         {
-            // pokud je stisteno Alt+? a je zabalena Options cast, ma smysl zkoumat dal
+            // if Alt+? is pressed while the Options section is collapsed, check further
             if (!IsDlgButtonChecked(HWindow, IDC_FIND_GREP))
             {
-                // otukame horke klavesy sledovanych prvku
+                // probe the hotkeys of monitored controls
                 int resID[] = {IDC_FIND_CONTAINING_TEXT, IDC_FIND_HEX, IDC_FIND_CASE,
-                               IDC_FIND_WHOLE, IDC_FIND_REGULAR, -1}; // (terminatovat -1)
+                               IDC_FIND_WHOLE, IDC_FIND_REGULAR, -1}; // terminated by -1
                 int i;
                 for (i = 0; resID[i] != -1; i++)
                 {
                     char key = GetControlHotKey(HWindow, resID[i]);
                     if (key != 0 && (WPARAM)key == msg->wParam)
                     {
-                        // rozbalime options cast
+                        // expand the Options section
                         CheckDlgButton(HWindow, IDC_FIND_GREP, BST_CHECKED);
                         SendMessage(HWindow, WM_COMMAND, MAKEWPARAM(IDC_FIND_GREP, BN_CLICKED), 0);
-                        return FALSE; // rozbaleno, o zbytek se postara IsDialogMessage po nasem navratu
+                        return FALSE; // expanded; IsDialogMessage will handle the rest after we return
                     }
                 }
             }
         }
     }
-    return FALSE; // neni to nase message
+    return FALSE; // not our message
 }
 
 void CFindDialog::SetFullRowSelect(BOOL fullRow)
 {
     Configuration.FindFullRowSelect = fullRow;
 
-    // dame vedet findum o zmene
+    // notify all find dialogs about the change
     FindDialogQueue.BroadcastMessage(WM_USER_FINDFULLROWSEL, 0, 0);
 }
 
@@ -2893,9 +2891,9 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
         UpdateAdvancedText();
 
-        InstallWordBreakProc(GetDlgItem(HWindow, IDC_FIND_NAMED));      // instalujeme WordBreakProc do comboboxu
-        InstallWordBreakProc(GetDlgItem(HWindow, IDC_FIND_LOOKIN));     // instalujeme WordBreakProc do comboboxu
-        InstallWordBreakProc(GetDlgItem(HWindow, IDC_FIND_CONTAINING)); // instalujeme WordBreakProc do comboboxu
+        InstallWordBreakProc(GetDlgItem(HWindow, IDC_FIND_NAMED));      // install WordBreakProc in the combo box
+        InstallWordBreakProc(GetDlgItem(HWindow, IDC_FIND_LOOKIN));     // install WordBreakProc in the combo box
+        InstallWordBreakProc(GetDlgItem(HWindow, IDC_FIND_CONTAINING)); // install WordBreakProc in the combo box
 
         CComboboxEdit* edit = new CComboboxEdit();
         if (edit != NULL)
@@ -2908,23 +2906,23 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         OKButton = new CButton(HWindow, IDOK, BTF_DROPDOWN);
         new CButton(HWindow, IDC_FIND_LOOKIN_BROWSE, BTF_RIGHTARROW);
 
-        // nastavim checkbox pro viditelnost Content casti dialogu
+        // set the checkbox controlling the visibility of the Content section
         CheckDlgButton(HWindow, IDC_FIND_GREP, Configuration.SearchFileContent);
 
-        // priradim oknu ikonku
+        // assign an icon to the window
         HICON findIcon = HANDLES(LoadIcon(ImageResDLL, MAKEINTRESOURCE(8)));
         if (findIcon == NULL)
             findIcon = HANDLES(LoadIcon(HInstance, MAKEINTRESOURCE(IDI_FIND)));
         SendMessage(HWindow, WM_SETICON, ICON_BIG, (LPARAM)findIcon);
 
-        // konstrukce listview
+        // construct the list view
         FoundFilesListView = new CFoundFilesListView(HWindow, IDC_FIND_RESULTS, this);
 
         SetFullRowSelect(Configuration.FindFullRowSelect);
 
         TBHeader = new CFindTBHeader(HWindow, IDC_FIND_FOUND_FILES);
 
-        // vytvorim status bar
+        // create the status bar
         HStatusBar = CreateWindowEx(0,
                                     STATUSCLASSNAME,
                                     (LPCTSTR)NULL,
@@ -2945,7 +2943,7 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         SetTwoStatusParts(FALSE, TRUE);
         SendMessage(HStatusBar, SB_SETTEXT, 1 | SBT_NOBORDERS, (LPARAM)LoadStr(IDS_FIND_INIT_HINT));
 
-        // priradim oknu menu
+        // assign a menu to the window
         MainMenu = new CMenuPopup;
 
         BuildFindMenu(MainMenu);
@@ -2959,7 +2957,7 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         }
         ShowWindow(MenuBar->HWindow, SW_SHOW);
 
-        // nactu paramatry pro layoutovani okna
+        // load parameters for laying out the window
         GetLayoutParams();
 
         WINDOWPLACEMENT* wp = &Configuration.FindDialogWindowPlacement;
@@ -2978,7 +2976,7 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         FoundFilesListView->InitColumns();
         SetContentVisible(Configuration.SearchFileContent);
 
-        // sejmu WS_TABSTOP z IDC_FIND_ADVANCED_TEXT
+        // remove WS_TABSTOP from IDC_FIND_ADVANCED_TEXT
         DWORD style = (DWORD)GetWindowLongPtr(GetDlgItem(HWindow, IDC_FIND_ADVANCED_TEXT), GWL_STYLE);
         style &= ~WS_TABSTOP;
         SetWindowLongPtr(GetDlgItem(HWindow, IDC_FIND_ADVANCED_TEXT), GWL_STYLE, style);
@@ -3003,7 +3001,7 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         HWND hCombo = GetDlgItem(HWindow, IDC_FIND_LOOKIN);
         EditLine->AttachToWindow(GetWindow(hCombo, GW_CHILD));
 
-        // zatim neumime, schovame volbu
+        // not implemented yet, hide the option
         ShowWindow(GetDlgItem(HWindow, IDC_FIND_INCLUDE_ARCHIVES), FALSE);
 
         EnableControls();
@@ -3017,7 +3015,7 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             char buf[MAX_PATH + 50];
             if (SearchingText.GetDirty())
             {
-                SearchingText.SetDirty(FALSE); // uz se prekresluje - zavola se Get; radsi 2x refresh nez vubec
+                SearchingText.SetDirty(FALSE); // already being redrawn - Get will be called; better to refresh twice than not at all
                                                //          SearchingText.Get(buf, MAX_PATH + 50);
                 SendMessage(HStatusBar, SB_SETTEXT, 1 | SBT_NOBORDERS | SBT_OWNERDRAW, 0);
             }
@@ -3025,9 +3023,9 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             {
                 if (!TwoParts)
                     SetTwoStatusParts(TRUE);
-                SearchingText2.SetDirty(FALSE); // uz se prekresluje - zavola se Get; radsi 2x refresh nez vubec
+                SearchingText2.SetDirty(FALSE); // already being redrawn - Get will be called; better to refresh twice than not at all
                 SearchingText2.Get(buf, MAX_PATH + 50);
-                int pos = buf[0]; // misto retezce vytahneme primo hodnotu
+                int pos = buf[0]; // extract the value directly instead of the string
                 SendMessage(HProgressBar, PBM_SETPOS, pos, 0);
             }
             return 0;
@@ -3073,21 +3071,21 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         return TRUE;
     }
 
-    // slouzi pro test na zavreni okna z duvodu zavirani Salamander
+    // used to test closing the window because Salamander is shutting down
     case WM_USER_QUERYCLOSEFIND:
     {
         BOOL query = TRUE;
         if (SearchInProgress)
         {
             if (lParam /* quiet */)
-                StopSearch(); // nemame se na nic ptat, rozjete hledani kazdopadne zastavime
+                StopSearch(); // stop searching silently when requested
             else
             {
                 if (!DoYouWantToStopSearching())
                     query = FALSE;
                 else
                 {
-                    if (SearchInProgress) // zastavime search hned, kdyz si to user preje
+                    if (SearchInProgress) // stop searching immediately if the user wants
                         StopSearch();
                 }
             }
@@ -3099,7 +3097,7 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         return TRUE;
     }
 
-    // slouzi pro remote zavreni okna z duvodu zavirani Salamander
+    // used for remote closing of the window because Salamander is shutting down
     case WM_USER_CLOSEFIND:
     {
         if (SearchInProgress)
@@ -3172,9 +3170,9 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 BOOL enabledPathTime = TRUE;
                 if (GrepData.FindDuplicates)
                 {
-                    enabledPathTime = FALSE; // v pripade duplikatu nema vyznam
-                    // radit podle jmena a velikosti lze v pripade duplicatu pouze
-                    // pokud bylo hledano podle stejneho jmena i velikosti
+                    enabledPathTime = FALSE; // path and time are irrelevant for duplicates
+                    // sorting by name and size works for duplicates only
+                    // if both name and size were searched for
                     enabledNameSize = (GrepData.FindDupFlags & FIND_DUPLICATES_NAME) &&
                                       (GrepData.FindDupFlags & FIND_DUPLICATES_SIZE);
                 }
@@ -3193,7 +3191,7 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
                 popup->CheckItem(CM_FIND_SHOWERRORS, FALSE, Configuration.ShowGrepErrors);
                 popup->CheckItem(CM_FIND_FULLROWSEL, FALSE, Configuration.FindFullRowSelect);
-                // pokud je otevreny dialog manage, v jinem okne ho zakazu a take pridavani do pole
+                // if the manage dialog is open in another window, disable it and also disable adding to the list
                 popup->EnableItem(CM_FIND_ADD_CURRENT, FALSE, !FindManageInUse);
                 popup->EnableItem(CM_FIND_MANAGE, FALSE, !FindManageInUse);
                 popup->EnableItem(CM_FIND_IGNORE, FALSE, !FindIgnoreInUse);
@@ -3231,7 +3229,7 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_SIZE:
     {
-        // pri restoru obnovim titulek okna
+        // when restoring, refresh the window title
         if (SearchInProgress && (wParam == SIZE_RESTORED || wParam == SIZE_MAXIMIZED)) // restore
         {
             char buff[MAX_PATH + 100];
@@ -3264,7 +3262,7 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_COMMAND:
     {
         if (FoundFilesListView != NULL && ListView_GetEditControl(FoundFilesListView->HWindow) != NULL)
-            return 0; // list view nam behem editace posila nejake commandy
+            return 0; // the list view sends some commands while editing
         if (LOWORD(wParam) >= CM_FIND_OPTIONS_FIRST && LOWORD(wParam) <= CM_FIND_OPTIONS_LAST)
         {
             LoadControls(LOWORD(wParam) - CM_FIND_OPTIONS_FIRST);
@@ -3277,7 +3275,7 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             SetContentVisible(Configuration.SearchFileContent);
             if (!Configuration.SearchFileContent)
             {
-                // sejmu priadny obsah schovanych prvku
+                // clear any stale content from hidden controls
                 SetDlgItemText(HWindow, IDC_FIND_CONTAINING, "");
                 CheckDlgButton(HWindow, IDC_FIND_HEX, FALSE);
                 CheckDlgButton(HWindow, IDC_FIND_CASE, FALSE);
@@ -3317,14 +3315,14 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
         case IDOK:
         {
-            if (SearchInProgress) // jde o Stop?
+            if (SearchInProgress) // is this a stop request?
             {
                 if (Configuration.MinBeepWhenDone && GetForegroundWindow() != HWindow)
                     MessageBeep(0);
                 StopSearch();
                 return TRUE;
             }
-            else // ne, jde o start
+            else // no, we're starting
             {
                 if (!ValidateData() || !TransferData(ttDataFromWindow))
                     return TRUE;
@@ -3407,12 +3405,12 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 BOOL regular = (IsDlgButtonChecked(HWindow, IDC_FIND_REGULAR) == BST_CHECKED);
                 if (item->Keyword == EXECUTE_HELP)
                 {
-                    // otevreme help se strankou venovanou regular expressions
+                    // open the help page dedicated to regular expressions
                     OpenHtmlHelp(NULL, HWindow, HHCDisplayContext, IDH_REGEXP, FALSE);
                 }
                 if (item->Keyword != EXECUTE_HELP && !regular)
                 {
-                    // user zvolil nejaky vyraz -> zaskrtneme checkbox pro hledani regularu
+                    // the user chose a pattern -> check the box for regular search
                     CheckDlgButton(HWindow, IDC_FIND_REGULAR, BST_CHECKED);
                     PostMessage(HWindow, WM_COMMAND, MAKELPARAM(IDC_FIND_REGULAR, BN_CLICKED), 0);
                 }
@@ -3522,8 +3520,8 @@ CFindDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             mii.Mask = MENU_MASK_TYPE | MENU_MASK_STRING | MENU_MASK_ID;
             mii.Type = MENU_TYPE_STRING;
 
-            /* slouzi pro skript export_mnu.py, ktery generuje salmenu.mnu pro Translator
-   udrzovat synchronizovane s volanim InsertItem() dole...
+            /* used by the export_mnu.py script which generates salmenu.mnu for the Translator
+   keep synchronized with the InsertItem() call below...
 MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] = 
 {
   {MNTT_PB, 0
@@ -3567,7 +3565,7 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
                                            LoadStr(IDS_BROWSECHANGEDIRTEXT), path, FALSE, path))
                     {
                         char* s = path;
-                        while (*s != 0) // zdvojime znak ';' (escape sekvence pro ";" == ";;")
+                        while (*s != 0) // duplicate ';' characters (escape sequence for ';' is ';;')
                         {
                             if (*s == ';')
                             {
@@ -3577,8 +3575,8 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
                             s++;
                         }
 
-                        int leftIndex = -1;  // posledni znak, za ktery uz bude vlozeny text
-                        int rightIndex = -1; // prvni znak za vlozenym textem
+                        int leftIndex = -1;  // last character after which the text will be inserted
+                        int rightIndex = -1; // first character after the inserted text
                         if (start > 0)
                             leftIndex = start - 1;
                         if (end < (DWORD)lstrlen(buff))
@@ -3800,7 +3798,7 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
 
             case CM_HELP_CONTENTS:
             {
-                OpenHtmlHelp(NULL, HWindow, HHCDisplayTOC, 0, TRUE); // nechceme dva messageboxy za sebou
+                OpenHtmlHelp(NULL, HWindow, HHCDisplayTOC, 0, TRUE); // avoid two message boxes in a row
                 command = HHCDisplayContext;
                 dwData = IDD_FIND;
                 break;
@@ -3846,7 +3844,7 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
             }
             if (ContextMenu->HandleMenuMsg(uMsg, wParam, lParam) == NOERROR)
             {
-                if (uMsg == WM_INITMENUPOPUP) // zajistime vraceni spravne navratove hodnoty
+                if (uMsg == WM_INITMENUPOPUP) // ensure the return value is correct
                     return 0;
                 else
                     return TRUE;
@@ -3857,10 +3855,10 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
 
     case WM_SYSCOMMAND:
     {
-        if (SkipCharacter) // zamezime pipani pri Alt+Enter
+        if (SkipCharacter) // suppress the beep on Alt+Enter
         {
             SkipCharacter = FALSE;
-            return TRUE; // podle MSDN bychom meli vratit 0, ale to pipa, tak nevim
+            return TRUE; // MSDN says we should return 0, but that beeps, so we'll return TRUE
         }
         break;
     }
@@ -3873,7 +3871,7 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
             {
             case NM_DBLCLK:
             {
-                if (((LPNMITEMACTIVATE)lParam)->iItem >= 0) // double-click mimo polozku nic neotvira
+                if (((LPNMITEMACTIVATE)lParam)->iItem >= 0) // double-click outside items does nothing
                     OnOpen(TRUE);
                 break;
             }
@@ -3881,14 +3879,14 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
             case NM_RCLICK:
             {
                 int clickedIndex = ((LPNMITEMACTIVATE)lParam)->iItem;
-                if (clickedIndex >= 0) // right-click mimo polozku menu neukaze
+                if (clickedIndex >= 0) // right-click outside items won't show the menu
                 {
                     BOOL controlPressed = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
                     BOOL altPressed = (GetKeyState(VK_MENU) & 0x8000) != 0;
                     BOOL shiftPressed = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
 
-                    // pri kliknuti mimo selectionu, pokud user drzi Shift (na Alt+Ctrl nezalezi) nebo
-                    // drzi jen Alt, dojde ke zmene oznaceni na kliknutou polozku jeste pred vybalenim menu
+                    // when clicking outside the selection while holding Shift (Alt+Ctrl doesn't matter) or
+                    // holding only Alt, the clicked item is selected before the menu opens
                     HWND hListView = FoundFilesListView->HWindow;
                     if ((shiftPressed || altPressed && !controlPressed) &&
                         (ListView_GetItemState(hListView, clickedIndex, LVIS_SELECTED) & LVIS_SELECTED) == 0)
@@ -3915,7 +3913,7 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
 
                 if (cd->nmcd.dwDrawStage == CDDS_ITEMPREPAINT)
                 {
-                    // pozadame si o zaslani notifikace CDDS_ITEMPREPAINT | CDDS_SUBITEM
+                    // request notification of CDDS_ITEMPREPAINT | CDDS_SUBITEM
                     SetWindowLongPtr(HWindow, DWLP_MSGRESULT, CDRF_NOTIFYSUBITEMDRAW);
                     return TRUE;
                 }
@@ -3924,12 +3922,12 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
                 {
                     CFoundFilesData* item = FoundFilesListView->At((int)cd->nmcd.dwItemSpec);
 
-                    // sloupec Path bychom si radi malovali sami (s vypustkou pro cesty)
+                    // we'd like to draw the Path column ourselves (with ellipsis for paths)
                     if (cd->iSubItem == 1)
                     {
                         HDC hDC = cd->nmcd.hdc;
 
-                        // pokud jeste neexistuje cache DC, pokusime se ho vytvorit
+                        // if the cache DC does not exist yet, try to create it
                         if (CacheBitmap == NULL)
                         {
                             CacheBitmap = new CBitmap();
@@ -3937,21 +3935,21 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
                                 CacheBitmap->CreateBmp(hDC, 1, 1);
                         }
                         if (CacheBitmap == NULL)
-                            break; // out of memory; kresleni nechame na listview; padame
+                            break; // out of memory; let the list view draw it; we're done
 
-                        RECT r; // obdelnik kolem sub item
+                        RECT r; // rectangle around the sub item
                         ListView_GetSubItemRect(FoundFilesListView->HWindow, cd->nmcd.dwItemSpec, cd->iSubItem, LVIR_BOUNDS, &r);
-                        RECT r2; // obdelnik o stejnem rozmetu jako r, ale posunuty do nuly
+                        RECT r2; // rectangle same size as r but shifted to origin
                         r2.left = 0;
                         r2.top = 0;
                         r2.right = r.right - r.left;
                         r2.bottom = r.bottom - r.top;
 
-                        // nafoukneme cache bitmap
+                        // enlarge the cache bitmap if necessary
                         if (CacheBitmap->NeedEnlarge(r2.right, r2.bottom))
                             CacheBitmap->Enlarge(r2.right, r2.bottom);
 
-                        // podmazeme pozadi default barvou
+                        // fill the background with the default color
                         int bkColor = (GrepData.FindDuplicates && item->Different == 1) ? COLOR_3DFACE : COLOR_WINDOW;
                         int textColor = COLOR_WINDOWTEXT;
 
@@ -3970,7 +3968,7 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
                                         bkColor = COLOR_3DFACE;
                                     else
                                     {
-                                        // pro high contrast barevna schemata
+                                        // for high contrast color schemes
                                         bkColor = COLOR_HIGHLIGHT;
                                         textColor = COLOR_HIGHLIGHTTEXT;
                                     }
@@ -3982,15 +3980,15 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
                         ExtTextOut(CacheBitmap->HMemDC, 0, 0, ETO_OPAQUE, &r2, "", 0, NULL);
                         SetBkMode(CacheBitmap->HMemDC, TRANSPARENT);
 
-                        // vykreslime text s vypustkou
+                        // draw the text with path shortening
                         r2.left += 5;
                         r2.right -= 5;
                         CFoundFilesData* item2 = FoundFilesListView->At((int)cd->nmcd.dwItemSpec);
                         SelectObject(CacheBitmap->HMemDC, (HFONT)SendMessage(FoundFilesListView->HWindow, WM_GETFONT, 0, 0));
                         int oldTextColor = SetTextColor(CacheBitmap->HMemDC, GetSysColor(textColor));
 
-                        // DT_PATH_ELLIPSIS nefunguje na nekterych retezcich, dochazi pak vytisteni oclipovaneho textu
-                        // PathCompactPath() sice potrebuje kopii do lokalniho bufferu, ale neclipuje texty
+                        // DT_PATH_ELLIPSIS doesn't work on some strings and prints truncated text
+                        // PathCompactPath() needs a local copy but doesn't clip text
                         char buff[2 * MAX_PATH];
                         strncpy_s(buff, _countof(buff), item2->Path, _TRUNCATE);
                         PathCompactPath(CacheBitmap->HMemDC, buff, r2.right - r2.left);
@@ -4000,11 +3998,11 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
                         //                         DT_VCENTER | DT_LEFT | DT_NOPREFIX | DT_SINGLELINE | DT_PATH_ELLIPSIS);
                         SetTextColor(CacheBitmap->HMemDC, oldTextColor);
 
-                        // cache preneseme do listview
+                        // copy the cache to the list view
                         BitBlt(hDC, r.left, r.top, r.right - r.left, r.bottom - r.top,
                                CacheBitmap->HMemDC, 0, 0, SRCCOPY);
 
-                        // zakazeme default kresleni
+                        // disable default drawing
                         SetWindowLongPtr(HWindow, DWLP_MSGRESULT, CDRF_SKIPDEFAULT);
                         return TRUE;
                     }
@@ -4023,7 +4021,7 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
 
             case LVN_ODFINDITEM:
             {
-                // pomuzeme listview s quick search
+                // assist the list view with quick search
                 NMLVFINDITEM* pFindInfo = (NMLVFINDITEM*)lParam;
                 int iStart = pFindInfo->iStart;
                 LVFINDINFO* fi = &pFindInfo->lvfi;
@@ -4032,9 +4030,9 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
                 if (fi->flags & LVFI_STRING || fi->flags & LVFI_PARTIAL)
                 {
                     //              BOOL partial = fi->flags & LVFI_PARTIAL != 0;
-                    // podle dokumentace by melo chodit LVFI_PARTIAL a LVFI_STRING,
-                    // ale chodi pouze LVFI_STRING. Nejakej manik si na to stezoval
-                    // na newsech, ale zadna odpoved. Takze to tady forcnu.
+                    // the documentation says LVFI_PARTIAL and LVFI_STRING should arrive,
+                    // but only LVFI_STRING comes through. Some guy complained about it
+                    // on the newsgroups, but no reply. So we'll force it here.
                     BOOL partial = TRUE;
                     int i;
                     for (i = iStart; i < FoundFilesListView->GetCount(); i++)
@@ -4109,7 +4107,7 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
             {
                 EnableToolBar();
                 if (!IsSearchInProgress())
-                    UpdateStatusBar = TRUE; // pri Idle bude nastaven text
+                    UpdateStatusBar = TRUE; // the text will be set during idle time
                 break;
             }
 
@@ -4268,7 +4266,7 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
 
     case WM_USER_ADDLOG:
     {
-        // bezime v threadu findu
+        // running in the find thread
         FIND_LOG_ITEM* item = (FIND_LOG_ITEM*)wParam;
         Log.Add(item->Flags, item->Text, item->Path);
         return 0;
@@ -4290,14 +4288,14 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
 
     case WM_ACTIVATEAPP:
     {
-        if (wParam == FALSE) // pri deaktivaci uteceme z adresaru zobrazenych v panelech,
-        {                    // aby sly mazat, odpojovat atd. z jinych softu
+        if (wParam == FALSE) // when deactivated we leave directories shown in panels
+        {                    // so they can be deleted, unmounted, etc. by other software
             if (CanChangeDirectory())
                 SetCurrentDirectoryToSystem();
         }
         else
         {
-            SuppressToolTipOnCurrentMousePos(); // potlaceni nechteneho tooltipu pri prepnuti do okna
+            SuppressToolTipOnCurrentMousePos(); // suppress unwanted tooltip when switching to the window
         }
         break;
     }
@@ -4323,15 +4321,15 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
 
         if (!DlgFailed)
         {
-            // ulozim sirku sloupce Name
+            // store the width of the Name column
             Configuration.FindColNameWidth = ListView_GetColumnWidth(FoundFilesListView->HWindow, 0);
-            // ulozim umisteni okna
+            // store the window placement
             Configuration.FindDialogWindowPlacement.length = sizeof(WINDOWPLACEMENT);
             GetWindowPlacement(HWindow, &Configuration.FindDialogWindowPlacement);
         }
         if (FoundFilesListView != NULL)
         {
-            // uvolnime handle, jinak by ho ListView vzalo s sebou do pekel
+            // release the handle, otherwise ListView would drag it to hell with itself
             ListView_SetImageList(FoundFilesListView->HWindow, NULL, LVSIL_SMALL);
         }
         if (MenuBar != NULL)
@@ -4358,18 +4356,18 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
 
         FindDialogQueue.Remove(HWindow);
 
-        // pokud uzivatel nakopiruje vysledek hledani do schranky (Ctrl+C), prepne se do hlavniho okna
-        // a da prikaz Paste Shortcut (Ctrl+S) a behem vytvareni zastupcu zavre Find okno, musime pockat
-        // na dobehnuti Paste prikazu v hlavnim okne; jinak dochazelo k padu
+        // if the user copies the search results to the clipboard (Ctrl+C), switches to the main window
+        // and invokes Paste Shortcut (Ctrl+S) while the shortcuts are being created, the Find window may close.
+        // We must wait for Paste to finish in the main window; otherwise it could crash.
         //
-        // pokud provede Paste Shortcut do okna Explorera (pripadne jinam), nedozvime se to a pad porad hrozi
+        // If Paste Shortcut is used in Explorer (or elsewhere), we have no notification and a crash is still possible.
         //
-        // pokud po Ctrl+C zavre okno Findu a teprve potom da Paste, zavolame v ramci UninitializeOle()
-        // funkci OleFlushClipboard(), ktera data odpouta od tohoto vlakna a zadny problem nenastane
-        // teoreticky bychom OleFlushClipboard() mohli volat po kazdem Ctrl+C primo v tomto vlakne,
-        // ale nejsme si jisty, zda by neco neprestalo fungovat (nevim jak je renderovani dat dokonale),
-        // navic OleFlushClipboard() na 2000 souborech dokaze vterinu trvat
-        // takze volime tento hack,
+        // If Ctrl+C is followed by closing the Find window before Paste, UninitializeOle() calls
+        // OleFlushClipboard(), detaching the data from this thread so no problem occurs.
+        // In theory we could call OleFlushClipboard() after every Ctrl+C directly here,
+        // but we're not sure nothing would break (not sure how robust the data rendering is),
+        // plus OleFlushClipboard() can take a second with 2000 files.
+        // Therefore we use this hack:
         while (PasteLinkIsRunning > 0)
         {
             MSG msg;
@@ -4379,7 +4377,7 @@ MENU_TEMPLATE_ITEM FindLookInBrowseMenu[] =
                 DispatchMessage(&msg);
             }
             if (PasteLinkIsRunning > 0)
-                Sleep(50); // jde o aktivni cekani, trosku thread pribrzdime
+                Sleep(50); // active waiting; slow the thread down a bit
         }
 
         UninitializeOle();

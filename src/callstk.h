@@ -3,41 +3,50 @@
 
 #pragma once
 
-// makro CALLSTK_DISABLE - odstavi kompletne tenhle modul
-// makro CALLSTK_MEASURETIMES - zapne mereni casu straveneho pri priprave call-stack hlaseni (meri se pomer proti
-//                              celkovemu casu behu funkci)
-//                              POZOR: nutne zapnout tez pro kazdy plugin zvlast
-// makro CALLSTK_DISABLEMEASURETIMES - potlaci mereni casu straveneho pri priprave call-stack hlaseni v DEBUG verzi
+// CALLSTK_DISABLE macro - completely disables this module
+// CALLSTK_MEASURETIMES macro - enables measuring the time spent preparing
+//                              call-stack reports (compared to the total
+//                              runtime of functions). NOTE: must also be
+//                              enabled separately for each plugin
+// CALLSTK_DISABLEMEASURETIMES macro - suppresses call-stack timing in DEBUG
+//                                      builds
 
-// prehled typu maker: (vsechna jsou neprazdna jen pokud neni definovano CALLSTK_DISABLE)
-// CALL_STACK_MESSAGE - bezne call-stack makro
-// SLOW_CALL_STACK_MESSAGE - call-stack makro, u ktereho se ignoruje libovolne zpomaleni kodu (pouziti
-//                           na mistech, kde vime, ze vyrazne zpomaluje kod, ale presto ho na tomto
-//                           miste potrebujeme)
-// DEBUG_SLOW_CALL_STACK_MESSAGE - call-stack makro, ktere je v release verzi prazdne, v DEBUG verzi
-//                                 se chova jako SLOW_CALL_STACK_MESSAGE (pouziti na mistech, kde jsme
-//                                 ochotni ignorovat zpomaleni jen v debug verzi, release verze je rychla)
+// overview of macro types (all are non-empty unless CALLSTK_DISABLE is defined)
+// CALL_STACK_MESSAGE - standard call-stack macro
+// SLOW_CALL_STACK_MESSAGE - call-stack macro that ignores any slowdown. Use at
+//                           points where performance suffers but the call stack
+//                           is still required.
+// DEBUG_SLOW_CALL_STACK_MESSAGE - empty in release builds; behaves like
+//                                 SLOW_CALL_STACK_MESSAGE in DEBUG. Suitable
+//                                 for locations where slowdown is acceptable
+//                                 only while debugging.
 
 //
 // ****************************************************************************
 
-// objekt drzi seznam volanych funkci (call-stack) - radky se pridavaji pres CCallStackMessage
+// object holds a list of called functions (the call stack) - lines are added via CCallStackMessage
 
 typedef void (*FPrintLine)(void* param, const char* txt, BOOL tab);
 
 BOOL StartSalmonProcess(BOOL enableRestartAS);
 
 #if (defined(_DEBUG) || defined(CALLSTK_MEASURETIMES)) && !defined(CALLSTK_DISABLEMEASURETIMES)
-#define CALLSTACK_MONITORINGPERIOD 100    // v milisekundach: jak dlouho se ma sledovat kolikrat se volalo jedno call-stack makro
-#define CALLSTACK_MONITOREDITEMS_BASE 30  // na kolik polozek se alokuje fronta sledovanych volani call-stack makra
-#define CALLSTACK_MONITOREDITEMS_DELTA 20 // po kolika polozkach se zvetsuje fronta sledovanych volani call-stack makra
+#define CALLSTACK_MONITORINGPERIOD 100    // in milliseconds: how long we monitor \
+                                          // how many times a call-stack macro \
+                                          // is invoked
+#define CALLSTACK_MONITOREDITEMS_BASE 30  // initial queue length for monitored \
+                                          // call-stack macro invocations
+#define CALLSTACK_MONITOREDITEMS_DELTA 20 // queue growth step for monitored \
+                                          // call-stack macro invocations
 struct CCallStackMonitoredItem
 {
-    __int64 MonitoringStartPerfTime; // odkdy sledujeme toto volani call-stack makra
-    DWORD_PTR CallerAddress;         // adresa volani call-stack makra
-    DWORD NumberOfCalls;             // pocet volani behem poslednich CALLSTACK_TRACETIME milisekund
-    __int64 PushesPerfTime;          // soucet "casu" Pushu tohoto call-stack makra
-    BOOL NotAlreadyReported;         // TRUE = problem jeste nebyl ohlasen (prevence proti zbytecnemu plneni Trace Serveru)
+    __int64 MonitoringStartPerfTime; // when we started tracking this macro call
+    DWORD_PTR CallerAddress;         // address where the call-stack macro was invoked
+    DWORD NumberOfCalls;             // number of calls during the last
+                                     // CALLSTACK_TRACETIME milliseconds
+    __int64 PushesPerfTime;          // total "time" of Push operations for this macro
+    BOOL NotAlreadyReported;         // TRUE if the issue has not been reported
+                                     // to avoid flooding the Trace Server
 };
 #endif // (defined(_DEBUG) || defined(CALLSTK_MEASURETIMES)) && !defined(CALLSTK_DISABLEMEASURETIMES)
 
@@ -45,40 +54,46 @@ class CCallStack
 {
 #ifndef CALLSTK_DISABLE
 protected:
-    DWORD ThreadID;                  // ID aktualniho threadu
-    HANDLE ThreadHandle;             // handle aktualniho threadu, pouzivame v CCallStack::PrintBugReport pro GetThreadContext
-    char Text[STACK_CALLS_BUF_SIZE]; // double-null-terminated list + za koncovou nulou je vzdy delka predchoziho stringu (na dvou bytech), nasleduje hned dalsi string
-    char* End;                       // ukazatel na posledni dve nuly
-    int Skipped;                     // pocet messages, ktere nesly ulozit
-    char* Enum;                      // ukazatel na posledni vypsany text
-    BOOL FirstCallstack;             // jsme prvni instance?
+    DWORD ThreadID;                  // ID of the current thread
+    HANDLE ThreadHandle;             // handle of the current thread; used in
+                                     // CCallStack::PrintBugReport via GetThreadContext
+    char Text[STACK_CALLS_BUF_SIZE]; // double-null-terminated list; after the
+                                     // terminating null the length of the
+                                     // previous string is stored (two bytes)
+                                     // followed immediately by the next string
+    char* End;                       // pointer to the last two zeros
+    int Skipped;                     // number of messages that could not be stored
+    char* Enum;                      // pointer to the last printed text
+    BOOL FirstCallstack;             // are we the first instance?
 
-    const char* PluginDLLName; // DLL plug-inu, kde thread prave bezi (NULL jde-li o salamand.exe)
-    int PluginDLLNameUses;     // kolikata Pop() operace ma PluginDLLName NULLovat (uroven vnoreni)
+    const char* PluginDLLName; // plug-in DLL currently running in the thread
+                               // (NULL when running in salamand.exe)
+    int PluginDLLNameUses;     // which Pop() call should null PluginDLLName
+                               // (nesting level)
 
-    static DWORD TlsIndex;                        // thread-local-storage index, na kterem je vzdy 'this'
-    static BOOL SectionOK;                        // je sekce inicializovana?
-    static CRITICAL_SECTION Section;              // kriticka sekce pro pristup k CallStacks
-    static TIndirectArray<CCallStack> CallStacks; // pole vsech call-stacku
-    static BOOL ExceptionExists;                  // zpracovava se uz nejaka exceptiona? (mame se suspendnout?)
+    static DWORD TlsIndex;                        // TLS index storing 'this'
+    static BOOL SectionOK;                        // is the critical section initialized?
+    static CRITICAL_SECTION Section;              // critical section for accessing CallStacks
+    static TIndirectArray<CCallStack> CallStacks; // array of all call stacks
+    static BOOL ExceptionExists;                  // is an exception already active? (should we suspend?)
 
-    BOOL DontSuspend; // oznaceni threadu, ktery ukazuje bug-report okna
+    BOOL DontSuspend; // marks a thread displaying bug-report windows
 
 #if (defined(_DEBUG) || defined(CALLSTK_MEASURETIMES)) && !defined(CALLSTK_DISABLEMEASURETIMES)
-#define CALLSTK_MONITOR_SHOWINFORATIO 20     // minimalni pomer realneho casu proti casu stravenemu pri ukladani zpravy na call-stack (vetsi = pise TRACE_I)
-#define CALLSTK_MONITOR_SHOWERRORRATIO 10    // minimalni pomer realneho casu proti casu stravenemu pri ukladani zpravy na call-stack (vetsi = pise TRACE_E)
-    CCallStackMonitoredItem* MonitoredItems; // kruhova fronta sledovanych volani call-stack maker
-    int MonitoredItemsSize;                  // aktualni velikost fronty MonitoredItems
-    int NewestItemIndex;                     // index nejnovejsi polozky ve fronte MonitoredItems; -1 = fronta je prazdna
-    int OldestItemIndex;                     // index nejstarsi polozky ve fronte MonitoredItems; -1 = fronta je prazdna
+#define CALLSTK_MONITOR_SHOWINFORATIO 20     // minimum ratio of real time to storing time to log info (higher = TRACE_I)
+#define CALLSTK_MONITOR_SHOWERRORRATIO 10    // minimum ratio of real time to storing time to log an error (higher = TRACE_E)
+    CCallStackMonitoredItem* MonitoredItems; // circular queue of monitored call-stack macro invocations
+    int MonitoredItemsSize;                  // current size of MonitoredItems queue
+    int NewestItemIndex;                     // index of the newest item in MonitoredItems; -1 = queue is empty
+    int OldestItemIndex;                     // index of the oldest item in MonitoredItems; -1 = queue is empty
 
 public:
-    DWORD PushesCounter;                      // pocitadlo Pushu volanych v tomto objektu (aneb v jednom threadu)
-    LARGE_INTEGER PushPerfTimeCounter;        // soucet casu straveneho v Push volanych tomto objektu (aneb v jednom threadu)
-    LARGE_INTEGER IgnoredPushPerfTimeCounter; // soucet casu straveneho v nemerenych (ignorovanych) Push volanych tomto objektu (aneb v jednom threadu)
-    static LARGE_INTEGER SavedPerfFreq;       // nenulovy vysledek QueryPerformanceFrequency
-#define CALLSTK_BENCHMARKTIME 100             // cas v milisekundach, po ktery se meri rychlost call-stacku
-    static DWORD SpeedBenchmark;              // kolik merenych call-stack maker se stihne pushnout+popnout za CALLSTK_BENCHMARKTIME milisekund
+    DWORD PushesCounter;                      // counter of Push calls invoked in this object (in one thread)
+    LARGE_INTEGER PushPerfTimeCounter;        // total time spent in Push calls invoked in this object (one thread)
+    LARGE_INTEGER IgnoredPushPerfTimeCounter; // total time spent in unmeasured (ignored) Push calls invoked here
+    static LARGE_INTEGER SavedPerfFreq;       // nonzero result of QueryPerformanceFrequency
+#define CALLSTK_BENCHMARKTIME 100             // time in milliseconds used for call-stack speed benchmark
+    static DWORD SpeedBenchmark;              // number of benchmarked macros pushed and popped during CALLSTK_BENCHMARKTIME
 #endif                                        // (defined(_DEBUG) || defined(CALLSTK_MEASURETIMES)) && !defined(CALLSTK_DISABLEMEASURETIMES)
 
 public:
@@ -99,7 +114,7 @@ public:
     void Pop();
 #endif // (defined(_DEBUG) || defined(CALLSTK_MEASURETIMES)) && !defined(CALLSTK_DISABLEMEASURETIMES)
 
-    // vola se jen pri ukladani call-stack-message z plug-inu
+    // called only when storing a call-stack message from a plug-in
     void PushPluginDLLName(const char* dllName)
     {
         if (PluginDLLName == NULL)
@@ -111,7 +126,7 @@ public:
             PluginDLLNameUses++;
     }
 
-    // vola se jen pri vybirani call-stack-message z plug-inu
+    // called only when retrieving a call-stack message from a plug-in
     void PopPluginDLLName()
     {
         if (PluginDLLNameUses <= 1)
@@ -125,30 +140,30 @@ public:
 
     const char* GetPluginDLLName() { return PluginDLLName; }
 
-    void Reset() // zacatek enumerace radek
+    void Reset() // start enumerating lines
     {
         Enum = Text;
     }
 
-    const char* GetNextLine(); // vrati bud dalsi radku nebo NULL, pokud jiz zadna neni
+    const char* GetNextLine(); // returns the next line or NULL if none remain
 
-    static void ReleaseBeforeExitThread(); // uvolni data call-stack objektu v aktualnim threadu (pouziva se pred vyvolanim exitu threadu uvnitr hlidane oblasti)
-    void ReleaseBeforeExitThreadBody();    // vola se z ReleaseBeforeExitThread() po detekci objektu call-stacku z TLS
+    static void ReleaseBeforeExitThread(); // release call-stack data in the current thread (used before triggering an exit inside a guarded region)
+    void ReleaseBeforeExitThreadBody();    // called from ReleaseBeforeExitThread() after locating the call-stack object in TLS
 
     static int HandleException(EXCEPTION_POINTERS* e, DWORD shellExtCrashID = -1,
-                               const char* iconOvrlsHanName = NULL); // volano z exception handleru
-    static DWORD WINAPI ThreadBugReportF(void* exitProcess);         // thread, ve kterem se otevre dialog bug-reportu
-    // zavola PrintBugReport do bug reportu
+                               const char* iconOvrlsHanName = NULL); // called from the exception handler
+    static DWORD WINAPI ThreadBugReportF(void* exitProcess);         // thread that opens the bug report dialog
+    // invokes PrintBugReport to populate the bug report
     static BOOL CreateBugReportFile(EXCEPTION_POINTERS* Exception, DWORD ThreadID, DWORD ShellExtCrashID, const char* bugReportFileName);
 
-    // funkce pro tisk informaci o vyjimce (pouziva se jak do souboru, tak do okna)
-    // je-li Exception==NULL nejde o vyjimku (user otevrel Bug Report dialog)
+    // function for printing exception information (used both to a file and to a window)
+    // when Exception==NULL it's not an exception (user manually opened the Bug Report dialog)
     static void PrintBugReport(EXCEPTION_POINTERS* Exception, DWORD ThreadID, DWORD ShellExtCrashID,
                                FPrintLine PrintLine, void* param);
 #endif // CALLSTK_DISABLE
 };
 
-// uklada a pri odchodu z bloku vybira zpravu z call-stacku, parametry shodne s printf funkcemi
+// stores the message on the call stack and removes it upon leaving the block; parameters match printf semantics
 
 #ifndef CALLSTK_DISABLE
 
@@ -156,19 +171,20 @@ class CCallStackMessage
 {
 #if (defined(_DEBUG) || defined(CALLSTK_MEASURETIMES)) && !defined(CALLSTK_DISABLEMEASURETIMES)
 public:
-#define CALLSTK_MINWARNTIME 200                    // minimalni cas v milisekundach mezi Push a Pop, aby doslo ke hlaseni problemu
-#define CALLSTK_MINRATIO 10                        // minimalni povoleny pomer realneho casu proti casu stravenemu pri ukladani zprav na call-stack (10 = z celkoveho casu behu bylo straveno mene nez 1/10 pri generovani call-stack, jinak zarve)
-    DWORD PushesCounterStart;                      // start-stav pocitadla Pushu volanych v tomto threadu
-    LARGE_INTEGER PushPerfTimeCounterStart;        // start-stav pocitadla casu straveneho v metodach Push volanych v tomto threadu
-    LARGE_INTEGER IgnoredPushPerfTimeCounterStart; // start-stav pocitadla casu straveneho v nemerenych (ignorovanych) metodach Push volanych v tomto threadu
-    LARGE_INTEGER StartTime;                       // "cas" Pushe tohoto call-stack makra
-    DWORD_PTR PushCallerAddress;                   // adresa makra CALL_STACK_MESSAGE (adresa Pushnuti)
+#define CALLSTK_MINWARNTIME 200                    // minimum time between Push and Pop in milliseconds to report a warning
+#define CALLSTK_MINRATIO 10                        // minimum allowed ratio of real time to storing time (10 = <1/10 of runtime spent generating the call stack; otherwise warn)
+    DWORD PushesCounterStart;                      // initial Push counter value for this thread
+    LARGE_INTEGER PushPerfTimeCounterStart;        // initial counter of time spent in Push methods in this thread
+    LARGE_INTEGER IgnoredPushPerfTimeCounterStart; // initial counter of time spent in ignored Push methods in this thread
+    LARGE_INTEGER StartTime;                       // timestamp when this macro was pushed
+    DWORD_PTR PushCallerAddress;                   // address where CALL_STACK_MESSAGE macro was invoked
 #endif                                             // (defined(_DEBUG) || defined(CALLSTK_MEASURETIMES)) && !defined(CALLSTK_DISABLEMEASURETIMES)
 
 public:
 #if (defined(_DEBUG) || defined(CALLSTK_MEASURETIMES)) && !defined(CALLSTK_DISABLEMEASURETIMES)
-    // 'doNotMeasureTimes'==TRUE = nemerit Push tohoto call-stack makra (zrejme dost zpomaluje, ale
-    // nechceme ho vyhodit, je prilis dulezite pro debugovani)
+    // 'doNotMeasureTimes'==TRUE means the Push of this call-stack macro should
+    // not be measured (it probably slows things down a lot, but removing it
+    // would hurt debugging)
     CCallStackMessage(BOOL doNotMeasureTimes, int dummy, const char* format, ...);
 #else  // (defined(_DEBUG) || defined(CALLSTK_MEASURETIMES)) && !defined(CALLSTK_DISABLEMEASURETIMES)
     CCallStackMessage(const char* format, ...);
@@ -349,7 +365,7 @@ extern BOOL __CallStk_T; // always TRUE - just to check format string and type o
 #define DEBUG_SLOW_CALL_STACK_MESSAGE20 SLOW_CALL_STACK_MESSAGE20
 #define DEBUG_SLOW_CALL_STACK_MESSAGE21 SLOW_CALL_STACK_MESSAGE21
 
-#else //_DEBUG
+#else _DEBUG
 
 #define DEBUG_SLOW_CALL_STACK_MESSAGE1(p1)
 #define DEBUG_SLOW_CALL_STACK_MESSAGE2(p1, p2)
@@ -375,5 +391,6 @@ extern BOOL __CallStk_T; // always TRUE - just to check format string and type o
 
 #endif // _DEBUG
 
-// prazdne makro: oznamuje CheckStk, ze u teto funkce si call-stack message neprejeme
+// empty macro: informs CheckStk that we do not want a call-stack message for
+// this function
 #define CALL_STACK_MESSAGE_NONE

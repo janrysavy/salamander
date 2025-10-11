@@ -61,7 +61,7 @@ CEditLBEdit::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         case VK_ESCAPE:
         case VK_F2:
         {
-            EditLB->OnEndEdit(); // zahodim zmeny
+            EditLB->OnEndEdit(); // discard changes
             return 0;
         }
 
@@ -124,7 +124,7 @@ CEditListBox::CEditListBox(HWND hDlg, int ctrlID, DWORD flags, CObjectOrigin ori
 
     LOGFONT lf;
     GetObject(hFont, sizeof(lf), &lf);
-    // nakonstruuju dva fonty
+    // construct two fonts
     HNormalFont = HANDLES(CreateFontIndirect(&lf));
     lf.lfWeight = FW_BOLD;
     HBoldFont = HANDLES(CreateFontIndirect(&lf));
@@ -138,9 +138,9 @@ CEditListBox::CEditListBox(HWND hDlg, int ctrlID, DWORD flags, CObjectOrigin ori
     int itemHeight = max(tm.tmHeight + 4, IconSizes[ICONSIZE_16]);
     SendMessage(HWindow, LB_SETITEMHEIGHT, 0, MAKELPARAM(itemHeight, 0));
 
-    // MakeDragList subclassne listbox a prestaneme dostavat zakaldni message jako je
-    // WM_LBUTTONDOWN, WM_MOUSEMOVE, atd. Tim je tato fce nepouzitelna a naprogramujeme
-    // si podporu pro d&d vlastni silou.
+    // MakeDragList subclasses the list box and we would stop receiving basic
+    // messages such as WM_LBUTTONDOWN or WM_MOUSEMOVE. That would render this
+    // function unusable, so we implement drag&drop support ourselves.
     //  MakeDragList(HWindow);
     //  DragNotify = RegisterWindowMessage(DRAGLISTMSGSTRING);
 }
@@ -160,12 +160,12 @@ int CEditListBox::AddItem(INT_PTR itemID)
     // data instead of the string it would otherwise point to. You can send the
     // LB_GETITEMDATA and LB_SETITEMDATA messages to retrieve or modify the item data.
 
-    // Pod Window XP s pripojenyma Common Controls 6 (pomoci manifest.xml) MS ma chybu:
-    // v pripade owner draw listboxu bez flagu LBS_HASSTRINGS nelze v LB_ADDSTRING a
-    // LB_INSERTSTRING predat lParam == 0. Message pak vrati LB_ERR (-1) a polozku
-    // neprida. Obchazime to tak, ze davame dummy lParam == 1 a skutecnou hodnotu
-    // nastavujeme v druhem kroku volanim LB_SETITEMDATA pro prave pridanou polozku
-    LRESULT res = SendMessage(HWindow, LB_INSERTSTRING, ItemsCount, 1); // 1 je dumy hodnota, obchazime chybu WinXP
+    // Windows XP with Common Controls 6 (via manifest.xml) has a bug: for an
+    // owner-draw list box without LBS_HASSTRINGS, LB_ADDSTRING and LB_INSERTSTRING
+    // cannot receive lParam == 0. The message returns LB_ERR (-1) and the item is
+    // not inserted. We work around it by passing a dummy lParam of 1 and then
+    // assigning the real value using LB_SETITEMDATA for the newly added item
+    LRESULT res = SendMessage(HWindow, LB_INSERTSTRING, ItemsCount, 1); // 1 is a dummy value, working around a Windows XP bug
     if (res != LB_ERR)
     {
         SendMessage(HWindow, LB_SETITEMDATA, res, ((Flags & ELB_ITEMINDEXES) ? ItemsCount : itemID));
@@ -181,7 +181,7 @@ int CEditListBox::InsertItem(INT_PTR itemID, int index)
         TRACE_E("CEditListBox::InsertItem is not ready for ELB_ITEMINDEXES Flag");
         return LB_ERR;
     }
-    LRESULT res = SendMessage(HWindow, LB_INSERTSTRING, index, 1); // 1 je dumy hodnota, obchazime chybu WinXP
+    LRESULT res = SendMessage(HWindow, LB_INSERTSTRING, index, 1); // 1 is a dummy value, working around a Windows XP bug
     if (res != LB_ERR)
     {
         SendMessage(HWindow, LB_SETITEMDATA, res, itemID);
@@ -380,7 +380,7 @@ void CEditListBox::MoveItem(int newIndex)
     if (newIndex == index || newIndex == index + 1)
         return;
     if (newIndex > index)
-        newIndex--; // posun smerem dolu
+        newIndex--; // shift downwards
 
     DispInfo.ItemID = (INT_PTR)SendMessage(HWindow, LB_GETITEMDATA, index, 0);
     DispInfo.Index = index;
@@ -633,9 +633,9 @@ void CEditListBox::OnDrawItem(LPARAM lParam)
                 {
                     if (DispInfo.HIcon != NULL)
                     {
-                        // pokud do DrawIconEx predam brush stylem (HBRUSH)(COLOR_WINDOW + 1)
-                        // pod NT40US + 256 barvach se v pozadi zobrazuje cerny flek; tento
-                        // patch problem resi
+                        // Passing (HBRUSH)(COLOR_WINDOW + 1) to DrawIconEx results in
+                        // a black patch on NT4.0 US when using 256 colors; this brush
+                        // workaround fixes the issue
                         HBRUSH hBrush = HANDLES(CreateSolidBrush(GetSysColor(COLOR_WINDOW)));
                         int iconSize = IconSizes[ICONSIZE_16];
                         DrawIconEx(lpdis->hDC, lpdis->rcItem.left + 1, lpdis->rcItem.top + 1,
@@ -644,7 +644,7 @@ void CEditListBox::OnDrawItem(LPARAM lParam)
                     }
                     else
                     {
-                        // musime podmazat pozadi
+                        // must paint the background underneath
                         RECT r = lpdis->rcItem;
                         r.right = IconSizes[ICONSIZE_16] + 2;
                         FillRect(lpdis->hDC, &r, (HBRUSH)(COLOR_WINDOW + 1));
@@ -705,7 +705,7 @@ CEditListBox::IsDragNotifyMessage(UINT uMsg, WPARAM wParam, LPARAM lParam, HWND 
         BOOL enableDrag = TRUE;
         if ((GetEnabler() & (TLBHDRMASK_UP | TLBHDRMASK_DOWN)) == 0) enableDrag = FALSE;
         int index = LBItemFromPt(HWindow, dli->ptCursor, TRUE);
-        if (index >= ItemsCount) enableDrag = FALSE; // prazdnou polozku nesmime nechat tahat
+        if (index >= ItemsCount) enableDrag = FALSE; // we must not allow dragging an empty item
         Dragging = enableDrag;
         SetWindowLongPtr(GetParent(HWindow), DWLP_MSGRESULT, enableDrag);
         break;
@@ -804,7 +804,7 @@ CEditListBox::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             return 0;
         if (wParam >= 32)
         {
-            // mame dorucit zpravu o SPACE v podobe kliknuti na ikonku
+            // should we deliver the SPACE message as a click on the icon?
             if (wParam == 32 && (Flags & ELB_SPACEASICONCLICK))
             {
                 int index;
@@ -908,8 +908,8 @@ CEditListBox::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
             if (GetFocus() != HWindow)
             {
-                // pod W2K+ asi zbytecne: bez tohoto zavreni edit okna nam padal Salamander:
-                // stacilo rozeditovat polozku a kliknout na jinou
+                // probably unnecessary on W2K+: without closing the edit window Salamander crashed:
+                // it was enough to edit an item and click on another
                 if (EditLine != NULL)
                 {
                     OnSaveEdit();
@@ -921,7 +921,7 @@ CEditListBox::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             int item = LOWORD(SendMessage(HWindow, LB_ITEMFROMPOINT, 0,
                                           MAKELPARAM(LOWORD(lParam), HIWORD(lParam))));
 
-            // zahodime kliknuti mimo polozku
+            // ignore clicks outside the item
             RECT r;
             SendMessage(HWindow, LB_GETITEMRECT, item, (LPARAM)&r);
             POINT pt;
@@ -944,7 +944,7 @@ CEditListBox::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 DispInfo.Index = index;
                 NotifyParent(&DispInfo, EDTLBN_ICONCLICKED);
             }
-            else if (HMarkWindow != NULL && item < ItemsCount) // prazdnou polozku nesmime nechat tahat
+            else if (HMarkWindow != NULL && item < ItemsCount) // we must not allow dragging an empty item
             {
                 WaitForDrag = TRUE;
                 DragAnchor = pt;
@@ -1076,7 +1076,7 @@ CEditListBox::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         if (Dragging)
         {
             LRESULT ret = CWindow::WindowProc(uMsg, wParam, lParam);
-            return ret | DLGC_WANTMESSAGE; // chceme Escape
+            return ret | DLGC_WANTMESSAGE; // we want Escape
         }
         break;
     }

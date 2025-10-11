@@ -3,27 +3,27 @@
 
 #pragma once
 
-// OLESPY slouzi pro detekci COM/OLE leaku
-// tela nasledujicich funkci jsou prazdna, pokud se jedna o release verzi
-// (neni definovano _DEFINE)
+// OLESPY is used to detect COM/OLE leaks
+// the bodies of the following functions are empty in release builds
+// (when _DEFINE is not defined)
 //
-// Podrobnosti k hledani OLE leaku jsou popsany v OLESPY.CPP
+// Details about searching for OLE leaks are described in OLESPY.CPP
 
-// Pripojeni naseho IMallocSpy k OLE; napred je treba inicializova COM
-// Pokud vrati TRUE, je mozne volat nasledujici funkce
+// Connect our IMallocSpy to OLE; COM must be initialized first
+// Returns TRUE if the following functions can be called
 BOOL OleSpyRegister();
 
-// Odpojeni SPYe od OLE; po teto funkci lze jeste zavolat OleSpyDump
+// Disconnect the SPY from OLE; OleSpyDump can still be called afterwards
 void OleSpyRevoke();
 
-// Slouzi k breknuti aplikace pri dosazeni 'alloc' alokace
-// Zavolat nekdy od OleSpyRegister do OleSpyRevoke
+// Used to break the application when allocation number 'alloc' is reached
+// Call sometime between OleSpyRegister and OleSpyRevoke
 void OleSpySetBreak(int alloc);
 
-// Vypise do Debug okna debuggeru a do TRACE_I statistiky a leaky
-// U leaku zobrazuje v [n] poradi alokaci, ktere lze vyuzit pro OleSpySetBreak
+// Prints statistics and leaks to the Debug window and TRACE_I
+// For leaks it shows the allocation order [n] which can be used for OleSpySetBreak
 void OleSpyDump();
 
-// stress test implementace IMallocSpy
-// urceno pro ladici ucely
+// stress test of IMallocSpy implementation
+// meant for debugging purposes
 // void OleSpyStressTest();

@@ -7,18 +7,18 @@
 //
 // CProgressBar
 //
-// Trida je vzdy alokovana (CObjectOrigin origin = ooAllocated)
+// The class is always allocated (CObjectOrigin origin = ooAllocated)
 
 class CProgressBar : public CWindow
 {
 public:
-    // hDlg je parent window (dialog nebo okno)
-    // ctrlID je ID child okna
+    // hDlg is the parent window (dialog or window)
+    // ctrlID is the child window ID
     CProgressBar(HWND hDlg, int ctrlID);
     ~CProgressBar();
 
-    // SetProgress lze volat z libovolneho threadu, vnitrne se zasila WM_USER_SETPROGRESS
-    // thread progress bary vsak musi bezet
+    // SetProgress can be called from any thread and internally sends WM_USER_SETPROGRESS
+    // however, thread progress bars must be running
     void SetProgress(DWORD progress, const char* text = NULL);
     void SetProgress2(const CQuadWord& progressCurrent, const CQuadWord& progressTotal,
                       const char* text = NULL);
@@ -37,59 +37,58 @@ protected:
 protected:
     int Width, Height;
     DWORD Progress;
-    CBitmap* Bitmap;     // bitmapa pro memDC -> cache paintu
-    int BarX;            // Xova souradnice obdelniku pro neznamy progress (pro Progress==-1)
-    BOOL MoveBarRight;   // jede obdelnik vpravo?
-    DWORD SelfMoveTime;  // 0: po zavolani SetProgress(-1) se obdelnicek pohne pouze o jeden dilek (0 je implicitni hodnota)
-                         // vic jak 0: cas v [ms], po ktery se jeste budeme hybat po zavolani SetProgress(-1)
-    DWORD SelfMoveTicks; // ulozena hodnota GetTickCount() behem posledniho zavolani SetSelfMoveTime()
-    DWORD SelfMoveSpeed; // rychlost pohybu obdelnicku: hodnota je v [ms] a udava cas, po kterem se obdelnicek pohne
-                         // minimum je 10ms, default hodnota je 50ms -- tedy 20 posunu za vterinu
-                         // pozor na nizke hodnoty, samotna animace pak dokaze znatelne vytizit procesor
-    BOOL TimerIsRunning; // bezi timer?
-    char* Text;          // pokud je ruzny od NULL, bude zobrazen misto cisla
-    HFONT HFont;         // font pro progress bar
+    CBitmap* Bitmap;     // bitmap used by memDC -> drawing cache
+    int BarX;            // X coordinate of the rectangle for indeterminate progress (Progress == -1)
+    BOOL MoveBarRight;   // is the rectangle moving to the right?
+    DWORD SelfMoveTime;  // 0: after SetProgress(-1) the bar moves only one step (default value)
+                         // >0: time in ms the bar continues to move after SetProgress(-1)
+    DWORD SelfMoveTicks; // stored GetTickCount() value from the last SetSelfMoveTime() call
+    DWORD SelfMoveSpeed; // how fast the bar moves: value in ms determining when the rectangle shifts
+                         // minimum is 10 ms, default is 50 ms -- 20 steps per second
+                         // beware of low values; the animation alone can significantly load the CPU
+    BOOL TimerIsRunning; // is the timer running?
+    char* Text;          // displayed instead of the numeric value when not NULL
+    HFONT HFont;         // font for the progress bar
 };
 
 //****************************************************************************
 //
 // CStaticText
 //
-// Trida je vzdy alokovana (CObjectOrigin origin = ooAllocated)
+// The class is always allocated (CObjectOrigin origin = ooAllocated)
 
 class CStaticText : public CWindow
 {
 public:
-    // hDlg je parent window (dialog nebo okno)
-    // ctrlID je ID child okna
-    // flags je kombinaci hodnot z rodiny STF_* (shared\spl_gui.h)
+    // hDlg is the parent window (dialog or window)
+    // ctrlID is the child window ID
+    // flags is a combination of STF_* values (shared\spl_gui.h)
     CStaticText(HWND hDlg, int ctrlID, DWORD flags);
     ~CStaticText();
 
-    // nastavi Text, vraci TRUE pri uspechu a FALSE pri nedostatku pameti
+    // sets Text; returns TRUE on success and FALSE on out-of-memory
     BOOL SetText(const char* text);
 
-    // pozor, vraceny Text muze byt NULL
+    // note that the returned Text may be NULL
     const char* GetText() { return Text; }
 
-    // nastavi Text (pokud zacina nebo konci na mezeru, da do dvojitych uvozovek),
-    // vraci TRUE pri uspechu a FALSE pri nedostatku pameti
+    // sets Text; if it begins or ends with a space, it is wrapped in double quotes
+    // returns TRUE on success and FALSE when memory allocation fails
     BOOL SetTextToDblQuotesIfNeeded(const char* text);
 
-    // na nekterych filesystemech muze byt jiny oddelovac casti cesty
-    // musi byt ruzny od '\0';
+    // on some filesystems a different path separator may be required
+    // the separator must not be '\0'
     void SetPathSeparator(char separator);
 
-    // priradi text, ktery bude zobrazen jako tooltip
+    // assigns the text that will be shown as a tooltip
     BOOL SetToolTipText(const char* text);
 
-    // priradi okno a id, kteremu se pri zobrazeni tooltipu zasle WM_USER_TTGETTEXT
+    // assigns the window and id that will receive WM_USER_TTGETTEXT when the tooltip is shown
     void SetToolTip(HWND hNotifyWindow, DWORD id);
 
-    // pokud je nastaveno na TRUE, tooltip lze vyvolat kliknutim na text nebo
-    // stisknutim klaves Up/Down/Space, ma-li control focus
-    // tootltip se pak zobrazi tesne pod textem a zustane zobrazen
-    // implicitne je nastaveno na FALSE
+    // if set to TRUE the tooltip can be triggered by clicking the text or
+    // pressing Up/Down/Space when the control has focus; the tooltip then
+    // appears right under the text and stays visible; the default is FALSE
     void EnableHintToolTip(BOOL enable);
 
     //    void UpdateControl();
@@ -100,37 +99,37 @@ protected:
     void PrepareForPaint();
 
     BOOL TextHitTest(POINT* screenCursorPos);
-    int GetTextXOffset(); // na zaklade promennych Alignment, Width a TextWidth vraci X posunuti textu
+    int GetTextXOffset(); // returns the X offset based on Alignment, Width, and TextWidth
     void DrawFocus(HDC hDC);
 
     BOOL ToolTipAssigned();
 
     BOOL ShowHint();
 
-    DWORD Flags;         // flagy pro chovani controlu
-    char* Text;          // alokovany text
-    int TextLen;         // delka retezce
-    char* Text2;         // alokovany text obshujici vypustku; pouziva se se pouze s STF_END_ELLIPSIS nebo STF_PATH_ELLIPSIS
-    int Text2Len;        // delka Text2
-    int* AlpDX;          // pole delek substringu; pouziva se se pouze s STF_END_ELLIPSIS nebo STF_PATH_ELLIPSIS
-    int TextWidth;       // sirka textu v bodech
-    int TextHeight;      // vyska textu v bodech
-    int Allocated;       // velikost alokovaneho bufferu 'Text' a 'AlpDX'
-    int Width, Height;   // rozmery staticu
-    CBitmap* Bitmap;     // cache pro kresleni; pouziva se pouze s STF_CACHED_PAINT
-    HFONT HFont;         // handlu fontu pouzivany ro kresleni textu
-    BOOL DestroyFont;    // pokud je HFont alokovany, je TRUE, jinak je FALSE
-    BOOL ClipDraw;       // je treba clipnout kresleni, protoze bychom vylezli ven
-    BOOL Text2Draw;      // budeme kreslit z bufferu obsahujici vypustku
+    DWORD Flags;         // flags specifying the control behavior
+    char* Text;          // allocated text
+    int TextLen;         // string length
+    char* Text2;         // allocated text containing an ellipsis; used only with STF_END_ELLIPSIS or STF_PATH_ELLIPSIS
+    int Text2Len;        // length of Text2
+    int* AlpDX;          // array of substring lengths; used only with STF_END_ELLIPSIS or STF_PATH_ELLIPSIS
+    int TextWidth;       // text width in points
+    int TextHeight;      // text height in points
+    int Allocated;       // size of the allocated 'Text' and 'AlpDX' buffers
+    int Width, Height;   // dimensions of the static control
+    CBitmap* Bitmap;     // drawing cache; used only with STF_CACHED_PAINT
+    HFONT HFont;         // font handle used for drawing text
+    BOOL DestroyFont;    // TRUE if HFont was allocated, otherwise FALSE
+    BOOL ClipDraw;       // need to clip drawing so that we don't paint outside
+    BOOL Text2Draw;      // we will draw from the buffer containing an ellipsis
     int Alignment;       // 0=left, 1=center, 2=right
-    char PathSeparator;  // oddelovac casti cesty; implicitne '\\'
-    BOOL MouseIsTracked; // instalovali jsme hlidani opusteni mysi
-    // podpora pro tooltips
-    char* ToolTipText; // retezec, ktery bude zobrazen jako nas tooltip
-    HWND HToolTipNW;   // notifikacni okno
-    DWORD ToolTipID;   // a ID pod kterym se ma tool tip dotazat na text
-    BOOL HintMode;     // mame tooltip zobrazovat jako Hint?
-    WORD UIState;      // zobrazovani akceleratoru
+    char PathSeparator;  // separator of path segments; default '\\'
+    BOOL MouseIsTracked; // mouse leave tracking has been installed
+    // tooltip support
+    char* ToolTipText; // string that will be shown as our tooltip
+    HWND HToolTipNW;   // notification window
+    DWORD ToolTipID;   // ID under which the tooltip asks for text
+    BOOL HintMode;     // should the tooltip be displayed as a hint?
+    WORD UIState;      // displaying accelerators
 };
 
 //****************************************************************************
@@ -141,9 +140,9 @@ protected:
 class CHyperLink : public CStaticText
 {
 public:
-    // hDlg je parent window (dialog nebo okno)
-    // ctrlID je ID child okna
-    // flags je kombinaci hodnot z rodiny STF_* (shared\spl_gui.h)
+    // hDlg is the parent window (dialog or window)
+    // ctrlID is the child window ID
+    // flags is a combination of STF_* values (shared\spl_gui.h)
     CHyperLink(HWND hDlg, int ctrlID, DWORD flags = STF_UNDERLINE | STF_HYPERLINK_COLOR);
 
     void SetActionOpen(const char* file);
@@ -156,8 +155,8 @@ protected:
     BOOL ExecuteIt();
 
 protected:
-    char File[MAX_PATH]; // pokud je ruzny od 0, predava se do ShellExecute
-    WORD Command;        // pokud je ruzny od 0, posti se pri akci
+    char File[MAX_PATH]; // when non-zero it is passed to ShellExecute
+    WORD Command;        // when non-zero this command is executed during the action
     HWND HDialog;        // parent dialog
 };
 
@@ -165,8 +164,8 @@ protected:
 //
 // CColorRectangle
 //
-// vykresli celou plochu objektu barvou Color
-// kombinovat s WS_EX_CLIENTEDGE
+// draws the entire object area with the color Color
+// combine with WS_EX_CLIENTEDGE
 //
 
 class CColorRectangle : public CWindow
@@ -231,24 +230,24 @@ protected:
     BOOL Captured;
     BOOL Space;
     RECT ClientRect;
-    // podpora pro tooltips
-    BOOL MouseIsTracked;  // instalovali jsme hlidani opusteni mysi
-    char* ToolTipText;    // retezec, ktery bude zobrazen jako nas tooltip
-    HWND HToolTipNW;      // notifikacni okno
-    DWORD ToolTipID;      // a ID pod kterym se ma tool tip dotazat na text
-    DWORD DropDownUpTime; // cas v [ms], kdy byl odmackunt drop down, pro ochranu pred novym zamacknutim
-    // podpora pro XP Theme
+    // tooltip support
+    BOOL MouseIsTracked;  // mouse leave tracking has been installed
+    char* ToolTipText;    // string that will be shown as our tooltip
+    HWND HToolTipNW;      // notification window
+    DWORD ToolTipID;      // ID under which the tooltip asks for text
+    DWORD DropDownUpTime; // time in [ms] when the drop-down was released, used to prevent immediate re-press
+    // XP Theme support
     BOOL Hot;
-    WORD UIState; // zobrazovani akceleratoru
+    WORD UIState; // displaying accelerators
 
 public:
     CButton(HWND hDlg, int ctrlID, DWORD flags, CObjectOrigin origin = ooAllocated);
     ~CButton();
 
-    // priradi text, ktery bude zobrazen jako tooltip
+    // assigns the text that will be shown as a tooltip
     BOOL SetToolTipText(const char* text);
 
-    // priradi okno a id, kteremu se pri zobrazeni tooltipu zasle WM_USER_TTGETTEXT
+    // assigns the window and id that will receive WM_USER_TTGETTEXT when the tooltip is shown
     void SetToolTip(HWND hNotifyWindow, DWORD id);
 
     DWORD GetFlags();
@@ -259,7 +258,7 @@ protected:
 
     virtual void PaintFace(HDC hdc, const RECT* rect, BOOL enabled);
 
-    int HitTest(LPARAM lParam); // vraci 0: nikde; 1: tlacitko; 2: drop down
+    int HitTest(LPARAM lParam); // returns 0: nowhere; 1: button; 2: drop-down
     void PaintFrame(HDC hDC, const RECT* r, BOOL down);
     void PaintDrop(HDC hDC, const RECT* r, BOOL enabled);
     int GetDropPartWidth();
@@ -274,7 +273,7 @@ protected:
 //
 // CColorArrowButton
 //
-// pozadi s textem, za kterym je jeste sipka - slouzi pro rozbaleni menu
+// draws a background with text followed by an arrow that opens a menu
 //
 
 class CColorArrowButton : public CButton
@@ -320,9 +319,9 @@ protected:
     HIMAGELIST HHotImageList;
     HIMAGELIST HGrayImageList;
 #endif
-    DWORD ButtonMask;   // pouzita tlacitka
-    HWND HNotifyWindow; // kam posilam comandy
-    WORD UIState;       // zobrazovani akceleratoru
+    DWORD ButtonMask;   // used buttons
+    HWND HNotifyWindow; // where commands are sent
+    WORD UIState;       // displaying accelerators
 
 public:
     CToolbarHeader(HWND hDlg, int ctrlID, HWND hAlignWindow, DWORD buttonMask);
@@ -350,50 +349,49 @@ protected:
 class CAnimate: public CWindow
 {
   protected:
-    HBITMAP          HBitmap;             // bitmapa ze ktere tahame jednotliva policka animace
-    int              FramesCount;         // pocet policek v bitmape
-    int              FirstLoopFrame;      // pokud jedeme ve smycce, z konce prechazime na toto policko
-    SIZE             FrameSize;           // rozmer policka v bodech
-    CRITICAL_SECTION GDICriticalSection;  // kriticka sekce pro pristup ke GDI prostredkum
-    CRITICAL_SECTION DataCriticalSection; // kriticka sekce pro pristup k datum
+    HBITMAP          HBitmap;             // bitmap containing the animation frames
+    int              FramesCount;         // number of frames in the bitmap
+    int              FirstLoopFrame;      // frame to jump to when looping
+    SIZE             FrameSize;           // frame size in pixels
+    CRITICAL_SECTION GDICriticalSection;  // critical section for access to GDI resources
+    CRITICAL_SECTION DataCriticalSection; // critical section for access to data
     HANDLE           HThread;
-    HANDLE           HRunEvent;           // pokud je signed, animacni thread bezi
-    HANDLE           HTerminateEvent;     // pokud je signed, thread se ukonci
+    HANDLE           HRunEvent;           // when signaled the animation thread runs
+    HANDLE           HTerminateEvent;     // when signaled the thread terminates
     COLORREF         BkColor;
 
-    // ridici promenne, prijdou ke slovu kdyz HRunEvent signed
-    BOOL             SleepThread;         // thread se ma uspat, HRunEvent bude resetnut
+    // control variables used when HRunEvent is signaled
+    BOOL             SleepThread;         // the thread should sleep; HRunEvent will be reset
 
-    int              CurrentFrame;        // zero-based index prave zobrazeneho policka
+    int              CurrentFrame;        // zero-based index of the currently displayed frame
     int              NestedCount;
-    BOOL             MouseIsTracked;      // instalovali jsme hlidani opusteni mysi
+    BOOL             MouseIsTracked;      // have we installed mouse leave tracking?
 
   public:
-    // 'hBitmap'          je bitmapa ze ktere vykreslujeme policka pri animaci; 
-    //                    policka musi byt pod sebou a musi mit konstantni vysku
-    // 'framesCount'      udava celkovy pocet policek v bitmape
-    // 'firstLoopFrame'   zero-based index policka, kam se pri cyklicke
-    //                    animaci vracime po dosazeni konce
+    // 'hBitmap'          bitmap used for drawing animation frames;
+    //                    frames must be stacked vertically with equal height
+    // 'framesCount'      total number of frames in the bitmap
+    // 'firstLoopFrame'   zero-based frame index to return to when cycling
     CAnimate(HBITMAP hBitmap, int framesCount, int firstLoopFrame, COLORREF bkColor, CObjectOrigin origin = ooAllocated);
-    BOOL IsGood();                // dopadnul dobre konstruktor?
+    BOOL IsGood();                // did the constructor succeed?
 
-    void Start();                 // pokud neanimujeme, zacneme
-    void Stop();                  // zastavi animaci a zobrazi uvodni policko
-    void GetFrameSize(SIZE *sz);  // vraci rozmer v bodech potrebny pro zobrazeni policka
+    void Start();                 // start the animation if not already running
+    void Stop();                  // stop the animation and show the first frame
+    void GetFrameSize(SIZE *sz);  // returns the frame size in pixels
 
   protected:
     virtual LRESULT WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam);
 
-    void Paint(HDC hdc = NULL);   // zobraz soucasne policko; pokud je hdc NULL, vytahni si DC okna
-    void FirstFrame();            // nastav Frame na uvodni policko
-    void NextFrame();             // nastav Frame na dalsi policko; preskakuj uvodni sekvenci
+    void Paint(HDC hdc = NULL);   // draw the current frame; grab the window DC if hdc is NULL
+    void FirstFrame();            // set Frame to the initial cell
+    void NextFrame();             // advance to the next frame, skipping the intro sequence
 
-    // tela threadu
+    // thread bodies
     static unsigned ThreadF(void *param);
     static unsigned AuxThreadEH(void *param);
     static DWORD WINAPI AuxThreadF(void *param);
 
-    // ThreadF bude friend, aby mohl pristupovat na nase data
+    // ThreadF is a friend so it can access our data
     friend static unsigned ThreadF(void *param);
 };
 */
@@ -416,51 +414,52 @@ BOOL ChangeToIconButton(HWND hParent, int ctrlID, int iconID);
 //  ****************************************************************************
 // VerticalAlignChildToChild
 //
-// slouzi k zarovnani "browse" tlacitka za editline / combobox (v resource workshopu je problem se trefit s tlacitkem za combobox)
-// upravi velikost a pozici child okna 'alignID' tak, aby sedelo ve stejne vysce (a bylo stejne vysoke) jako child 'toID'
+// aligns the "browse" button with the edit line / combobox (in the resource workshop it is hard to place the button behind a combobox)
+// adjusts the size and position of the child window "alignID" so it is at the same height (and equally tall) as the child "toID"
 void VerticalAlignChildToChild(HWND hParent, int alignID, int toID);
 
 //
 //  ****************************************************************************
 // CondenseStaticTexts
 //
-// sesune static texty tak, ze budou tesne navazovat - vzdalenost mezi nimi bude
-// sire mezery dialog fontu; 'staticsArr' je pole IDcek staticu ukoncene nulou
+// moves static texts so they directly follow each other; the spacing between them
+// equals the width of one space in the dialog font; "staticsArr" is an array of
+// static IDs terminated by zero
 void CondenseStaticTexts(HWND hWindow, int* staticsArr);
 
 //
 //  ****************************************************************************
 // ArrangeHorizontalLines
 //
-// najde horizontalni cary a dorazi je zprava na text, na ktery navazuji
-// navic najde checkboxy a radioboxy, ktere tvori labely groupboxum a zkrati
-// je podle jejich textu a aktualniho pisma v dialogu (eliminuje zbytecne
-// mezery vznikle kvuli ruznym DPI obrazovky)
+// finds horizontal lines in a dialog and extends them from the right to the
+// text they relate to; it also locates check boxes and radio buttons acting as
+// group-box labels and shortens them according to their text and the current
+// dialog font, eliminating extra gaps caused by varying screen DPI
 void ArrangeHorizontalLines(HWND hWindow);
 
 //
 //  ****************************************************************************
 // GetWindowFontHeight
 //
-// pro hWindow ziska aktualni font a vrati jeho vysku
+// retrieves the font currently used by hWindow and returns its height
 int GetWindowFontHeight(HWND hWindow);
 
 //
 //  ****************************************************************************
-// GetWindowFontHeight
+// CreateCheckboxImagelist
 //
-// vytvori imagelist obsahujici dva stavy checkboxu (unchecked a checked)
-// a vrati jeho handle; 'itemSize' je sirka a vyska jedne polozky v bodech
+// creates an image list containing two check box states (unchecked and checked)
+// and returns the list handle; 'itemSize' specifies the width and height of each
+// item in points
 HIMAGELIST CreateCheckboxImagelist(int itemSize);
 
 //
 //  ****************************************************************************
 // SalLoadIcon
 //
-// nacte ikonu urcenou 'hInst' a 'iconName', vrati jeji handle nebo NULL v pripade
-// chyby; 'iconSize' udava pozadovanou velikost ikony; funkce je High DPI ready
-// a vrati jeho handle; 'itemSize' je sirka a vyska jedne polozky v bodech
+// loads the icon specified by 'hInst' and 'iconName' and returns its handle or NULL on error;
+// 'iconSize' specifies the desired icon size and the function is High DPI ready
 //
-// Poznamka: stare API LoadIcon() neumi ikony vetsich velikosti, proto zavadime tuto
-// funkci, ktera cte ikony pomoci noveho LoadIconWithScaleDown()
+// Note: the old LoadIcon() API cannot load larger icons, therefore we introduce this
+// function that loads icons using the new LoadIconWithScaleDown()
 HICON SalLoadIcon(HINSTANCE hInst, LPCTSTR iconName, CIconSizeEnum iconSize);

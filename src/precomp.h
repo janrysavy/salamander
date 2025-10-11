@@ -5,7 +5,7 @@
 
 //#define WIN32_LEAN_AND_MEAN // exclude rarely-used stuff from Windows headers
 
-// SDK nam potlacuje nektere warningy, napriklad C4244, proto ho obklicime do PUSH/POP
+// The SDK suppresses some warnings such as C4244, so we wrap it with PUSH/POP
 #pragma warning(push)
 
 #ifdef _WIN64
@@ -35,8 +35,8 @@
 #endif
 #include <math.h>
 
-// opatreni proti runtime check failure v debug verzi: puvodni verze makra pretypovava rgb na WORD,
-// takze hlasi ztratu dat (RED slozky)
+// Workaround for runtime check failure in debug builds: the original macro
+// casts the RGB value to WORD and therefore reports data loss (the RED component)
 #undef GetGValue
 #define GetGValue(rgb) ((BYTE)(((rgb) >> 8) & 0xFF))
 
