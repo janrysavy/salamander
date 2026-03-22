@@ -19,7 +19,7 @@
 //#include <commctrl.h>
 #include <ostream>
 
-#if defined(_DEBUG) && defined(_MSC_VER) // without passing file+line to 'new' operator, list of memory leaks shows only 'crtdbg.h(552)'
+#if defined(_DEBUG) && defined(_MSC_VER) // under _MSC_VER, without passing file+line to 'new' operator, the memory leak list shows only 'crtdbg.h(552)'
 #define new new (_NORMAL_BLOCK, __FILE__, __LINE__)
 #endif
 
@@ -42,7 +42,7 @@ CThreadQueue::CThreadQueue(const char* queueName)
 
 CThreadQueue::~CThreadQueue()
 {
-    ClearFinishedThreads(); // no need for a section; only one thread should be using it now
+    ClearFinishedThreads(); // no need for a critical section; only one thread should be using it now
     if (Continue != NULL)
         CloseHandle(Continue);
     if (Head != NULL)
@@ -76,7 +76,7 @@ void CThreadQueue::ClearFinishedThreads()
 
 BOOL CThreadQueue::Add(CThreadQueueItem* item)
 {
-    // first discard threads that have already finished
+    // first remove threads that have already finished
     ClearFinishedThreads();
 
     // add a new thread
@@ -93,7 +93,7 @@ BOOL CThreadQueue::FindAndLockItem(HANDLE thread)
 {
     CS.Enter();
 
-    CThreadQueueItem* act = Head; // look for the queue entry that owns the thread handle
+    CThreadQueueItem* act = Head; // try to find an open handle to the thread
     while (act != NULL)
     {
         if (act->Thread == thread)
@@ -114,7 +114,7 @@ void CThreadQueue::UnlockItem(HANDLE thread, BOOL deleteIfUnlocked)
     CS.Enter();
 
     CThreadQueueItem* last = NULL;
-    CThreadQueueItem* act = Head; // look for the queue entry that owns the thread handle
+    CThreadQueueItem* act = Head; // try to find the open thread handle
     while (act != NULL)
     {
         if (act->Thread == thread)
@@ -128,7 +128,7 @@ void CThreadQueue::UnlockItem(HANDLE thread, BOOL deleteIfUnlocked)
             TRACE_E("CThreadQueue::UnlockItem(): thread has not locks!");
         else
         {
-            if (--(act->Locks) == 0 && deleteIfUnlocked) // the thread is no longer locked and the record should be removed
+            if (--(act->Locks) == 0 && deleteIfUnlocked) // the thread is no longer locked and its record should be deleted if deleteIfUnlocked is set
             {
                 if (last != NULL)
                     last->Next = act->Next;
@@ -140,7 +140,7 @@ void CThreadQueue::UnlockItem(HANDLE thread, BOOL deleteIfUnlocked)
         }
     }
     else
-        TRACE_E("CThreadQueue::UnlockItem(): unable to find thread!"); // wasn't it locked because it was deleted?
+        TRACE_E("CThreadQueue::UnlockItem(): unable to find thread!"); // wasn't it locked, so it could not have been deleted?
 
     CS.Leave();
 }
@@ -168,7 +168,7 @@ void CThreadQueue::KillThread(HANDLE thread, DWORD exitCode)
     CALL_STACK_MESSAGE2("CThreadQueue::KillThread(, %d)", exitCode);
     if (thread != NULL)
     {
-        if (FindAndLockItem(thread)) // thread handle found and locked — it is safe to terminate it and then remove it
+        if (FindAndLockItem(thread)) // thread handle found and locked - we can terminate the thread and then remove the item
         {
             TerminateThread(thread, exitCode);
             WaitForSingleObject(thread, INFINITE); // wait until the thread really ends; sometimes it takes quite a while
@@ -196,11 +196,11 @@ BOOL CThreadQueue::KillAll(BOOL force, int waitTime, int forceWaitTime, DWORD ex
         BOOL leaveCS = FALSE;
         DWORD ec;
         if (GetExitCodeThread(item->Thread, &ec) && ec == STILL_ACTIVE)
-        { // the thread is still almost certainly running
+        { // the thread is probably still running
             DWORD t = GetTickCount() - ti;
             if (w == INFINITE || t < w) // we should keep waiting
             {
-                // release the queue so other threads can, for example, wait for a queued worker to finish and then exit
+                // release the queue for other threads (so they can, for example, wait for a thread from the queue to terminate and then terminate themselves)
                 CS.Leave();
 
                 if (w == INFINITE || 50 < w - t)
@@ -249,10 +249,10 @@ BOOL CThreadQueue::KillAll(BOOL force, int waitTime, int forceWaitTime, DWORD ex
 
         if (leaveCS)
         {
-            // release the queue so other threads can, for example, wait for a queued worker to finish and then exit
+            // release the queue so other threads can, for example, wait for a thread from the queue to finish and then exit
             CS.Leave();
 
-            Sleep(50); // give the queue a moment to be taken over and possibly let the thread finish before we terminate it like the rest
+            Sleep(50); // give it a moment for the queue to take over and possibly for the thread to finish before we terminate it like all the others
 
             CS.Enter();
             item = Head;
@@ -277,7 +277,7 @@ CThreadQueue::ThreadBase(void* param)
 {
     CThreadBaseData* d = (CThreadBaseData*)param;
 
-    // copy the data to the stack ('d' stops being valid once Continue is signaled)
+    // copy the WINAPI threadBody pointer and threadParam to the stack ('d' stops being valid after 'Continue')
     unsigned(WINAPI * threadBody)(void*) = d->Body;
     void* threadParam = d->Param;
 
@@ -380,7 +380,7 @@ CThread::UniversalBody(void* param)
 
     unsigned ret = thread->Body(); // run the actual thread body
 
-    delete thread; // destroy the thread object
+    delete thread; // delete the thread object
     return ret;
 }
 
