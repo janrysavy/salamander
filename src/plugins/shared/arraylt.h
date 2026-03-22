@@ -13,11 +13,11 @@
 
 #pragma once
 
-// Use the _DEBUG or __ARRAY_DEBUG defines to enable various error state checking. Errors
-// are displayed using TRACE_E and TRACE_C macros.
+// Use the _DEBUG or __ARRAY_DEBUG defines to enable various error-state checks. Errors
+// are displayed using the TRACE_E and TRACE_C macros.
 
-// We need to make this module independent on TRACE macros, so if they are not defined,
-// we define their fakes. Certainly error reporting will not work in such situation.
+// We need to make this module independent of the TRACE macros, so if they are not defined,
+// we define stand-ins for them. Of course, error reporting will not work in that case.
 #if !defined(TRACE_I) && !defined(TRACE_E) && !defined(TRACE_C)
 inline void __TraceEmptyFunction() {}
 #define TRACE_I(str) __TraceEmptyFunction()
@@ -40,10 +40,10 @@ enum CDeleteType
 enum CErrorType
 {
     etNone,         // OK
-    etLowMemory,    // new - NULL
+    etLowMemory,    // new returned NULL
     etUnknownIndex, // index is out of array range
     etBadInsert,    // index of inserted item is out of array range
-    etDestructed,   // array was already destructed using Destroy() method
+    etDestructed,   // array was already destroyed using the Destroy() method
 };
 
 // ****************************************************************************
@@ -66,7 +66,7 @@ template <class DATA_TYPE>
 class TDirectArray
 {
 public:
-    CErrorType State; // etNone if array is OK, otherwise some error occured
+    CErrorType State; // etNone if the array is OK, otherwise an error occurred
     int Count;        // current count of items in array
 
     TDirectArray<DATA_TYPE>(int base, int delta);
@@ -80,12 +80,12 @@ public:
     }
 
     void Insert(int index, const DATA_TYPE& member);
-    int Add(const DATA_TYPE& member); // adds item to the end of array, returns item index
+    int Add(const DATA_TYPE& member); // adds an item to the end of the array, returns the item index
 
     void Insert(int index, const DATA_TYPE* members, int count); // insert 'count' of 'members' items
-    int Add(const DATA_TYPE* members, int count);                // add 'count' of 'members' items
+    int Add(const DATA_TYPE* members, int count);                // add 'count' items from 'members'
 
-    DATA_TYPE& At(int index) // returns pointer to item at 'index' possition
+    DATA_TYPE& At(int index) // returns reference to item at 'index' position
     {
 #if defined(_DEBUG) || defined(__ARRAY_DEBUG)
         if (index >= 0 && index < Count)
@@ -102,7 +102,7 @@ public:
 #endif
     }
 
-    DATA_TYPE& operator[](int index) // returns pointer to item at 'index' possition
+    DATA_TYPE& operator[](int index) // returns reference to item at 'index' position
     {
 #if defined(_DEBUG) || defined(__ARRAY_DEBUG)
         if (index >= 0 && index < Count)
@@ -128,15 +128,15 @@ public:
     }
     DATA_TYPE* GetData() { return Data; }
 
-    void DestroyMembers();             // release items from memory (calling destructors), keep array
+    void DestroyMembers();             // destroy all items (calling destructors), keep array
     void DetachMembers();              // detach all items (destructors are NOT called), keep array
     void Destroy();                    // complete array destruction (calling destructors)
-    void Delete(int index);            // delete item at 'index' possition (calling destructor), move remaining items
-    void Delete(int index, int count); // delete 'count' of items at 'index' possition (calling destructors), move remaining items
-    void Detach(int index);            // detach item at 'index' possition (destructor is NOT called), move remaining items
-    void Detach(int index, int count); // detach 'count' of items at 'index' possition (destructors are NOT called), move remaining items
+    void Delete(int index);            // delete the item at 'index' (calling the destructor), move remaining items
+    void Delete(int index, int count); // delete 'count' items at 'index' position (calling destructors), move remaining items
+    void Detach(int index);            // detach the item at 'index' (the destructor is NOT called), move remaining items
+    void Detach(int index, int count); // detach 'count' items at 'index' position (destructors are NOT called), move remaining items
 
-    int SetDelta(int delta); // change 'Delta', return real used value; NOTE: can be used only for empty array
+    int SetDelta(int delta); // change 'Delta', return actual value used; NOTE: can be used only for an empty array
 
 protected:
     DATA_TYPE* Data; // pointer to array
@@ -159,7 +159,7 @@ protected:
     void CallCopyConstructor(DATA_TYPE* placement, const DATA_TYPE& member)
     {
 #ifdef new
-//#pragma push_macro("new")  // push_macro and pop_macro are not working here (memory leak test placed further in this module is not reported with correct module and line information) -- the reason is that we are not using simple macro to define 'new' as in MFC (MFC uses "#define new DEBUG_NEW")
+//#pragma push_macro("new")  // push_macro and pop_macro do not work here (the memory leak test later in this module is not reported with the correct module and line information) -- the reason is that we are not using a simple macro to define 'new' as in MFC (MFC uses "#define new DEBUG_NEW")
 #define __ARRAY_REDEF_NEW
 #undef new
 #endif
@@ -167,7 +167,7 @@ protected:
         ::new (placement) DATA_TYPE(member); // call copy constructor
 
 #ifdef __ARRAY_REDEF_NEW
-//#pragma pop_macro("new")  // push_macro and pop_macro are not working here (memory leak test placed further in this module is not reported with correct module and line information) -- the reason is that we are not using simple macro to define 'new' as in MFC (MFC uses "#define new DEBUG_NEW")
+//#pragma pop_macro("new")  // push_macro and pop_macro do not work here (the memory leak test later in this module is not reported with the correct module and line information) -- the reason is that we are not using a simple macro to define 'new' as in MFC (MFC uses "#define new DEBUG_NEW")
 #if defined(_DEBUG) && defined(_MSC_VER) // without passing file+line to 'new' operator, list of memory leaks shows only 'crtdbg.h(552)'
 #define new new (_NORMAL_BLOCK, __FILE__, __LINE__)
 #else
@@ -183,14 +183,14 @@ protected:
 
     virtual void CallDestructor(DATA_TYPE& member) { member.~DATA_TYPE(); }
 
-private: // following methods will not be called (prevention)
+private: // prevent the following methods from being called
     TDirectArray<DATA_TYPE>() {}
     TDirectArray<DATA_TYPE>(const TDirectArray<DATA_TYPE>&) {}
     TDirectArray<DATA_TYPE>& operator=(TDirectArray<DATA_TYPE>&) { return *this; }
 
-    // compiler reports error on this line: we have just wanted to catch source code designed for
-    // older version of TDirectArray template: use CallDestructor instead of Destructor and please
-    // notice that in new version of TDirectArray copy-constructors and destructors are called
+    // the compiler reports an error on this line: we only want to catch source code written for
+    // an older version of the TDirectArray template; use CallDestructor instead of Destructor, and
+    // note that in the new version of TDirectArray, copy constructors and destructors are called
     virtual int Destructor(int) { return 0; }
 };
 
@@ -295,7 +295,7 @@ TDirectArray<DATA_TYPE>::TDirectArray(int base, int delta)
 template <class DATA_TYPE>
 void TDirectArray<DATA_TYPE>::Destroy()
 {
-    if (State == etNone) // it can be also etDestructed
+    if (State == etNone) // it can also be etDestructed
     {
         if (Data != NULL)
         {
@@ -384,7 +384,7 @@ void TDirectArray<DATA_TYPE>::Insert(int index, const DATA_TYPE* members, int co
 #if defined(_DEBUG) || defined(__ARRAY_DEBUG)
     if (State == etNone)
     {
-        if (Count + count > Available && members + count - 1 >= Data && // array will be reallocated and inserted items are from this array (items will be released after array reallocation)
+        if (Count + count > Available && members + count - 1 >= Data && // array will be reallocated and the inserted range of count items is from this array (the source range will become invalid after reallocation)
             members < Data + Count)
         {
             TRACE_C("Inserted items could become invalid during operation.");
