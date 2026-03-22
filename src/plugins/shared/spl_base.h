@@ -20,7 +20,7 @@
 #pragma option -a4
 #endif // __BORLANDC__
 
-// In debug builds we test whether the source and destination memory blocks overlap (memcpy must not overlap)
+// In debug builds we test whether the source and destination memory blocks overlap (memcpy must not be used on overlapping blocks)
 #if defined(_DEBUG) && defined(TRACE_ENABLE)
 #define memcpy _sal_safe_memcpy
 #ifdef __cplusplus
@@ -34,9 +34,9 @@ extern "C"
 #endif // defined(_DEBUG) && defined(TRACE_ENABLE)
 
 // The following functions do not crash when working with invalid memory (including NULL):
-// lstrcpy, lstrcpyn, lstrlen and lstrcat (they are defined with the A or W suffix, therefore
-// we cannot redefine them directly). For easier debugging we need them to crash,
-// because otherwise the bug would be discovered later at a point where it might no longer be clear
+// lstrcpy, lstrcpyn, lstrlen and lstrcat (they are defined with the A or W suffix, so
+// we do not redefine them directly). To make bugs easier to debug, we need them to crash,
+// because otherwise the error would only be discovered later, at a point where it might no longer be clear
 // what caused it
 #define lstrcpyA _sal_lstrcpyA
 #define lstrcpyW _sal_lstrcpyW
@@ -95,8 +95,8 @@ struct CCallStackMsgContext
     DWORD PushesCounterStart;                      // starting value of the counter for Push calls made in this thread
     LARGE_INTEGER PushPerfTimeCounterStart;        // starting value of the counter for time spent in Push methods called in this thread
     LARGE_INTEGER IgnoredPushPerfTimeCounterStart; // starting value of the counter for time spent in unmeasured (ignored) Push methods called in this thread
-    LARGE_INTEGER StartTime;                       // "time" of the Push of this call-stack macro
-    DWORD_PTR PushCallerAddress;                   // address of the CALL_STACK_MESSAGE macro (the Push address)
+    LARGE_INTEGER StartTime;                       // "time" of Push for this call-stack macro
+    DWORD_PTR PushCallerAddress;                   // address of the CALL_STACK_MESSAGE macro (address of the Push call)
 };
 #else  // (defined(_DEBUG) || defined(CALLSTK_MEASURETIMES)) && !defined(CALLSTK_DISABLEMEASURETIMES)
 struct CCallStackMsgContext;
@@ -113,8 +113,8 @@ public:
     virtual void WINAPI TraceE(const char* file, int line, const char* str) = 0;
     virtual void WINAPI TraceEW(const WCHAR* file, int line, const WCHAR* str) = 0;
 
-    // registers a new thread with TRACE (assigns a unique ID). 'thread'+'tid' are returned by
-    // _beginthreadex or CreateThread, optional (the UID is then -1)
+    // registers a new thread with TRACE (assigns a Unique ID); 'thread'+'tid' are returned by
+    // _beginthreadex or CreateThread; calling this is optional (the UID is then -1)
     virtual void WINAPI TraceAttachThread(HANDLE thread, unsigned tid) = 0;
 
     // sets the name of the active thread for TRACE, optional (the thread is otherwise marked as "unknown")
@@ -142,9 +142,9 @@ public:
     // calls TraceSetThreadName and SetThreadNameInVC for 'name' (see both methods for details)
     virtual void WINAPI SetThreadNameInVCAndTrace(const char* name) = 0;
 
-    // If we are not yet connected to the Trace Server, try to establish the connection (the server
-    // must be running). SDK builds of Salamander only (including Preview Builds): if auto start of the
-    // server is enabled and the server is not running (for example the user closed it), try to start it
+    // If we are not yet connected to the Trace Server, tries to establish the connection (the server
+    // must be running). SDK builds of Salamander only (including Preview Builds): if auto-start of the
+    // server is enabled and the server is not running (for example, the user terminated it), it tries to start it
     // before connecting.
     virtual void WINAPI TraceConnectToServer() = 0;
 
@@ -170,32 +170,32 @@ public:
     // clears the 'key' of all subkeys and values, returns success
     virtual BOOL WINAPI ClearKey(HKEY key) = 0;
 
-    // creates or opens the existing subkey 'name' of the key 'key', returns 'createdKey' and success;
+    // creates the subkey 'name' of the key 'key', or opens it if it already exists; returns success and the key in 'createdKey'
     // the obtained key ('createdKey') must be closed by calling CloseKey
     virtual BOOL WINAPI CreateKey(HKEY key, const char* name, HKEY& createdKey) = 0;
 
-    // opens the existing subkey 'name' of the key 'key', returns 'openedKey' and success
+    // opens the existing subkey 'name' of the key 'key'; returns success and the key in 'openedKey'
     // the obtained key ('openedKey') must be closed by calling CloseKey
     virtual BOOL WINAPI OpenKey(HKEY key, const char* name, HKEY& openedKey) = 0;
 
     // closes a key opened via OpenKey or CreateKey
     virtual void WINAPI CloseKey(HKEY key) = 0;
 
-    // deletes the subkey 'name' of the key 'key', returns success
+    // deletes the subkey 'name' of the key 'key'; returns whether it succeeded
     virtual BOOL WINAPI DeleteKey(HKEY key, const char* name) = 0;
 
-    // reads the value 'name'+'type'+'buffer'+'bufferSize' from the key 'key', returns success
+    // reads the 'name' value of type 'type' from key 'key' into 'buffer' of size 'bufferSize', returns success
     virtual BOOL WINAPI GetValue(HKEY key, const char* name, DWORD type, void* buffer, DWORD bufferSize) = 0;
 
-    // stores the value 'name'+'type'+'data'+'dataSize' into the key 'key'. For strings it is possible
-    // to pass 'dataSize' == -1 -> compute the string length using strlen,
+    // stores the value specified by 'name'+'type'+'data'+'dataSize' in the key 'key'. For strings, it is possible
+    // to pass 'dataSize' == -1 -> the string length is computed using strlen,
     // returns success
     virtual BOOL WINAPI SetValue(HKEY key, const char* name, DWORD type, const void* data, DWORD dataSize) = 0;
 
-    // deletes the value 'name' of the key 'key', returns success
+    // deletes the value 'name' of the key 'key'; returns whether it succeeded
     virtual BOOL WINAPI DeleteValue(HKEY key, const char* name) = 0;
 
-    // obtains into 'bufferSize' the required size for the value 'name'+'type' from the key 'key', returns success
+    // retrieves into 'bufferSize' the required size of the 'name' value of type 'type' from key 'key', returns success
     virtual BOOL WINAPI GetSize(HKEY key, const char* name, DWORD type, DWORD& bufferSize) = 0;
 };
 
@@ -222,12 +222,12 @@ public:
 #define MENU_EVENT_SUBDIR 0x1000                  // the directory is not the root (contains "..")
 // focus is on a file for which this plugin provides "panel archiver view" or "panel archiver edit"
 #define MENU_EVENT_ARCHIVE_FOCUSED 0x2000
-// only 0x4000 is still available (the masks are merged into a DWORD and masked with 0x7FFF beforehand)
+// only 0x4000 is still available (both masks are combined into a DWORD and are masked with 0x7FFF beforehand)
 
-// determines for which user level the item is intended
+// determines which user level the item is intended for
 #define MENU_SKILLLEVEL_BEGINNER 0x0001     // intended for the most important menu items for beginners
-#define MENU_SKILLLEVEL_INTERMEDIATE 0x0002 // also assign to less frequent commands; for advanced users
-#define MENU_SKILLLEVEL_ADVANCED 0x0004     // assign to all commands (power users should see everything)
+#define MENU_SKILLLEVEL_INTERMEDIATE 0x0002 // also assign to less frequently used commands; for more advanced users
+#define MENU_SKILLLEVEL_ADVANCED 0x0004     // assign to all commands (advanced users should have everything in the menu)
 #define MENU_SKILLLEVEL_ALL 0x0007          // helper constant combining all of the above
 
 // macro to prepare a 'HotKey' for AddMenuItem()
@@ -237,98 +237,100 @@ public:
 //#define SALHOTKEY(vk,mods,cst) ((DWORD)(((BYTE)(vk)|((WORD)((BYTE)(mods))<<8))|(((DWORD)(BYTE)(cst))<<16)))
 #define SALHOTKEY(vk, mods) ((DWORD)(((BYTE)(vk) | ((WORD)((BYTE)(mods)) << 8))))
 
-// macro to prepare a 'hotKey' for AddMenuItem()
+// macro to prepare 'hotKey' for AddMenuItem()
 // tells Salamander that the menu item will contain a hotkey (separated by '\t')
-// Salamander will not complain with TRACE_E and will show the hotkey in the Plugins menu
-// NOTE: this is not a hotkey delivered to the plugin, it really is just a label
-// if the user assigns their own hotkey to this command in Plugin Manager, the hint is suppressed
+// Salamander will not complain via TRACE_E and will display the hotkey in the Plugins menu
+// NOTE: this is not a hotkey that Salamander would deliver to the plugin; it really is just a label
+// if the user assigns their own hotkey to this command in Plugin Manager, the hint will be suppressed
 #define SALHOTKEY_HINT ((DWORD)0x00020000)
 
 class CSalamanderConnectAbstract
 {
 public:
-    // adds the plugin to the list for "custom archiver pack".
+    // adds the plugin to the list for "custom archiver pack",
     // 'title' is the custom packer name shown to the user, 'defaultExtension' is the default extension
-    // for new archives. If this is not an upgrade of the "custom pack" (or adding the whole plugin) and
+    // for new archives; if this is not an upgrade of "custom pack" (or adding the whole plugin) and
     // 'update' is FALSE, the call is ignored; if 'update' is TRUE, the settings are overwritten with the new
-    // values 'title' and 'defaultExtension' - prevents repeated calls with 'update'==TRUE
+    // values 'title' and 'defaultExtension' - it is necessary to prevent repeated 'update'==TRUE
     // (continuous overwriting of the settings)
     virtual void WINAPI AddCustomPacker(const char* title, const char* defaultExtension, BOOL update) = 0;
 
-    // adds the plugin to the list for "custom archiver unpack".
-    // 'title' is the custom unpacker name shown to the user, 'masks' are archive file masks (they are used
-    // to determine which unpacker handles a given archive, the separator is ';' (escape sequence for ';' is
-    // ";;") and the usual wildcards '*' and '?' plus '#' for '0'..'9' are supported). If this is not an upgrade
+    // adding the plugin to the list for "custom archiver unpack",
+    // 'title' is the name of the custom unpacker shown to the user, 'masks' are archive file masks (they are used
+    // to determine which unpacker should unpack a given archive, the separator is ';' (the escape sequence for ';' is
+    // ";;") and the usual wildcards '*' and '?' plus '#' for '0'..'9' are supported); if this is not an upgrade
     // of "custom unpack" (or adding the whole plugin) and 'update' is FALSE, the call is ignored;
-    // if 'update' is TRUE, the settings are overwritten with the new values 'title' and 'masks' - prevents repeated
-    // calls with 'update'==TRUE (continuous overwriting of the settings)
+    // if 'update' is TRUE, the settings are overwritten with the new values of 'title' and 'masks' - it is necessary to prevent
+    // repeated 'update'==TRUE calls (continuous overwriting of the settings)
     virtual void WINAPI AddCustomUnpacker(const char* title, const char* masks, BOOL update) = 0;
 
-    // adds the plugin to the list for "panel archiver view/edit".
-    // 'extensions' are archive extensions that should be processed by this plugin
-    // (the separator is ';' (no escape sequence for ';' here) and wildcard '#' is used for
-    // '0'..'9'). If 'edit' is TRUE, the plugin handles "panel archiver view/edit", otherwise only
-    // "panel archiver view". If this is not an upgrade of "panel archiver view/edit" (or adding
+    // adds the plugin to the list for "panel archiver view/edit",
+    // 'extensions' are archive extensions that should be handled by this plugin
+    // (the separator is ';' (';' has no escape sequence here) and wildcard '#' is used for
+    // '0'..'9'); if 'edit' is TRUE, this plugin handles "panel archiver view/edit", otherwise only
+    // "panel archiver view"; if this is not an upgrade of "panel archiver view/edit" (or adding
     // the whole plugin) and 'updateExts' is FALSE, the call is ignored; if 'updateExts' is TRUE,
-    // it adds new archive extensions (ensuring that all extensions from 'extensions' are present) - prevents
-    // repeated calls with 'updateExts'==TRUE (constant re-adding of extensions from 'extensions')
+    // new archive extensions are added (ensuring that all extensions from 'extensions' are present) -
+    // repeated 'updateExts'==TRUE must be prevented (to avoid constantly reviving extensions from 'extensions')
     virtual void WINAPI AddPanelArchiver(const char* extensions, BOOL edit, BOOL updateExts) = 0;
 
     // removes an extension from the "panel archiver view/edit" list (only from items belonging to
-    // this plugin). 'extension' is a single archive extension (using wildcard '#' for '0'..'9'),
-    // prevents repeated calls (continuous deletion of 'extension')
+    // this plugin); 'extension' is the archive extension (a single one; wildcard '#' is used for '0'..'9'),
+    // protection against repeated calls is necessary (to avoid repeatedly deleting 'extension')
     virtual void WINAPI ForceRemovePanelArchiver(const char* extension) = 0;
 
-    // adds the plugin to the list for "file viewer".
-    // 'masks' are viewer extensions that should be processed by this plugin
-    // (the separator is ';' (escape sequence for ';' is ";;") and the wildcards '*' and '?' are supported,
-    // avoid spaces if possible and the '|' character is forbidden (inverse masks are not allowed)).
-    // If this is not an upgrade of "file viewer" (or adding the whole plugin) and 'force' is FALSE,
+    // adds the plugin to the list for "file viewer",
+    // 'masks' are file masks that should be handled by this plugin
+    // (the separator is ';' (the escape sequence for ';' is ";;"), and the wildcards '*' and '?' are used;
+    // avoid spaces if possible, and the '|' character is forbidden (inverse masks are not allowed)),
+    // if this is not an upgrade of "file viewer" (or the addition of the whole plugin) and 'force' is FALSE,
     // the call is ignored; if 'force' is TRUE, 'masks' are always added (if they are not already on
-    // the list) - prevents repeated calls with 'force'==TRUE (continuous adding of 'masks')
+    // the list) - it is necessary to prevent repeated 'force'==TRUE calls (constant re-adding of 'masks')
     virtual void WINAPI AddViewer(const char* masks, BOOL force) = 0;
 
-    // removes a mask from the "file viewer" list (only from items belonging to this plugin).
-    // 'mask' is a single viewer extension (using wildcards '*' and '?'), prevents
-    // repeated calls (continuous deletion of 'mask')
+    // removes a mask from the "file viewer" list (only from items related to this plugin),
+    // 'mask' is a viewer extension (a single one; wildcards '*' and '?' are used), protection is needed
+    // against repeated calls (continuous removal of 'mask')
     virtual void WINAPI ForceRemoveViewer(const char* mask) = 0;
 
     // adds items to Salamander's Plugins/"plugin name" menu. 'iconIndex' is the index of the
-    // item icon (-1 = no icon; providing the bitmap with icons is described in
+    // item's icon (-1 = no icon; for specifying the bitmap with icons, see
     // CSalamanderConnectAbstract::SetBitmapWithIcons; ignored for separators). 'name' is the
     // item name (max. MAX_PATH - 1 characters) or NULL if it is a separator (the
-    // 'state_or'+'state_and' parameters have no meaning in that case); 'hotKey' is the hotkey
-    // obtained through the SALHOTKEY macro. 'name' may include a hotkey hint,
-    // separated by '\t'; in that case the 'hotKey' variable has to contain the
-    // SALHOTKEY_HINT constant, see the SALHOTKEY_HINT comment for details. 'id' is a unique
-    // identifier of the item within the plugin (for separators it matters only when 'callGetState' is TRUE).
-    // If 'callGetState' is TRUE, the CPluginInterfaceForMenuExtAbstract::GetMenuItemState method is used
-    // to determine the item state (for separators only the MENU_ITEM_STATE_HIDDEN state is relevant, the rest are ignored);
-    // otherwise 'state_or'+'state_and' are used to compute the item state (enabled/disabled).
-    // While computing the item state an 'eventMask' is built by logically summing all events that occurred (see
+    // 'state_or'+'state_and' parameters have no meaning in that case); 'hotKey' is the item's
+    // hotkey obtained using the SALHOTKEY macro. 'name' may contain a hotkey hint,
+    // separated by '\t'; in that case the 'hotKey' variable must be assigned the
+    // SALHOTKEY_HINT constant, see the comment for SALHOTKEY_HINT for details. 'id' is a unique
+    // identifier of the item within the plugin (for separators it matters only if 'callGetState' is TRUE).
+    // If 'callGetState' is TRUE, the CPluginInterfaceForMenuExtAbstract::GetMenuItemState method is called
+    // to determine the item state (for separators, only MENU_ITEM_STATE_HIDDEN is meaningful; the others are ignored);
+    // otherwise 'state_or'+'state_and' are used to compute the item state (enabled/disabled) -
+    // when computing the item state, an 'eventMask' is first built by ORing together all events that occurred (see
     // MENU_EVENT_XXX). The item will be enabled if the following expression evaluates to TRUE:
-    //   ('eventMask' & 'state_or') != 0 && ('eventMask' & 'state_and') == 'state_and'.
-    // The 'skillLevel' parameter determines for which user levels the item (or separator)
+    //   ('eventMask' & 'state_or') != 0 && ('eventMask' & 'state_and') == 'state_and',
+    // the 'skillLevel' parameter determines for which user levels the item (or separator)
     // is shown; the value contains one or more MENU_SKILLLEVEL_XXX constants ORed together.
-    // Menu items are refreshed on every plugin load (the items may change according to configuration).
+    // Menu items are updated on every plugin load (the items may change depending on the configuration).
     // NOTE: CSalamanderBuildMenuAbstract::AddMenuItem is used for a "dynamic menu extension"
     virtual void WINAPI AddMenuItem(int iconIndex, const char* name, DWORD hotKey, int id, BOOL callGetState,
                                     DWORD state_or, DWORD state_and, DWORD skillLevel) = 0;
 
-    // adds a submenu to Salamander's Plugins/"plugin name" menu. 'iconIndex'
-    // is the index of the submenu icon (-1 = no icon; providing the bitmap with icons is described in
-    // CSalamanderConnectAbstract::SetBitmapWithIcons). 'name' is the submenu name
-    // (max. MAX_PATH - 1 characters). 'id' is a unique identifier of the menu item
-    // within the plugin (for a submenu it matters only when 'callGetState' is TRUE).
-    // If 'callGetState' is TRUE, the CPluginInterfaceForMenuExtAbstract::GetMenuItemState method
-    // is used to determine the submenu state (only MENU_ITEM_STATE_ENABLED and MENU_ITEM_STATE_HIDDEN are relevant, the rest are ignored); otherwise
-    // 'state_or'+'state_and' are used to compute the item state (enabled/disabled) - see
-    // CSalamanderConnectAbstract::AddMenuItem() for the calculation. The 'skillLevel' parameter
-    // determines for which user levels the submenu is shown; the value contains one or more
-    // MENU_SKILLLEVEL_XXX constants ORed together. The submenu is closed by calling
-    // CSalamanderConnectAbstract::AddSubmenuEnd().
-    // Menu items are refreshed on every plugin load (the items may change according to configuration).
-    // NOTE: CSalamanderBuildMenuAbstract::AddSubmenuStart is used for a "dynamic menu extension"
+    // adds a submenu to Salamander's Plugins/"plugin name" menu, 'iconIndex'
+    // is the submenu icon index (-1 = no icon; for specifying the bitmap with icons,
+    // see CSalamanderConnectAbstract::SetBitmapWithIcons), 'name' is the submenu name
+    // (max. MAX_PATH - 1 characters), 'id' is a unique identifier of the menu item
+    // within the plugin (for a submenu it only matters if 'callGetState' is TRUE),
+    // if 'callGetState' is TRUE, the
+    // CPluginInterfaceForMenuExtAbstract::GetMenuItemState method is called to determine the
+    // submenu state (only the MENU_ITEM_STATE_ENABLED and MENU_ITEM_STATE_HIDDEN states
+    // matter, the others are ignored), otherwise 'state_or'+'state_and' are used
+    // to calculate the item state (enabled/disabled) - for the item state calculation,
+    // see CSalamanderConnectAbstract::AddMenuItem(), the 'skillLevel' parameter
+    // determines for which user levels the submenu is shown, the value contains one or
+    // more MENU_SKILLLEVEL_XXX constants ORed together, the submenu is ended by calling
+    // CSalamanderConnectAbstract::AddSubmenuEnd();
+    // menu items are updated on every plugin load (items may change according to configuration)
+    // WARNING: CSalamanderBuildMenuAbstract::AddSubmenuStart is used for "dynamic menu extension"
     virtual void WINAPI AddSubmenuStart(int iconIndex, const char* name, int id, BOOL callGetState,
                                         DWORD state_or, DWORD state_and, DWORD skillLevel) = 0;
 
@@ -346,10 +348,10 @@ public:
     // CSalamanderGeneralAbstract::SetChangeDriveMenuItemVisibility
     virtual void WINAPI SetChangeDriveMenuItem(const char* title, int iconIndex) = 0;
 
-    // informs Salamander that the plugin can load thumbnails for files matching the group mask
-    // 'masks' (the separator is ';' (escape sequence for ';' is ";;") and the wildcards '*' and '?' are supported);
-    // thumbnails are loaded by calling
-    // CPluginInterfaceForThumbLoaderAbstract::LoadThumbnail
+    // informs Salamander that the plugin can load thumbnails for files matching the group mask in
+    // 'masks' (the separator is ';' (the escape sequence for ';' is ";;") and the wildcards '*' and '?' are used);
+    // to load thumbnails,
+    // CPluginInterfaceForThumbLoaderAbstract::LoadThumbnail is called
     virtual void WINAPI SetThumbnailLoader(const char* masks) = 0;
 
     // sets the bitmap with the plugin icons. Salamander copies the bitmap contents into its internal
@@ -381,13 +383,13 @@ public:
     // with icons is described in CSalamanderConnectAbstract::SetBitmapWithIcons);
     virtual void WINAPI SetPluginMenuAndToolbarIcon(int iconIndex) = 0;
 
-    // sets the bitmap with the plugin icons. The bitmap must be allocated via
+    // sets the icon list with the plugin icons; the icon list must be allocated by calling
     // CSalamanderGUIAbstract::CreateIconList() and then created and filled using
-    // CGUIIconListAbstract methods. Each icon must be 16x16 pixels.
-    // Salamander takes ownership of the bitmap object; the plugin must not destroy it after calling
-    // this function. The bitmap is stored in Salamander's configuration
-    // so that icons can be used during the next run without loading the plugin, therefore include
-    // only the necessary icons
+    // methods of the CGUIIconListAbstract interface; icon dimensions must be 16x16 pixels;
+    // Salamander takes ownership of the icon list object, and the plugin must not destroy it after calling
+    // this function; the icon list is stored in Salamander's configuration
+    // so that the icons can be used on the next run without loading the plugin, therefore
+    // include only the necessary icons
     virtual void WINAPI SetIconListForGUI(CGUIIconListAbstract* iconList) = 0;
 };
 
@@ -401,8 +403,8 @@ class CDynamicString
 {
 public:
     // returns TRUE if the string 'str' of length 'len' was added successfully; if 'len' is -1,
-    // 'len' is determined as "strlen(str)" (adding without the terminating zero). If 'len' is -2,
-    // 'len' is determined as "strlen(str)+1" (adding including the terminating zero)
+    // 'len' is determined as "strlen(str)" (added without the terminating zero); if 'len' is -2,
+    // 'len' is determined as "strlen(str)+1" (added including the terminating zero)
     virtual BOOL WINAPI Add(const char* str, int len = -1) = 0;
 };
 
@@ -459,7 +461,7 @@ public:
 
 // event codes in the Password Manager, received by CPluginInterfaceAbstract::PasswordManagerEvent():
 #define PME_MASTERPASSWORDCREATED 1 // the user created a master password (passwords must be encrypted)
-#define PME_MASTERPASSWORDCHANGED 2 // the user changed the master password (passwords must be decrypted and encrypted again)
+#define PME_MASTERPASSWORDCHANGED 2 // the user changed the master password (passwords must be decrypted and then re-encrypted)
 #define PME_MASTERPASSWORDREMOVED 3 // the user removed the master password (passwords must be decrypted)
 
 class CPluginInterfaceAbstract
@@ -507,7 +509,7 @@ public:
     // called to connect the plugin to Salamander, invoked only after LoadConfiguration.
     // 'parent' is the parent for message boxes, 'salamander' is the set of methods for hooking a plugin in
 
-    /*  RULES FOR IMPLEMENTING THE CONNECT METHOD
+/*  RULES FOR IMPLEMENTING THE CONNECT METHOD
         (plugins must store their configuration version - see DEMOPLUGin,
          the ConfigVersion variable, and the CURRENT_CONFIG_VERSION constant.
          Below is an illustrative EXAMPLE that adds the "dmp2" extension to DEMOPLUGin):
@@ -649,9 +651,9 @@ public:
     // (see SetBasicPluginData) FUNCTION_VIEWER; if the plugin has no viewer it returns NULL
     virtual CPluginInterfaceForViewerAbstract* WINAPI GetInterfaceForViewer() = 0;
 
-    // returns the menu extension interface. The plugin must return this interface if it adds
-    // items to the menu (see CSalamanderConnectAbstract::AddMenuItem) or if it provides
-    // (see SetBasicPluginData) FUNCTION_DYNAMICMENUEXT; otherwise it returns NULL
+    // returns the menu extension interface; the plugin must return this interface if it adds
+    // items to the menu (see CSalamanderConnectAbstract::AddMenuItem) or if it has the
+    // FUNCTION_DYNAMICMENUEXT function (see SetBasicPluginData); otherwise it returns NULL
     virtual CPluginInterfaceForMenuExtAbstract* WINAPI GetInterfaceForMenuExt() = 0;
 
     // returns the file-system interface. The plugin must return this interface if it provides
@@ -668,25 +670,24 @@ public:
     // NOTE: may be called at any time after the plugin entry point (SalamanderPluginEntry) finishes
     virtual void WINAPI Event(int event, DWORD param) = 0;
 
-    // the user wants to delete all histories (they triggered Clear History from the History
-    // configuration page). History here means everything that is created automatically from values
-    // entered by the user (for example the list of texts run in the command line, the list of current paths on
-    // individual drives, etc.). Lists created by the user do not belong here - e.g. hot-paths, user menu,
-    // etc. 'parent' is the parent of possible message boxes. After saving the configuration no history
-    // may remain in the registry. If the plugin has windows open that contain histories (combo boxes), those
+    // the user wants to clear all histories (they invoked Clear History from the History
+    // page in the configuration). History here means everything that is created automatically from values
+    // entered by the user (for example, the list of texts executed on the command line, the list of current paths on
+    // individual drives, etc.). This does not include lists created by the user - e.g. hot-paths, user-menu,
+    // etc. 'parent' is the parent of any message boxes. After saving the configuration, no history
+    // may remain in the registry. If the plugin has open windows that contain histories (combo boxes), those
     // histories must be cleared there as well
     virtual void WINAPI ClearHistory(HWND parent) = 0;
 
-    // receives information about a change on the 'path' path (if 'includingSubdirs' is TRUE it also
-    // includes changes in subdirectories of 'path'). This method can be used, for example,
-    // to invalidate/clear file or directory caches. NOTE: plugin file systems (FS)
-    // have the CPluginFSInterfaceAbstract::AcceptChangeOnPathNotification() method
+    // receives information about a change on path 'path' (if 'includingSubdirs' is TRUE, it also
+    // includes changes in subdirectories of 'path'); this method can be used, for example,
+    // to invalidate/clear file or directory caches; NOTE: plugin file systems (FS)
+    // have the method CPluginFSInterfaceAbstract::AcceptChangeOnPathNotification()
     virtual void WINAPI AcceptChangeOnPathNotification(const char* path, BOOL includingSubdirs) = 0;
 
-    // this method is called only for plugins that use the Password Manager;
-    // they must opt in through the corresponding helper in
-    // CSalamanderGeneralAbstract before receiving these events:
-    // informs the plugin about changes in the Password Manager. 'parent' is the parent of possible
+    // this method is called only for plugins that use the Password Manager (see
+    // CSalamanderGeneralAbstract::SetPluginUsesPasswordManager()):
+    // informs the plugin about changes in the Password Manager; 'parent' is the parent of possible
     // message boxes/dialogs; 'event' contains the event, see PME_XXX
     virtual void WINAPI PasswordManagerEvent(HWND parent, int event) = 0;
 };
@@ -716,7 +717,7 @@ public:
     // returns the Salamander "parent" window (parent for message boxes)
     virtual HWND WINAPI GetParentWindow() = 0;
 
-    // returns a pointer to the interface with Salamander debugging functions;
+    // returns a pointer to the interface for Salamander debugging functions;
     // the interface is valid for the entire lifetime of the plugin (not just
     // during the "SalamanderPluginEntry" function) and is just a reference, so it is not released
     virtual CSalamanderDebugAbstract* WINAPI GetSalamanderDebug() = 0;
@@ -741,13 +742,13 @@ public:
                                            const char* description, const char* regKeyName = NULL,
                                            const char* extensions = NULL, const char* fsName = NULL) = 0;
 
-    // returns a pointer to the interface with commonly usable Salamander functions.
-    // The interface is valid for the entire lifetime of the plugin (not just during the
-    // "SalamanderPluginEntry" function) and is just a reference, so it is not released
+    // returns a pointer to the interface for Salamander's general-purpose functions.
+    // The interface is valid for the entire lifetime of the plugin (not just within the
+    // "SalamanderPluginEntry" function) and is only a reference, so it is not released
     virtual CSalamanderGeneralAbstract* WINAPI GetSalamanderGeneral() = 0;
 
-    // returns information related to loading the plugin; the information is returned as a DWORD
-    // containing the logical sum of LOADINFO_XXX flags (to test a flag use
+    // returns information related to plugin loading; the information is returned in a DWORD
+    // as a bitwise combination of LOADINFO_XXX flags (to test whether a flag is present, use
     // the condition: (GetLoadInformation() & LOADINFO_XXX) != 0)
     virtual DWORD WINAPI GetLoadInformation() = 0;
 
@@ -766,9 +767,9 @@ public:
     // English (US) = 0x409, czech.slg = Czech = 0x405)
     virtual WORD WINAPI GetCurrentSalamanderLanguageID() = 0;
 
-    // returns a pointer to the interface providing customized Windows controls used
-    // in Salamander; the interface is valid for the entire lifetime of the plugin (not only
-    // during the "SalamanderPluginEntry" function) and is just a reference, so it is not released
+    // returns a pointer to the interface providing the customized Windows controls used
+    // in Salamander; the interface remains valid for the entire lifetime of the plugin (not only
+    // within the "SalamanderPluginEntry" function) and is only a reference, so it must not be released
     virtual CSalamanderGUIAbstract* WINAPI GetSalamanderGUI() = 0;
 
     // returns a pointer to the interface for convenient file operations.
@@ -782,14 +783,14 @@ public:
     // no URL will be displayed (prevents keeping an invalid home page URL)
     virtual void WINAPI SetPluginHomePageURL(const char* url) = 0;
 
-    // adds another file system name. Without FUNCTION_FILESYSTEM in the 'functions'
-    // parameter passed to SetBasicPluginData this method always returns an error.
-    // 'fsName' is the proposed name (the assigned name is obtained via
-    // CSalamanderGeneralAbstract::GetPluginFSName) of the file system (allowed characters are
-    // 'a-zA-Z0-9_+-', minimum length 2). 'newFSNameIndex' (must not be NULL)
-    // receives the index of the newly added file system name. Returns TRUE on success;
+    // adds another file system name; without FUNCTION_FILESYSTEM in the 'functions'
+    // parameter when calling SetBasicPluginData, this method always fails.
+    // 'fsName' is the proposed file system name (the assigned name is obtained using
+    // CSalamanderGeneralAbstract::GetPluginFSName; allowed characters are
+    // 'a-zA-Z0-9_+-', minimum length 2 characters); 'newFSNameIndex' (must not be NULL)
+    // receives the index of the newly added file system name; returns TRUE on success;
     // returns FALSE on a fatal error - in that case 'newFSNameIndex' is ignored.
-    // restriction: must not be called before SetBasicPluginData
+    // limitation: must not be called before SetBasicPluginData
     virtual BOOL WINAPI AddFSName(const char* fsName, int* newFSNameIndex) = 0;
 };
 
