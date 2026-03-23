@@ -69,12 +69,12 @@
 
 struct SAFE_FILE
 {
-    HANDLE HFile;                // handle of the open file (note: it is stored under Salamander core HANDLES)
+    HANDLE HFile;                // open file HANDLE (note: it is managed by Salamander core HANDLES)
     char* FileName;              // fully qualified name of the open file
     HWND HParentWnd;             // window handle hParent from the SafeFileOpen/SafeFileCreate call; used
                                  // if hParent is set to HWND_STORED in the following calls
     DWORD dwDesiredAccess;       // > backup of the CreateFile API parameters
-    DWORD dwShareMode;           // > for a possible repeated call
+    DWORD dwShareMode;           // > for a possible repeated CreateFile call
     DWORD dwCreationDisposition; // > in case of errors during reading or writing
     DWORD dwFlagsAndAttributes;  // >
     BOOL WholeFileAllocated;     // TRUE if SafeFileCreate preallocated the entire file
@@ -84,7 +84,7 @@ struct SAFE_FILE
 
 #define SAFE_FILE_CHECK_SIZE 0x00010000 // FIXME: verify that it does not conflict with BUTTONS_xxx
 
-// bits of the silentMask mask
+// silentMask bit flags
 // skip section
 #define SILENT_SKIP_FILE_NAMEUSED 0x00000001 // skips files that cannot be created because a directory with the \
                                              // same name already exists (old CNFRM_MASK_NAMEUSED)
@@ -96,8 +96,8 @@ struct SAFE_FILE
                                              // mutually exclusive with SILENT_OVERWRITE_FILE_EXIST
 #define SILENT_SKIP_FILE_SYSHID 0x00000020   // skips System/Hidden files that already exist (old CNFRM_MASK_SHFILEOVERSKIP) \
                                              // mutually exclusive with SILENT_OVERWRITE_FILE_SYSHID
-#define SILENT_SKIP_FILE_READ 0x00000040     // skips files whose reading failed
-#define SILENT_SKIP_FILE_WRITE 0x00000080    // skips files whose writing failed
+#define SILENT_SKIP_FILE_READ 0x00000040     // skips files for which a read error occurred
+#define SILENT_SKIP_FILE_WRITE 0x00000080    // skips files for which a write error occurred
 #define SILENT_SKIP_FILE_OPEN 0x00000100     // skips files that cannot be opened
 
 // overwrite section
@@ -129,11 +129,10 @@ public:
     //   'dwShareMode'
     //   'dwCreationDisposition'
     //   'dwFlagsAndAttributes'
-    //      [in] see the CreateFile API.
+    //      [in] See the CreateFile API.
     //
     //   'hParent'
-    //      [in] Handle of the window to which the error messages will be shown
-    //      modally.
+    //      [in] Handle of the window to which error messages will be shown modally.
     //
     //   'flags'
     //      [in] One of the BUTTONS_xxx values; determines the buttons displayed in
@@ -141,31 +140,30 @@ public:
     //
     //   'pressedButton'
     //      [out] Pointer to a variable that receives the button pressed while the error
-    //      message was shown. The variable is meaningful only if SafeFileOpen returns
+    //      message is displayed. The variable is meaningful only if SafeFileOpen returns
     //      FALSE; otherwise its value is undefined. Returns one of the DIALOG_xxx
-    //      values. In case of errors returns the value DIALOG_CANCEL.
-    //      If a particular error message is suppressed thanks to 'silentMask', it
-    //      returns the corresponding button value (for example DIALOG_SKIP or
-    //      DIALOG_YES).
+    //      values. In case of an error, returns the value DIALOG_CANCEL.
+    //      If a particular error message is suppressed by 'silentMask', it returns the
+    //      corresponding button value (for example DIALOG_SKIP or DIALOG_YES).
     //
-    //      'pressedButton' can be NULL (for example for BUTTONS_OK or
-    //      BUTTONS_RETRYCANCEL it makes no sense to check the pressed button).
+    //      'pressedButton' can be NULL (for example, for BUTTONS_OK or
+    //      BUTTONS_RETRYCANCEL, it makes no sense to check the pressed button).
     //
     //   'silentMask'
-    //      [in/out] Pointer to a variable containing a bit array of SILENT_xxx values.
-    //      For SafeFileOpen only the SILENT_SKIP_FILE_OPEN value is relevant.
+    //      [in/out] Pointer to a variable containing a bitmask of SILENT_xxx values.
+    //      For SafeFileOpen, only the SILENT_SKIP_FILE_OPEN value is relevant.
     //
-    //      If the SILENT_SKIP_FILE_OPEN bit is set in the bit array, the displayed
+    //      If the SILENT_SKIP_FILE_OPEN bit is set in the bitmask, the displayed
     //      message should also have a Skip button (controlled by the 'flags'
-    //      parameter) and an error occurs while opening the file, the error message
+    //      parameter), and an error occurs while opening the file, the error message
     //      will be suppressed. SafeFileOpen then returns FALSE and, if 'pressedButton'
     //      is not NULL, sets it to DIALOG_SKIP.
     //
     // Return Values
     //   Returns TRUE if the file was opened successfully. The 'file' structure is
-    //   initialized and you must call SafeFileClose to close the file.
+    //   initialized, and you must call SafeFileClose to close the file.
     //
-    //   In case of an error returns FALSE and sets the 'pressedButton' and
+    //   In case of an error, returns FALSE and sets the 'pressedButton' and
     //   'silentMask' variables if they are not NULL.
     //
     // Remarks
