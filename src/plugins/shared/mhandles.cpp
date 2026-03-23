@@ -56,7 +56,7 @@ void EnterMessagesModul();
 // call once the current thread no longer needs the module's functions or data
 void LeaveMessagesModul();
 
-/// returns a pointer to the global buffer filled with the string produced by sprintf
+/// returns a pointer to the global char buffer, which it fills with the string produced by sprintf
 const char* spf(const char* formatString, ...);
 
 /// returns a pointer to the global buffer filled with the error description
@@ -75,8 +75,8 @@ const char* err(DWORD error);
         .MessageBoxT(__MessagesStringBuf.c_str(), \
                      __MessagesTitle, (buttons))
 
-/** displays a message box with the specified text and an error icon without creating a new
-    thread, dispatching messages on behalf of the calling thread */
+/** displays a message box with the specified text and an exclamation icon; it does not run in a new
+    thread and dispatches the calling thread's messages */
 #define MESSAGE_E(parent, str, buttons) \
     MESSAGE(parent, str, MB_ICONEXCLAMATION | (buttons))
 
@@ -85,7 +85,7 @@ const char* err(DWORD error);
 #define MESSAGE_TI(str, buttons) \
     MESSAGE_T(str, MB_ICONINFORMATION | (buttons))
 
-/** displays a message box with the specified text and an error icon in a new thread,
+/** displays a message box with the specified text and an exclamation icon in a new thread,
     without dispatching the calling thread's messages */
 #define MESSAGE_TE(str, buttons) \
     MESSAGE_T(str, MB_ICONEXCLAMATION | (buttons))
@@ -131,7 +131,7 @@ struct C__MessageBoxData
 };
 
 int CALLBACK __MessagesMessageBoxThreadF(C__MessageBoxData* data)
-{ // must not wait for the caller; otherwise the caller would stop dispatching messages
+{ // must not wait for a response from the calling thread, because it will not respond
     // therefore parent == NULL -> leave the owner windows enabled, etc.
     data->Return = MessageBox(NULL, data->Text, data->Caption, data->Type | MB_SETFOREGROUND);
     return 0;
@@ -139,7 +139,7 @@ int CALLBACK __MessagesMessageBoxThreadF(C__MessageBoxData* data)
 
 int C__Messages::MessageBoxT(LPCTSTR lpText, LPCTSTR lpCaption, UINT uType)
 {
-    __Handles.__MessagesStrStream.flush(); // flush into the buffer (lpText references that buffer)
+    __Handles.__MessagesStrStream.flush(); // flush into the buffer (in lpText)
 
     C__MessageBoxData data;
     data.Caption = lpCaption;
@@ -177,7 +177,7 @@ int C__Messages::MessageBoxT(LPCTSTR lpText, LPCTSTR lpCaption, UINT uType)
 
 int C__Messages::MessageBox(HWND hWnd, LPCTSTR lpText, LPCTSTR lpCaption, UINT uType)
 {
-    __Handles.__MessagesStrStream.flush(); // flush into the buffer (lpText references that buffer)
+    __Handles.__MessagesStrStream.flush(); // flush into the buffer (pointed to by lpText)
 
     int len = (int)strlen(lpText) + 1;
     char* message = (char*)malloc(len); // backup of the text
@@ -735,7 +735,7 @@ C__Handles::SetInfo(const char* file, int line, C__HandlesOutputType outputType)
     ::EnterCriticalSection(&CriticalSection);
     if (CriticalSection.RecursionCount > 1)
     {
-        DebugBreak(); // recursive call to the handles helpers — likely a hidden message loop; inspect the call stack
+        DebugBreak(); // recursive call into Handles again — some hidden message loop; see the call stack
     }
     OutputType = outputType;
     TemporaryHandle.File = file;
@@ -838,7 +838,7 @@ BOOL C__Handles::DeleteHandle(C__HandlesType& type, HANDLE handle,
             {
                 C__HandlesOrigin org = Handles[i].Handle.Origin;
                 if (org != __hoLoadAccelerators && org != __hoLoadIcon &&
-                    org != __hoGetStockObject) // this handle is not one of the automatically released ones (prefer releasing the ones that must be freed first)
+                    org != __hoGetStockObject) // this handle is not one of those that can be left unreleased (we prioritize releasing handles that must be released first)
                 {
                     if (origin != NULL)
                         *origin = org;
@@ -1009,7 +1009,7 @@ C__Handles::CreateFile(LPCTSTR lpFileName, DWORD dwDesiredAccess,
                               dwFlagsAndAttributes, hTemplateFile);
     char paramsBuf[MAX_PATH + 200];
     const char* params = NULL;
-    if (ret == INVALID_HANDLE_VALUE) // parameters to buffer only when error occurs (can be displayed)
+    if (ret == INVALID_HANDLE_VALUE) // store the parameters in the buffer only on error (so they can be displayed)
     {
 #ifdef __BORLANDC__
         _snprintf(paramsBuf, MAX_PATH + 200,
@@ -2386,7 +2386,7 @@ HDWP C__Handles::DeferWindowPos(HDWP hWinPosInfo, HWND hWnd, HWND hWndInsertAfte
 {
     HDWP ret = ::DeferWindowPos(hWinPosInfo, hWnd, hWndInsertAfter, x, y, cx, cy, uFlags);
 
-    if (ret != hWinPosInfo) // the structure was reallocated - we must update the value of the monitored handle
+    if (ret != hWinPosInfo) // the structure was reallocated - we must update the value of the tracked handle
     {
         CheckClose(TRUE, (HANDLE)hWinPosInfo, __htDeferWindowPos, __GetHandlesOrigin(__hoDeferWindowPos), ERROR_SUCCESS, FALSE);
         CheckCreate(ret != NULL, __htDeferWindowPos, __hoDeferWindowPos, (HANDLE)ret, GetLastError());
