@@ -54,21 +54,26 @@ public:
     CThreadQueue(const char* queueName /* e.g. "DemoPlug Viewers" */);
     ~CThreadQueue();
 
-    // runs 'body(param)' in a newly created thread whose stack has size 'stack_size' (0 = default);
-    // returns the thread handle or NULL on error and, before the thread resumes, stores the handle to 'threadHandle'
-    // (if it is not NULL); use the returned handle only for NULL checks and for calls to the CThreadQueue helpers
-    // WaitForExit() and KillThread(), because the queue object closes the handle
-    // WARNING: - the thread might not start until StartThread() returns
-    //          (if 'param' references stack storage, coordinate the hand-off — the main thread must wait until the worker copies it)
+    // starts function 'body' with parameter 'param' in a newly created thread with a stack
+    // of size 'stack_size' (0 = default); returns the thread handle or NULL on error,
+    // and also stores the result in 'threadHandle' before the thread is started (resumed)
+    // (if it is not NULL); use the returned thread handle only for NULL checks and for calling
+    // CThreadQueue methods WaitForExit() and KillThread(); this queue object
+    // closes the thread handle
+    // WARNING: - the thread may start with a delay, only after StartThread() returns
+    //          (if 'param' is a pointer to a structure stored on the stack, it is necessary
+    //           to synchronize passing the data from 'param' - the main thread must wait
+    //           until the new thread takes over the data)
     //         - the returned thread handle may already be closed if the thread finishes before
-    //           StartThread() returns and another thread calls StartThread() or KillAll()
+    //          StartThread() returns and StartThread() or KillAll() is called from another
+    //          thread
     // can be called from any thread
     HANDLE StartThread(unsigned(WINAPI* body)(void*), void* param, unsigned stack_size = 0,
                        HANDLE* threadHandle = NULL, DWORD* threadID = NULL);
 
     // waits for a thread from this queue to finish; 'thread' is a thread handle that may already
-    // be closed (this object closes it when StartThread or KillAll is called); if the wait
-    // succeeds, it removes the entry from the queue and closes the handle
+    // be closed (this object closes it when StartThread and KillAll are called); if the thread does
+    // finish, it removes it from the queue and closes its handle
     BOOL WaitForExit(HANDLE thread, int milliseconds = INFINITE);
 
     // kills a thread from this queue (via TerminateThread()); 'thread' is a thread handle
@@ -77,21 +82,22 @@ public:
     // is not deallocated because its state is unknown and possibly inconsistent)
     void KillThread(HANDLE thread, DWORD exitCode = 666);
 
-    // checks that all threads have finished; if 'force' is TRUE and some thread is still running,
-    // it waits 'forceWaitTime' (in ms) for them to finish, then terminates any that are still alive
-    // (their objects are not deallocated because their state is unknown and possibly inconsistent);
-    // returns TRUE if all threads end; with 'force' TRUE it always returns TRUE;
-    // if 'force' is FALSE and some thread is still running, it waits 'waitTime' (in ms) for them to finish;
-    // if something still runs afterwards, it returns FALSE; INFINITE means it waits without a limit
+    // checks whether all threads have finished; if 'force' is TRUE and some thread is still running,
+    // it waits 'forceWaitTime' (in ms) for all threads to finish, then terminates the threads still running
+    // (their objects are not deallocated because their state is unknown and may be inconsistent);
+    // returns TRUE if all threads have finished; with 'force' TRUE it always returns TRUE;
+    // if 'force' is FALSE and some thread is still running, it waits 'waitTime' (in ms) for all threads to finish;
+    // if something is still running afterwards, it returns FALSE; INFINITE means waiting for an unlimited
+    // time
     // can be called from any thread
     BOOL KillAll(BOOL force, int waitTime = 1000, int forceWaitTime = 200, DWORD exitCode = 666);
 
 protected:                                                 // internal non-synchronized methods
     BOOL Add(CThreadQueueItem* item);                      // adds an item to the queue, returns success
-    BOOL FindAndLockItem(HANDLE thread);                   // finds the item for 'thread' in the queue and locks it
+    BOOL FindAndLockItem(HANDLE thread);                   // finds the item for HANDLE 'thread' in the queue and locks it
     void UnlockItem(HANDLE thread, BOOL deleteIfUnlocked); // unlocks the item for 'thread' in the queue, optionally deletes it
     void ClearFinishedThreads();                           // removes threads that have already finished from the queue
-    static DWORD WINAPI ThreadBase(void* param);           // universal thread body
+    static DWORD WINAPI ThreadBase(void* param);           // generic thread entry point
 };
 
 //
@@ -104,8 +110,8 @@ protected:                                                 // internal non-synch
 class CThread
 {
 public:
-    // thread handle (NULL if the thread has not started yet or is no longer running); WARNING: once the thread ends it
-    // closes itself (becomes invalid), and by then this object has already been deallocated
+    // thread handle (NULL = the thread has not started yet / has not run yet), WARNING: after the thread terminates it
+    // is closed automatically (becomes invalid); moreover, this object has already been deallocated
     HANDLE Thread;
 
 protected:
