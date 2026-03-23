@@ -63,8 +63,8 @@ struct CSalBZIP2
 };
 
 /* Any function of CSalamanderBZIP2Abstract can be called from any thread.
-   Single instance can be used many times, using different bzip2Info structs.
-   For usage howtos, see the comment at the top of this file. */
+   A single instance can be used many times with different bzip2Info structs.
+   For usage instructions, see the comment at the top of this file. */
 
 class CSalamanderBZIP2Abstract
 {
@@ -76,7 +76,7 @@ public:
     virtual int WINAPI CompressEnd(CSalBZIP2* bzip2Info) = 0;
 
     /* Decompression functions */
-    /* bConserveMemory: TRUE to use less memory & decompress slower */
+    /* bConserveMemory: TRUE to use less memory and decompress more slowly */
     virtual int WINAPI DecompressInit(CSalBZIP2* bzip2Info, BOOL bConserveMemory) = 0;
     virtual int WINAPI Decompress(CSalBZIP2* bzip2Info) = 0;
     virtual int WINAPI DecompressEnd(CSalBZIP2* bzip2Info) = 0;
