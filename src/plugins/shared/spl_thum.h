@@ -32,17 +32,19 @@
 #define SSTHUMB_ROTATE_180 (SSTHUMB_MIRROR_VERT | SSTHUMB_MIRROR_HOR)   // the image needs to be rotated 180 degrees
 #define SSTHUMB_ROTATE_90CCW (SSTHUMB_ROTATE_90CW | SSTHUMB_ROTATE_180) // the image needs to be rotated 90 degrees counterclockwise
 // the image is lower quality or smaller than required; after Salamander finishes the first round
-// of "quick" thumbnails it tries to obtain a "quality" thumbnail for this image
+// of obtaining "quick" thumbnails, it tries to obtain a "high-quality" thumbnail for this image
 #define SSTHUMB_ONLY_PREVIEW 8
 
 class CSalamanderThumbnailMakerAbstract
 {
 public:
-    // sets the image-processing parameters used to create a thumbnail; must be the first method called
-    // on this interface; 'picWidth' and 'picHeight' are the dimensions of the processed image (in pixels);
-    // 'flags' is a combination of SSTHUMB_XXX values describing the image passed in the 'buffer' parameter
-    // to ProcessBuffer; returns TRUE if the downscaling buffers were allocated successfully and
-    // ProcessBuffer may be called; if it returns FALSE an error occurred and thumbnail loading must stop
+    // sets the image-processing parameters for thumbnail creation; must be called
+    // as the first method of this interface; 'picWidth' and 'picHeight' are the dimensions
+    // of the image being processed (in pixels); 'flags' is a combination of SSTHUMB_XXX flags
+    // that specify information about the image passed in the 'buffer' parameter of
+    // ProcessBuffer; returns TRUE if the buffers for downscaling were allocated successfully
+    // and ProcessBuffer can then be called; if it returns FALSE, an error occurred
+    // and thumbnail loading must be terminated
     virtual BOOL WINAPI SetParameters(int picWidth, int picHeight, DWORD flags) = 0;
 
     // processes a portion of the image supplied in 'buffer' (the processed part of the image is stored row by
@@ -68,19 +70,21 @@ public:
     // the plugin must not deallocate the provided buffer (Salamander releases it automatically)
     virtual void* WINAPI GetBuffer(int rowsCount) = 0;
 
-    // reports an error while obtaining the image (the thumbnail is considered faulty and will not be used);
-    // after SetError is called, the other methods in this interface only return errors (GetBuffer and
-    // SetParameters) or stop processing (ProcessBuffer)
+    // reports an error while loading the image (the thumbnail is considered invalid
+    // and will not be used); after SetError is called, the other methods in this
+    // interface only return errors (GetBuffer and SetParameters) or signal
+    // interrupted processing (ProcessBuffer)
     virtual void WINAPI SetError() = 0;
 
-    // returns TRUE if the plugin should interrupt loading the thumbnail
-    // returns FALSE if the plugin should continue reading the image
+    // returns TRUE if the plugin should cancel thumbnail loading
+    // returns FALSE if the plugin should continue loading the image
     //
     // the method can be called before and after SetParameters
     //
     // used to detect a cancellation request in cases where the plugin
     // needs to perform time-consuming operations before calling SetParameters,
-    // or when it must pre-render the image after SetParameters but before ProcessBuffer
+    // or when it must pre-render the image after SetParameters but before
+    // calling ProcessBuffer
     virtual BOOL WINAPI GetCancelProcessing() = 0;
 };
 
