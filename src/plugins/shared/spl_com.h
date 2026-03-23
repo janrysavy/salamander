@@ -203,10 +203,10 @@ struct CFileData // do not add a destructor here!
 {
     char* Name;                    // allocated file name (without path), must be allocated on Salamander's
                                    // heap (see CSalamanderGeneralAbstract::Alloc/Realloc/Free)
-    char* Ext;                     // pointer into Name to the first dot from the right (including the dot at the start of the name,
-                                   // on Windows it is considered an extension, unlike UNIX) or to the end of Name if the extension
-                                   // does not exist; if the configuration has FALSE set for SALCFG_SORTBYEXTDIRSASFILES, Ext for
-                                   // directories points to the end of Name (directories do not have extensions)
+    char* Ext;                     // pointer into the char string Name to the first dot from the right (including a dot at the start of the name,
+                                   // which is treated as an extension on Windows, unlike UNIX), or to the end of
+                                   // Name if no extension exists; if SALCFG_SORTBYEXTDIRSASFILES is set to FALSE in
+                                   // the configuration, Ext for directories points to the end of Name (directories do not have extensions)
     CQuadWord Size;                // file size in bytes
     DWORD Attr;                    // file attributes - ORed FILE_ATTRIBUTE_XXX constants
     FILETIME LastWrite;            // time of the last write to the file (UTC-based time)
@@ -215,19 +215,19 @@ struct CFileData // do not add a destructor here!
     DWORD_PTR PluginData;          // used by the plugin via CPluginDataInterfaceAbstract, ignored by Salamander
     unsigned NameLen : 9;          // length of the Name string (strlen(Name)) - WARNING: the maximum name length is (MAX_PATH - 5)
     unsigned Hidden : 1;           // is it hidden? (if 1, the icon is 50% more transparent - ghosted)
-    unsigned IsLink : 1;           // is it a link? (if 1, the icon has a link overlay) - standard filling see CSalamanderGeneralAbstract::IsFileLink(CFileData::Ext), when displayed it has priority over IsOffline, but IconOverlayIndex takes precedence
+    unsigned IsLink : 1;           // is it a link? (if 1, the icon has a link overlay) - for standard initialization, see CSalamanderGeneralAbstract::IsFileLink(CFileData::Ext); when displayed, it takes precedence over IsOffline, but IconOverlayIndex takes precedence
     unsigned IsOffline : 1;        // is it offline? (if 1, the icon has an offline overlay - black clock), when displayed IsLink and IconOverlayIndex take precedence
     unsigned IconOverlayIndex : 4; // index of the icon overlay (if the icon has no overlay, the value here is ICONOVERLAYINDEX_NOTUSED), when displayed it has priority over IsLink and IsOffline
 
     // flags for internal use in Salamander: they are reset when added to CSalamanderDirectoryAbstract
-    unsigned Association : 1;     // meaningful only for displaying 'simple icons' - icon of the associated file, otherwise 0
+    unsigned Association : 1;     // meaningful only for displaying 'simple icons' - associated file icon, otherwise 0
     unsigned Selected : 1;        // read-only selection flag (0 - item not selected, 1 - item selected)
     unsigned Shared : 1;          // is the directory shared? not used for files
     unsigned Archive : 1;         // is it an archive? used to display the archive icon in the panel
     unsigned SizeValid : 1;       // has the directory size been computed?
-    unsigned Dirty : 1;           // does this item need to be redrawn? (temporary validity only; between setting the bit and redrawing the panel the message queue must not be pumped, otherwise the icon (icon reader) might be redrawn and thus the bit reset! as a result the item is not redrawn)
-    unsigned CutToClip : 1;       // is it CUT to the clipboard? (if 1, the icon is 50% more transparent - ghosted)
-    unsigned IconOverlayDone : 1; // only for the icon-reader thread: are we obtaining or have we already obtained the icon overlay? (0 - no, 1 - yes)
+    unsigned Dirty : 1;           // does this item need to be redrawn? (temporary validity only; between setting the bit and redrawing the panel the message queue must not be pumped, otherwise the icon may be redrawn (icon reader) and the bit reset! as a result the item will not be redrawn)
+    unsigned CutToClip : 1;       // is it cut to the clipboard? (if 1, the icon is 50% more transparent - ghosted)
+    unsigned IconOverlayDone : 1; // used only by the icon-reader thread: are we retrieving or have we already retrieved the icon overlay? (0 - no, 1 - yes)
 };
 
 // constants determining the validity of the data stored directly in CFileData (size, extension, etc.)
@@ -247,7 +247,7 @@ struct CFileData // do not add a destructor here!
 #define VALID_DATA_PL_SIZE 0x0400     // meaningful only without using VALID_DATA_SIZE: the plugin stores the size in bytes for at least some files/directories (somewhere in PluginData); to obtain this size Salamander calls CPluginDataInterfaceAbstract::GetByteSize()
 #define VALID_DATA_PL_DATE 0x0800     // meaningful only without using VALID_DATA_DATE: the plugin stores the modification date for at least some files/directories (somewhere in PluginData); to obtain this value Salamander calls CPluginDataInterfaceAbstract::GetLastWriteDate()
 #define VALID_DATA_PL_TIME 0x1000     // meaningful only without using VALID_DATA_TIME: the plugin stores the modification time for at least some files/directories (somewhere in PluginData); to obtain this value Salamander calls CPluginDataInterfaceAbstract::GetLastWriteTime()
-#define VALID_DATA_ICONOVERLAY 0x2000 // IconOverlayIndex is the icon overlay index (no overlay = value ICONOVERLAYINDEX_NOTUSED) (without: all IconOverlayIndex are ICONOVERLAYINDEX_NOTUSED), icon assignment see CSalamanderGeneralAbstract::SetPluginIconOverlays
+#define VALID_DATA_ICONOVERLAY 0x2000 // IconOverlayIndex is the icon overlay index (no overlay = value ICONOVERLAYINDEX_NOTUSED) (without: all IconOverlayIndex are ICONOVERLAYINDEX_NOTUSED); see CSalamanderGeneralAbstract::SetPluginIconOverlays for icon overlay setup
 
 #define VALID_DATA_NONE 0 // helper constant - only Name and NameLen are valid
 
@@ -256,7 +256,7 @@ struct CFileData // do not add a destructor here!
 // plugins OR together only the constants corresponding to the data provided by the plugin (this prevents issues
 // when additional constants and corresponding data are introduced)
 #define VALID_DATA_ALL 0xFFFF
-#define VALID_DATA_ALL_FS_ARC (0xFFFF & ~VALID_DATA_ICONOVERLAY) // for file systems and archives: everything except icon overlays
+#define VALID_DATA_ALL_FS_ARC (0xFFFF & ~VALID_DATA_ICONOVERLAY) // for file systems and archives: everything except icon overlays (VALID_DATA_ICONOVERLAY)
 #endif                                                           // INSIDE_SALAMANDER
 
 // If hiding hidden and system files and directories is enabled, items with Hidden==1 and Attr containing
@@ -266,10 +266,11 @@ struct CFileData // do not add a destructor here!
 // file and directory names (including in paths) should be compared case-sensitively (without this flag the
 // comparison is case-insensitive—the standard behavior on Windows)
 #define SALDIRFLAG_CASESENSITIVE 0x0001
-// subdirectory names within each directory will not be checked for duplicates (this test is time-consuming
-// and is needed only in archives when items are added not just into the root—to allow, for example, adding
-// "file1" to "dir1" followed by adding "dir1"—"dir1" is added by the first operation (a missing path is
-// created automatically), the second operation only refreshes the data about "dir1" (it must not add it again))
+// subdirectory names within each directory will not be checked for duplicates (this
+// check is time-consuming and is needed only in archives when items are added not only
+// to the root, so that, for example, adding "file1" to "dir1" followed by adding
+// "dir1" works correctly - the first operation adds "dir1" (the missing path is added
+// automatically), while the second operation only refreshes the data for "dir1" (it must not add it again))
 #define SALDIRFLAG_IGNOREDUPDIRS 0x0002
 
 class CPluginDataInterfaceAbstract;
@@ -285,7 +286,7 @@ public:
 
     // defines the valid data mask that determines which CFileData members are valid
     // and which should only be "zeroed" (see the comment for VALID_DATA_XXX); the 'validData'
-    // mask contains ORed VALID_DATA_XXX values; the default value of the mask is the sum of all
+    // mask contains ORed VALID_DATA_XXX values; the default value of the mask is the OR of all
     // VALID_DATA_XXX except VALID_DATA_ICONOVERLAY; the valid data mask must be set
     // before calling AddFile/AddDir
     virtual void WINAPI SetValidData(DWORD validData) = 0;
@@ -296,28 +297,29 @@ public:
     // so checking directory duplicates is pointless)
     virtual void WINAPI SetFlags(DWORD flags) = 0;
 
-    // adds a file at the specified path (relative to this "Salamander directory"), returns success;
-    // the path string is used only inside the function, the contents of the file structure are used outside the function as well
-    // (do not release the memory allocated for the variables within the structure)
+    // adds a file at the specified path (relative to this "Salamander directory"); returns success
+    // the path string is used only inside the function; the contents of the file structure are used outside the function as well
+    // (do not free the memory allocated for the structure members)
     // if the operation fails, the contents of the file structure must be released;
     // the 'pluginData' parameter is non-NULL only for archives (file systems use only an empty 'path' (==NULL));
-    // if 'pluginData' is not NULL, 'pluginData' is used when creating new directories (if the
-    // 'path' does not exist), see CPluginDataInterfaceAbstract::GetFileDataForNewDir;
-    // uniqueness of the file name on the 'path' is not checked
+    // if 'pluginData' is not NULL, it is used when creating new directories (if the
+    // 'path' does not exist); see CPluginDataInterfaceAbstract::GetFileDataForNewDir;
+    // file name uniqueness at 'path' is not checked
     virtual BOOL WINAPI AddFile(const char* path, CFileData& file, CPluginDataInterfaceAbstract* pluginData) = 0;
 
-    // adds a directory at the specified path (relative to this "Salamander directory"), returns success;
-    // the path string is used only inside the function, the contents of the file structure are used outside the function as well
-    // (do not release the memory allocated for the variables within the structure)
-    // if the operation fails, the contents of the file structure must be released;
-    // the 'pluginData' parameter is non-NULL only for archives (file systems use only an empty 'path' (==NULL));
+    // adds a directory at the specified path (relative to this "Salamander directory"), returns success status
+    // the path string is used only inside the function, the contents of the dir structure are used outside the function as well
+    // (do not free the memory allocated for the variables inside the structure)
+    // if the operation fails, the contents of the dir structure must be freed;
+    // the 'pluginData' parameter is non-NULL only for archives (FS use only an empty 'path' (==NULL));
     // if 'pluginData' is not NULL, it is used when creating new directories (if 'path' does not exist),
     // see CPluginDataInterfaceAbstract::GetFileDataForNewDir;
-    // uniqueness of the directory name on the 'path' is checked; if an existing directory is added again,
-    // the original data is released (if 'pluginData' is not NULL, CPluginDataInterfaceAbstract::ReleasePluginData is called to release the data)
-    // and replaced with data from 'dir' (this is necessary to refresh data for directories that were created automatically when the 'path' did not exist);
-    // special case for file systems (or an object allocated via CSalamanderGeneralAbstract::AllocSalamanderDirectory
-    // with 'isForFS'==TRUE): if dir.Name is "..", the directory is added as an up-dir (there may be only one,
+    // the uniqueness of the directory name on the 'path' is checked; if an existing directory is added again,
+    // the original data is released (if 'pluginData' is not NULL, CPluginDataInterfaceAbstract::ReleasePluginData is also called
+    // to release the data) and the data from 'dir' is stored
+    // (this is necessary to refresh the data of directories that are created automatically when 'path' does not exist);
+    // special case for FS (or an object allocated via CSalamanderGeneralAbstract::AllocSalamanderDirectory
+    // with 'isForFS'==TRUE): if dir.Name is "..", the directory is added as an up-dir (there can be only one,
     // it is always displayed at the beginning of the listing and has a special icon)
     virtual BOOL WINAPI AddDir(const char* path, CFileData& dir, CPluginDataInterfaceAbstract* pluginData) = 0;
 
@@ -333,8 +335,8 @@ public:
     // returns the directory at index 'index'; the returned data may only be used for reading
     virtual CFileData const* WINAPI GetDir(int index) const = 0;
 
-    // returns the CSalamanderDirectory object for the directory at index 'index'; the returned object may only
-    // be used for reading (objects for empty directories are not allocated, a single global empty object is returned—
+    // returns the CSalamanderDirectoryAbstract object for the directory at index 'index'; the returned object may only
+    // be used for reading (objects for empty directories are not allocated; instead, a single global empty object is returned—
     // modifying this object would have a global effect)
     virtual CSalamanderDirectoryAbstract const* WINAPI GetSalDir(int index) const = 0;
 
@@ -447,10 +449,10 @@ typedef const char*(WINAPI* SalEnumSelection2)(HWND parent, int enumFiles, const
 // but through global variables (CSalamanderViewAbstract::GetTransferVariables).
 typedef void(WINAPI* FColumnGetText)();
 
-// Callback for obtaining indices of simple icons for file systems with custom icons (pitFromPlugin).
-// For optimization the function does not receive/return values via parameters,
+// Callback for obtaining simple icon indices for file systems with custom icons (pitFromPlugin).
+// For optimization reasons, the function does not receive/return values through parameters,
 // but through global variables (CSalamanderViewAbstract::GetTransferVariables).
-// From the global variables the callback uses only TransferFileData and TransferIsDir.
+// Of the global variables, the callback uses only TransferFileData and TransferIsDir.
 typedef int(WINAPI* FGetPluginIconIndex)();
 
 // A column can be created in two ways:
@@ -493,7 +495,7 @@ struct CColumn
 
     unsigned ID : 4; // column identifier
                      // For standard columns provided by Salamander
-                     // contains values different from COLUMN_ID_CUSTOM.
+                     // it contains values other than COLUMN_ID_CUSTOM.
                      // For columns added by the plugin it always
                      // contains the value COLUMN_ID_CUSTOM.
 
@@ -513,7 +515,7 @@ struct CColumn
     // because their values are not guaranteed when the plugin is called
     unsigned MinWidth : 16; // Minimum width to which the column may be shrunk.
                             // Calculated from the column title and whether it supports sorting
-                            // so that the column header is always readable
+                            // so that the column header is always visible
 };
 
 // Through this interface the plugin can change the panel view mode when the path changes.
@@ -555,27 +557,28 @@ public:
     // (there is no point in showing columns whose values are all zeroed).
     virtual void WINAPI SetViewMode(DWORD viewMode, DWORD validData) = 0;
 
-    // Retrieves from Salamander the locations of variables that replace the parameters of the
-    // CColumn::GetText callback. Salamander stores these as global variables. The plugin saves
-    // the pointers to its own global variables.
+    // Obtains from Salamander the locations of variables that replace the parameters of the
+    // CColumn::GetText callback. On the Salamander side, these are global variables. The plugin
+    // stores pointers to them in its own global variables.
     //
     // variables:
-    //   transferFileData        [IN]     data describing the item that should be rendered
-    //   transferIsDir           [IN]     equals 0 for a file (entry from the Files array),
-    //                                    equals 1 for a directory (entry from the Dirs array),
-    //                                    equals 2 for the up-directory symbol
-    //   transferBuffer          [OUT]    buffer to receive the data, at most TRANSFER_BUFFER_MAX characters
-    //                                    there is no need to terminate it with zero
-    //   transferLen             [OUT]    before returning from the callback this variable is set
-    //                                    to the number of characters written without the terminator
-    //                                    (there is no need to store the terminator in the buffer)
-    //   transferRowData         [IN/OUT] points to a DWORD that is zeroed for every row before drawing the columns;
-    //                                    can be used for optimizations
+    //   transferFileData        [IN]     data based on which the item should be rendered
+    //   transferIsDir           [IN]     is 0 if this is a file (stored in the Files array),
+    //                                    is 1 if this is a directory (stored in the Dirs array),
+    //                                    is 2 if this is the up-dir symbol
+    //   transferBuffer          [OUT]    the data are written here, at most TRANSFER_BUFFER_MAX characters
+    //                                    it does not need to be null-terminated
+    //   transferLen             [OUT]    before returning from the callback, this variable is set
+    //                                    to the number of characters written, without the terminator
+    //                                    (the terminator does not need to be written to the buffer)
+    //   transferRowData         [IN/OUT] points to a DWORD that is always zeroed for each row
+    //                                    before the columns are drawn; it can be used for optimizations
     //                                    Salamander reserves bits 0x00000001 to 0x00000008.
     //                                    The remaining bits are available to the plugin.
-    //   transferPluginDataIface [IN]     plugin-data interface of the panel where the item
-    //                                    is drawn (matches (*transferFileData)->PluginData)
-    //   transferActCustomData   [IN]     CustomData of the column whose text is being retrieved (the callback target)
+    //   transferPluginDataIface [IN]     plugin-data interface of the panel into which the item
+    //                                    is rendered (it belongs to (*transferFileData)->PluginData)
+    //   transferActCustomData   [IN]     CustomData of the column for which the text is obtained
+    //                                    (for which the callback is called)
     virtual void WINAPI GetTransferVariables(const CFileData**& transferFileData,
                                              int*& transferIsDir,
                                              char*& transferBuffer,
@@ -587,8 +590,8 @@ public:
     // for file systems with custom icons only (pitFromPlugin):
     // Sets the callback for obtaining simple icon indices (see
     // CPluginDataInterfaceAbstract::GetSimplePluginIcons). If the plugin does not set this callback,
-    // the icon at index 0 is always drawn.
-    // From the global variables the callback uses only TransferFileData and TransferIsDir.
+    // only the icon at index 0 is always rendered.
+    // Of the global variables, the callback uses only TransferFileData and TransferIsDir.
     virtual void WINAPI SetPluginSimpleIconCallback(FGetPluginIconIndex callback) = 0;
 
     // ------------- columns ---------------
@@ -597,28 +600,28 @@ public:
     virtual int WINAPI GetColumnsCount() = 0;
 
     // returns a pointer to a column (read-only)
-    // 'index' specifies which column is returned; returns NULL if the column does not exist
+    // 'index' specifies which column is returned; returns NULL if column 'index' does not exist
     virtual const CColumn* WINAPI GetColumn(int index) = 0;
 
-    // Inserts a column at position 'index'. Column Name is always at position 0,
-    // if the Ext column is shown it must be at position 1. Otherwise the column can be placed
+    // Inserts a column at position 'index'. The Name column is always at position 0;
+    // if the Ext column is displayed, it will be at position 1. Otherwise the column can be placed
     // anywhere. The 'column' structure is copied into Salamander's internal structures.
     // Returns TRUE if the column was inserted.
     virtual BOOL WINAPI InsertColumn(int index, const CColumn* column) = 0;
 
-    // Inserts a standard column with ID 'id' at position 'index'. Column Name is always
-    // at position 0; if the Ext column is inserted it must be at position 1.
+    // Inserts a standard column with ID 'id' at position 'index'. The Name column is always
+    // at position 0; if the Ext column is inserted, it must be at position 1.
     // Otherwise the column can be placed anywhere. 'id' is one of the COLUMN_ID_xxxx values,
     // except COLUMN_ID_CUSTOM and COLUMN_ID_NAME.
     virtual BOOL WINAPI InsertStandardColumn(int index, DWORD id) = 0;
 
-    // Sets the column title and description (must not be empty strings or NULL). Lengths
+    // Sets the column name and description (must not be empty strings or NULL). String lengths
     // are limited to COLUMN_NAME_MAX and COLUMN_DESCRIPTION_MAX. Returns success.
-    // WARNING: The title and description of the "Name" column may contain (always after the first
-    // null terminator) also the title and description of the "Ext" column—this happens if
-    // there is no standalone "Ext" column and VALID_DATA_EXTENSION is set
+    // WARNING: The name and description of the "Name" column may also contain (always after the first
+    // null terminator) the name and description of the "Ext" column; this happens if
+    // there is no separate "Ext" column and VALID_DATA_EXTENSION is set
     // in the panel data (see CSalamanderDirectoryAbstract::SetValidData()).
-    // In that case you must provide a double string (two null terminators)
+    // In this case, double strings (with two null terminators) must be set -
     // see CSalamanderGeneralAbstract::AddStrToStr().
     virtual BOOL WINAPI SetColumnName(int index, const char* name, const char* description) = 0;
 
@@ -662,53 +665,54 @@ public:
     // returns TRUE, and for all directories if CallReleaseForDirs returns TRUE
     virtual void WINAPI ReleasePluginData(CFileData& file, BOOL isDir) = 0;
 
-    // archive data only (file systems do not supply an up-dir symbol):
-    // adjusts the proposed content of the up-dir symbol (".." at the top of the panel); 'archivePath'
-    // is the path in the archive for which the symbol is intended; 'upDir' contains the proposed
+    // archive data only (for file systems, the up-dir symbol is not added):
+    // modifies the proposed contents of the up-dir symbol (".." at the top of the panel); 'archivePath'
+    // is the path in the archive for which the symbol is intended; on input, 'upDir' contains the proposed
     // symbol data: name ".." (do not change), archive date & time, the rest zeroed;
-    // 'upDir' returns the plugin's modifications, primarily it should update 'upDir.PluginData',
-    // which will be used for the up-dir symbol when retrieving data for added columns;
-    // ReleasePluginData will not be called for 'upDir'; any necessary cleanup can be performed
+    // on output, 'upDir' contains the plugin's changes; in particular, it should update 'upDir.PluginData',
+    // which will be used for the up-dir symbol when retrieving the contents of added columns;
+    // ReleasePluginData will not be called for 'upDir'; any necessary cleanup can always be performed
     // during the next GetFileDataForUpDir call or when the entire interface is released
-    // (in its destructor—called from CPluginInterfaceAbstract::ReleasePluginDataInterface)
+    // (in its destructor - called from
+    // CPluginInterfaceAbstract::ReleasePluginDataInterface)
     virtual void WINAPI GetFileDataForUpDir(const char* archivePath, CFileData& upDir) = 0;
 
-    // archive data only (file systems use only the root path in CSalamanderDirectoryAbstract):
-    // when adding a file/directory to CSalamanderDirectoryAbstract the specified path might not exist
-    // and therefore needs to be created; individual directories on that path are created automatically,
-    // and this method lets the plugin add its specific data (for its columns) to these directories.
-    // 'dirName' is the full path of the directory being added in the archive; 'dir' contains the proposed
-    // data: directory name (allocated on Salamander's heap), date & time copied from the added file/directory,
-    // the rest zeroed; 'dir' returns the plugin's modifications, primarily it should update
-    // 'dir.PluginData'; returns TRUE if the plugin's data were added successfully, otherwise FALSE;
-    // if TRUE is returned, 'dir' is released through the standard path (Salamander part +
-    // ReleasePluginData), either when the entire listing is released or even during its creation
-    // if the same directory is later added via CSalamanderDirectoryAbstract::AddDir
-    // (overwriting the automatic creation with a regular addition); if FALSE is returned, only
-    // Salamander's part of 'dir' is released
+    // for archive data only (FS uses only the root path in CSalamanderDirectoryAbstract):
+    // when adding a file/directory to CSalamanderDirectoryAbstract, the specified path may not exist
+    // and therefore needs to be created; the individual directories in that path are created automatically,
+    // and this method allows the plugin to attach its specific data (for its columns) to those newly created
+    // directories; 'dirName' is the full path of the directory being added in the archive; on input, 'dir'
+    // contains the proposed data: directory name (allocated on Salamander's heap), date&time taken from the
+    // added file/directory, the rest zeroed; on output, 'dir' contains the plugin's changes, and in particular
+    // it should modify 'dir.PluginData'; returns TRUE if adding the plugin data succeeded, otherwise FALSE;
+    // if it returns TRUE, 'dir' will be released in the standard way (the Salamander part +
+    // ReleasePluginData), either when the listing is fully released or already during its creation
+    // if the same directory is later added using CSalamanderDirectoryAbstract::AddDir
+    // (the automatic creation is overwritten by a later normal addition); if it returns FALSE, only
+    // the Salamander part of 'dir' will be released
     virtual BOOL WINAPI GetFileDataForNewDir(const char* dirName, CFileData& dir) = 0;
 
     // for file systems with custom icons only (pitFromPlugin):
-    // returns an image list with simple icons; while drawing items in the panel the icon index
-    // is retrieved through the callback into this image list; called after every new listing
-    // is obtained (after CPluginFSInterfaceAbstract::ListCurrentPath),
-    // so the image list may be rebuilt for each listing;
-    // 'iconSize' specifies the desired icon size and is one of the SALICONSIZE_xxx values
-    // the plugin is responsible for destroying the image list during the next GetSimplePluginIcons call
-    // or when the entire interface is released (in its destructor—called from
+    // returns an image list with simple icons; while drawing items in the panel, the icon index
+    // into this image list is obtained via a callback; it is always called after a new listing
+    // is obtained (after calling CPluginFSInterfaceAbstract::ListCurrentPath),
+    // so the image list can be rebuilt for each new listing;
+    // 'iconSize' specifies the requested icon size and is one of the SALICONSIZE_xxx values
+    // the plugin is responsible for destroying the image list on the next GetSimplePluginIcons call
+    // or when the entire interface is released (in its destructor - called from
     // CPluginInterfaceAbstract::ReleasePluginDataInterface)
-    // if the image list cannot be created, NULL is returned and the current plugin-icons type
+    // if the image list cannot be created, NULL is returned and the current plugin icon type
     // falls back to pitSimple
     virtual HIMAGELIST WINAPI GetSimplePluginIcons(int iconSize) = 0;
 
-    // for file systems with custom icons only (pitFromPlugin):
-    // returns TRUE if a simple icon should be used for the given file/directory ('isDir' FALSE/TRUE) 'file'
-    // returns FALSE if the icon should be obtained by calling GetPluginIcon from the icon-loading thread
-    // (loading the icon in the background);
-    // this method can also precompute the simple icon index
-    // (for icons loaded in the background simple icons are used until the icon is loaded)
-    // and store it into CFileData (typically CFileData::PluginData);
-    // limitation: only methods from CSalamanderGeneralAbstract that may be called from any thread
+    // only for file systems with their own icons (pitFromPlugin):
+    // returns TRUE if a simple icon should be used for the given 'file' file/directory ('isDir' FALSE/TRUE);
+    // returns FALSE if GetPluginIcon should be called from the icon-loading thread to obtain the icon
+    // (loading the icon "in the background");
+    // this method can also precompute the icon index for the simple icon
+    // (for icons loaded "in the background", simple icons are also used until the icon is loaded)
+    // and store it in CFileData (most likely in CFileData::PluginData);
+    // limitation: only methods from CSalamanderGeneralAbstract that can be called from any thread
     // (methods independent of the panel state) may be used
     virtual BOOL WINAPI HasSimplePluginIcon(CFileData& file, BOOL isDir) = 0;
 
@@ -767,29 +771,31 @@ public:
     virtual void WINAPI ColumnWidthWasChanged(BOOL leftPanel, const CColumn* column,
                                               int newWidth) = 0;
 
-    // Retrieves the Information Line content for 'file' ('isDir' TRUE for directories, FALSE for files)
-    // or for the current selection if 'file' is NULL. The counts of selected files and directories
-    // are provided in 'selectedFiles' and 'selectedDirs'; 'panel' identifies the panel (one of PANEL_XXX).
-    // The method is invoked even for an empty listing (file systems only—archives never encounter this);
-    // in that case 'file' is NULL and both 'selectedFiles' and 'selectedDirs' are zero. When 'displaySize'
-    // is TRUE the size of all selected directories is known (see CFileData::SizeValid; TRUE if nothing is
-    // selected). 'selectedSize' contains the sum of CFileData::Size values for the selection (zero if no
-    // items are selected). 'buffer' points to storage for the formatted text (1000 bytes). 'hotTexts' is an
-    // array of 100 DWORDs that receives hot-text positions: the low WORD stores the offset in 'buffer', the
-    // high WORD the hot-text length. 'hotTextsCount' provides the array capacity (100) and returns how many
-    // hot texts were written. Return TRUE after filling 'buffer', 'hotTexts', and 'hotTextsCount'; return
-    // FALSE to request the default Information Line formatting used for standard file-system paths.
+    // Retrieves the Information Line content for 'file' ('isDir' is TRUE for a directory, FALSE for a file)
+    // or for the selected files and directories ('file' is NULL and the counts of selected files/directories
+    // are in 'selectedFiles'/'selectedDirs') in the panel ('panel' is one of PANEL_XXX);
+    // it is called even for an empty listing (this applies only to FS; it cannot occur for archives, 'file' is NULL,
+    // and 'selectedFiles' and 'selectedDirs' are 0); if 'displaySize' is TRUE, the size of
+    // all selected directories is known (see CFileData::SizeValid; if nothing is selected, this is
+    // TRUE); 'selectedSize' contains the sum of CFileData::Size values of the selected files and directories
+    // (if nothing is selected, it is zero); 'buffer' is the buffer for the returned text (size
+    // 1000 bytes); 'hotTexts' is an array (size 100 DWORDs) in which information about the position
+    // of hot texts is returned; the low WORD always contains the hot-text position in 'buffer', the high WORD contains
+    // the hot-text length; 'hotTextsCount' contains the size of the 'hotTexts' array (100) and returns the number
+    // of hot texts written to the 'hotTexts' array; returns TRUE if 'buffer' + 'hotTexts' +
+    // 'hotTextsCount' are set, returns FALSE if the Information Line should be filled in the standard
+    // way (as on disk)
     virtual BOOL WINAPI GetInfoLineContent(int panel, const CFileData* file, BOOL isDir, int selectedFiles,
                                            int selectedDirs, BOOL displaySize, const CQuadWord& selectedSize,
                                            char* buffer, DWORD* hotTexts, int& hotTextsCount) = 0;
 
     // archives only: the user copied files/directories from the archive to the clipboard and is now closing
-    // the archive in the panel; if the method returns TRUE, this object remains open (optimization
-    // for a potential Paste from the clipboard—the archive is already listed); if it returns FALSE,
-    // the object is released (a subsequent Paste from the clipboard will relist the archive before
-    // extracting the selected files/directories); NOTE: if the archive file itself remains open for the lifetime
-    // of the object, the method should return FALSE, otherwise the file will stay open the entire time
-    // otherwise the archive file would remain open for as long as the data stay on the clipboard (it could not be deleted, etc.)
+    // the archive in the panel; if the method returns TRUE, this object remains open (optimizing
+    // a possible Paste from the clipboard - the archive is already listed); if the method returns FALSE,
+    // this object is released (a subsequent Paste from the clipboard will list the archive and only then
+    // extract the selected files/directories); NOTE: if the archive file remains open for the lifetime
+    // of the object, the method should return FALSE, otherwise the archive file will remain open for the entire
+    // time the data stay on the clipboard (it will not be possible to delete it, etc.)
     virtual BOOL WINAPI CanBeCopiedToClipboard() = 0;
 
     // only when VALID_DATA_PL_SIZE was specified via CSalamanderDirectoryAbstract::SetValidData():
@@ -798,14 +804,14 @@ public:
     virtual BOOL WINAPI GetByteSize(const CFileData* file, BOOL isDir, CQuadWord* size) = 0;
 
     // only when VALID_DATA_PL_DATE was specified via CSalamanderDirectoryAbstract::SetValidData():
-    // returns TRUE if the date of the file/directory ('isDir' TRUE/FALSE) 'file' is known,
-    // otherwise returns FALSE; the date is returned in the "date" part of the 'date' structure
+    // returns TRUE if the date of 'file' is known (file/directory according to 'isDir' TRUE/FALSE),
+    // otherwise returns FALSE; returns the date in the "date" part of the 'date' structure
     // (the "time" part should remain untouched)
     virtual BOOL WINAPI GetLastWriteDate(const CFileData* file, BOOL isDir, SYSTEMTIME* date) = 0;
 
     // only when VALID_DATA_PL_TIME was specified via CSalamanderDirectoryAbstract::SetValidData():
-    // returns TRUE if the time of the file/directory ('isDir' TRUE/FALSE) 'file' is known,
-    // otherwise returns FALSE; the time is returned in the "time" part of the 'time' structure
+    // returns TRUE if the time of 'file' is known (file/directory according to 'isDir' TRUE/FALSE),
+    // otherwise returns FALSE; returns the time in the "time" part of the 'time' structure
     // (the "date" part should remain untouched)
     virtual BOOL WINAPI GetLastWriteTime(const CFileData* file, BOOL isDir, SYSTEMTIME* time) = 0;
 };
@@ -823,28 +829,28 @@ class CSalamanderForOperationsAbstract
 public:
     // PROGRESS DIALOG: the dialog contains one or two ('twoProgressBars' FALSE/TRUE) progress bars
     // opens the progress dialog with the title 'title'; 'parent' is the parent window of the dialog (if
-    // NULL, the main window is used); if it contains only one progress bar it can be labeled
+    // NULL, the main window is used); if it contains only one progress bar, it can be labeled
     // either "File" ('fileProgress' is TRUE) or "Total" ('fileProgress' is FALSE)
     //
-    // the dialog does not run in its own thread; for it to function (Cancel button + internal timer)
-    // the message queue must occasionally be pumped; this is done by the ProgressDialogAddText,
+    // the dialog does not run in its own thread; for it to function (Cancel button + internal timer),
+    // the message queue must occasionally be pumped; this is handled by the ProgressDialogAddText,
     // ProgressAddSize, and ProgressSetSize methods
     //
-    // because real-time text updates and progress bar changes slow things down significantly,
+    // because real-time display of text and progress bar changes slows things down significantly,
     // the methods ProgressDialogAddText, ProgressAddSize, and ProgressSetSize have the
     // 'delayedPaint' parameter; it should be TRUE for all rapidly changing texts and values;
-    // the methods then cache the texts and display them once the dialog's internal timer fires;
+    // the methods then store the texts and display them only after the dialog's internal timer fires;
     // set 'delayedPaint' to FALSE for initial/final texts such as "preparing data..."
-    // or "canceling operation..." after which the dialog is not given a chance to process messages
-    // messages (timer); if such an operation is likely to take a long time, the dialog should be
-    // "refreshed" during that time by calling ProgressAddSize(CQuadWord(0, 0), TRUE)
-    // and the return value can be used to abort the action early if needed
+    // or "canceling operation...", after whose display the dialog is not given a chance to dispatch
+    // messages (timer); if such an operation is likely to take a long time, we should
+    // "refresh" the dialog during that time by calling ProgressAddSize(CQuadWord(0, 0), TRUE)
+    // and, depending on its return value, possibly terminate the action early
     virtual void WINAPI OpenProgressDialog(const char* title, BOOL twoProgressBars,
                                            HWND parent, BOOL fileProgress) = 0;
-    // prints the text 'txt' (multiple lines allowed—the text is split into lines) into the progress dialog
+    // displays the text 'txt' in the progress dialog (including multiple lines - the text is split into lines)
     virtual void WINAPI ProgressDialogAddText(const char* txt, BOOL delayedPaint) = 0;
-    // if 'totalSize1' is not CQuadWord(-1, -1), sets 'totalSize1' as 100 percent of the first progress bar
-    // if 'totalSize2' is not CQuadWord(-1, -1), sets 'totalSize2' as 100 percent of the second progress bar
+    // if 'totalSize1' is not CQuadWord(-1, -1), sets 'totalSize1' to 100 percent of the first progress bar
+    // if 'totalSize2' is not CQuadWord(-1, -1), sets 'totalSize2' to 100 percent of the second progress bar
     // (for a progress dialog with one progress bar 'totalSize2' must be CQuadWord(-1, -1))
     virtual void WINAPI ProgressSetTotalSize(const CQuadWord& totalSize1, const CQuadWord& totalSize2) = 0;
     // if 'size1' is not CQuadWord(-1, -1), sets the value 'size1' (size1/total1*100 percent) on the first progress bar
@@ -852,8 +858,8 @@ public:
     // (for a progress dialog with one progress bar 'size2' must be CQuadWord(-1, -1)); returns whether the action should continue
     // (FALSE = stop)
     virtual BOOL WINAPI ProgressSetSize(const CQuadWord& size1, const CQuadWord& size2, BOOL delayedPaint) = 0;
-    // adds the amount 'size' (size/total*100 percent progress) to the progress bar(s),
-    // returns whether the action should continue (FALSE = stop)
+    // adds the size 'size' (size/total*100 percent of progress), possibly to both progress bars,
+    // returns whether the action should continue (FALSE = end)
     virtual BOOL WINAPI ProgressAddSize(int size, BOOL delayedPaint) = 0;
     // enables/disables the Cancel button
     virtual void WINAPI ProgressEnableCancel(BOOL enable) = 0;
