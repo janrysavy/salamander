@@ -152,7 +152,7 @@ BOOL CStatusWindow::SetText(const char* txt, int pathLen)
         SubTexts = NULL;
     }
 
-    // Build the array used to track the cursor
+    // Let the array for cursor tracking be built
     BuildHotTrackItems();
 
     if (MouseCaptured)
@@ -174,7 +174,7 @@ void CStatusWindow::BuildHotTrackItems()
     LastHotItem = NULL;
     if (Border == blTop)
     {
-        // Fill HotTrackItems
+        // Populate HotTrackItems
         CHotTrackItem item;
         HotTrackItems.DestroyMembers();
         if (Text != NULL)
@@ -243,7 +243,7 @@ void CStatusWindow::BuildHotTrackItems()
                             chars = pathLen;
                         }
                         if (chars == lastChars)
-                            chars++; // That would be an endless loop, so handle it just in case...
+                            chars++; // Otherwise chars would not change and the loop would be endless, so bump chars just in case...
                         if (chars > pathLen)
                             chars = pathLen;
 
@@ -364,7 +364,7 @@ void CStatusWindow::SetThrobber(BOOL show, int delay, BOOL calledFromDestroyWind
             if (Throbber /* just correcting an inconsistent state */ ||
                 delay <= 0 || !SetTimer(HWindow, IDT_DELAYEDTHROBBER, delay, NULL))
             {
-                DelayedThrobber = FALSE; // It should appear immediately or timer setup failed, so show it right away
+                DelayedThrobber = FALSE; // It should appear immediately or timer setup failed, so set DelayedThrobber to FALSE and show it right away
                 DelayedThrobberShowTime = 0;
             }
             else
@@ -388,7 +388,7 @@ void CStatusWindow::SetThrobber(BOOL show, int delay, BOOL calledFromDestroyWind
     }
     else
     {
-        if (DelayedThrobber) // Waiting to be shown, but the throbber must hide, end the wait
+        if (DelayedThrobber) // Waiting to be shown, but the throbber should be hidden, cancel the wait
         {
             if (HWindow == NULL)
                 TRACE_E("Unexpected situation 2 in CStatusWindow::SetThrobber(): DelayedThrobber is TRUE but HWindow is NULL");
@@ -623,7 +623,7 @@ BOOL CStatusWindow::FindHotTrackItem(int xPos, int& index)
     {
         CHotTrackItem* item = &HotTrackItems[i];
 
-        // If there is an ellipsis after the root directory, shift xPos by it
+        // If there is an ellipsis after the root directory, shift xPos to account for EllipsedWidth
         if (i == 1 && EllipsedWidth != -1)
             xPos += EllipsedWidth - TextEllipsisWidthEnv;
 
@@ -779,7 +779,7 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
     EllipsedWidth = -1;
     if (Text != NULL)
     {
-        BOOL truncateEnd = TRUE; // We shorten the end (TRUE) or after the root directory (FALSE)
+        BOOL truncateEnd = TRUE; // Truncate at the end (TRUE) or after the root directory (FALSE)
         int visibleChars = 0;
 
         SetBkMode(dc, TRANSPARENT);
@@ -883,11 +883,11 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
             int textWidth = tmpR.right - tmpR.left;
             if (textWidth < AlpDX[TextLen - 1])
             {
-                // The text does not fit into the requested width -> we must truncate it
+                // The full text does not fit within textWidth -> we must reduce the visible character count
                 if (isDirectoryLine && HotTrackItems.Count > 1 &&
                     HotTrackItems[0].Pixels + TextEllipsisWidthEnv <= textWidth)
                 {
-                    // For the top directory line shorten after the root directory
+                    // For the top directory line, shorten after the path's root directory
                     EllipsedChars = 0;
                     EllipsedWidth = 0;
 
@@ -903,7 +903,7 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
                         EllipsedWidth += charWidth;
                     }
                     visibleChars = TextLen - iter;
-                    truncateEnd = FALSE; // We trim from the inside
+                    truncateEnd = FALSE; // FALSE means we trim from the inside
                 }
                 else
                 {
@@ -962,8 +962,8 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
         // Render the main text if we have any room for it
         if (TextRect.right > TextRect.left)
         {
-            // Determine in advance which part of the text must be highlighted, because of ClearType
-            // We must exclude it from the normal text drawing
+            // Determine in advance which part of the text should be highlighted; because of ClearType
+            // we must exclude it from the normal text drawing
             CHotTrackItem* hotItem = NULL;
             BOOL showFlashText = (highlightText && highlightHotTrackOnly && LastHotItem != NULL);
             if (HotItem != NULL)
@@ -999,7 +999,7 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
             if (firstClipChar != 0)
             {
                 if (truncateEnd)
-                { // Without truncation or the trimmed end
+                { // Without truncation, or with the end trimmed
                     ExtTextOut(dc, TextRect.left, textY, 0, NULL, Text, min(visibleChars, firstClipChar), NULL);
                     if (visibleChars < min(TextLen, firstClipChar)) // If the end was trimmed -> append "..."
                     {
@@ -1008,8 +1008,8 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
                     }
                 }
                 else
-                { // Section cut off after the root directory
-                    // root cast
+                { // Part truncated after the root directory
+                    // root part
                     int rootChars = HotTrackItems[0].Chars;
                     ExtTextOut(dc, TextRect.left, textY, 0, NULL, Text, rootChars, NULL);
                     // "..."
@@ -1020,7 +1020,7 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
                 }
             }
 
-            // Draw the second part of the text (past hotItem) -- truncating at the end
+            // Draw the second part of the text (after hotItem) -- truncating at the end
             if (hotItem != NULL && truncateEnd && lastClipChar <= visibleChars)
             {
                 // Without truncation or the trimmed end
@@ -1035,7 +1035,7 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
             // Draw the second part of the text (past hotItem) -- truncating in the middle
             // Only directory line paths are shortened this way (the condition !truncateEnd applies)
             if (hotItem != NULL && !truncateEnd && lastClipChar <= TextLen)
-            { // Section cut off after the root directory
+            { // Truncated part after the root directory
                 int rootChars = HotTrackItems[0].Chars;
                 int firstChar = hotItem->Chars;
 
@@ -1072,7 +1072,7 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
                     hOldFont = (HFONT)SelectObject(dc, EnvFontUL);
 
                 if (truncateEnd)
-                { // Without truncation or the trimmed end
+                { // No truncation or clipping at the end
                     int showChars = hotItem->Chars;
                     if (hotItem->Offset + showChars > visibleChars)
                     {
@@ -1087,7 +1087,7 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
                     }
                 }
                 else
-                { // Section cut off after the root directory
+                { // Part cut off after the root directory
                     int showChars = hotItem->Chars;
 
                     int rootChars = HotTrackItems[0].Chars;
@@ -1163,7 +1163,7 @@ void CStatusWindow::Paint(HDC hdc, BOOL highlightText, BOOL highlightHotTrackOnl
                                         HotHistory ? SVGSTATE_DISABLED : SVGSTATE_ENABLED);
         }
 
-        // Filter symbol
+        // Filter icon
         if (HiddenRect.left < HiddenRect.right)
             PaintSymbol(dc, hMemDC, HFilter, 0, FILTER_WIDTH, FILTER_HEIGHT, &HiddenRect, HotHidden, activeCaption);
 
@@ -1384,7 +1384,7 @@ public:
             return S_OK;
         }
 
-        // Check whether text is on the clipboard
+        // Use formatEtc to check whether the clipboard contains text
         FORMATETC formatEtc;
         ZeroMemory(&formatEtc, sizeof(formatEtc));
         formatEtc.cfFormat = CF_UNICODETEXT;
@@ -1428,7 +1428,7 @@ public:
                 *pdwEffect = DROPEFFECT_NONE;
                 return S_OK;
             }
-            // Check whether text is on the clipboard
+            // Use formatEtc to check whether the data object contains text
             FORMATETC formatEtc;
             ZeroMemory(&formatEtc, sizeof(formatEtc));
             formatEtc.cfFormat = UseUnicode ? CF_UNICODETEXT : CF_TEXT;
@@ -1497,9 +1497,9 @@ public:
                     if (!IsPluginFSPath(Buffer))
                     {
                         int l = (int)strlen(Buffer);
-                        if ((l != 2 || Buffer[0] != '\\' || Buffer[1] != '\\') && // Not the path "\\\\" (Nethood root)
+                        if ((l != 2 || Buffer[0] != '\\' || Buffer[1] != '\\') && // Not the path "\\" (Nethood root)
                             l > 0 && Buffer[l - 1] == '\\')
-                            Buffer[--l] = 0;             // A trailing \\ is not welcome
+                            Buffer[--l] = 0;             // A trailing \\ is not allowed
                         if (l == 2 && Buffer[0] != '\\') // A non-UNC root path must end with '\\'
                         {
                             Buffer[l++] = '\\';
@@ -1532,7 +1532,7 @@ public:
                 {
                     int l = (int)strlen(Buffer);
                     if (l > 0 && Buffer[l - 1] == '\\')
-                        Buffer[--l] = 0;             // A trailing '\\' is not welcome
+                        Buffer[--l] = 0;             // A trailing '\\' is not allowed
                     if (l == 2 && Buffer[0] != '\\') // A non-UNC root path must end with '\\'
                     {
                         Buffer[l++] = '\\';
@@ -1612,7 +1612,7 @@ CStatusWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             int ti = DelayedThrobberShowTime == 0 /* invalid value */ ? 0 : DelayedThrobberShowTime - GetTickCount();
             if (ti < 0)
                 ti = 0;
-            DelayedThrobberShowTime = 0; // We no longer need this value; SetThrobber must set it again if necessary, assign an invalid value
+            DelayedThrobberShowTime = 0; // We no longer need this value; if necessary, SetThrobber will set it again, so reset it to an invalid value
             SetThrobber(TRUE, ti);       // We should also turn on the throbber
         }
 
@@ -1784,7 +1784,7 @@ CStatusWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             toolTipID = 0;
         SetCurrentToolTip(HWindow, toolTipID);
 
-        // Handle truncated text and the start of drag & drop
+        // Handle text truncation and the start of drag & drop
         if (MouseCaptured && (LButtonDown || RButtonDown) && HotTrackItems.Count > 0)
         {
             int x = abs(LButtonDownPoint.x - (short)LOWORD(lParam));
@@ -1866,7 +1866,7 @@ CStatusWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
         BOOL repaint = FALSE;
 
-        // Handle ending the capture mode
+        // Handle exiting capture mode
         if (MouseCaptured)
         {
             POINT p;
@@ -2073,7 +2073,7 @@ CStatusWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                         CHotTrackItem* lastItem = NULL;
                         if (HotTrackItems.Count > 0)
                             lastItem = &HotTrackItems[HotTrackItems.Count - 1];
-                        //if (HotItem->Chars != (int)TextLen) // This condition failed when a filter was attached
+                        //if (HotItem->Chars != (int)TextLen) // This condition failed when a filter was active
                         if (HotItem != lastItem)
                         {
                             // Path shortening
@@ -2143,7 +2143,7 @@ CStatusWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         {
             Width = r.right;
             Height = r.bottom;
-            ItemBitmap.Enlarge(Width, Height); // Bitmap allocation in ItemBitmap.HMemDC
+            ItemBitmap.Enlarge(Width, Height); // Allocate the bitmap in ItemBitmap.HMemDC
         }
         HDC dc = (HDC)wParam;
         if (Border != blNone)
@@ -2232,9 +2232,9 @@ CStatusWindow::CreateDragImage(const char* text, int& dxHotspot, int& dyHotspot,
     imgWidth = sz.cx;
     imgHeight = sz.cy;
     HIMAGELIST himl = ImageList_Create(sz.cx, sz.cy, ILC_COLORDDB | ILC_MASK, 1, 0);
-    SelectObject(ItemBitmap.HMemDC, ItemBitmap.HOldBmp); // Temporarily release the bitmap from HMemDC
+    SelectObject(ItemBitmap.HMemDC, ItemBitmap.HOldBmp); // Temporarily deselect the bitmap from HMemDC
     ImageList_AddMasked(himl, ItemBitmap.HBmp, GetCOLORREF(CurrentColors[ITEM_BK_NORMAL]));
-    SelectObject(ItemBitmap.HMemDC, ItemBitmap.HBmp); // Select it again
+    SelectObject(ItemBitmap.HMemDC, ItemBitmap.HBmp); // Select the bitmap again
     return himl;
 }
 
