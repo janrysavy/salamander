@@ -21,7 +21,7 @@ extern "C"
 {
 #endif // __cplusplus
 
-// Defines for Win64
+// Definitions for Win64
 #ifndef _WIN64
 #define DWORD_PTR DWORD
 #endif
@@ -37,7 +37,7 @@ extern "C"
 #define HH_GET_WIN_TYPE 0x0005
 #define HH_GET_WIN_HANDLE 0x0006
 #define HH_ENUM_INFO_TYPE 0x0007 // Get Info type name, call repeatedly to enumerate, -1 at end
-#define HH_SET_INFO_TYPE 0x0008  // Add Info type to filter.
+#define HH_SET_INFO_TYPE 0x0008  // Add info type to filter.
 #define HH_SYNC 0x0009
 #define HH_RESERVED1 0x000A
 #define HH_RESERVED2 0x000B
@@ -68,7 +68,7 @@ extern "C"
 #define HHWIN_PROP_TRI_PANE (1 << 5)         // use a tri-pane window
 #define HHWIN_PROP_NOTB_TEXT (1 << 6)        // no text on toolbar buttons
 #define HHWIN_PROP_POST_QUIT (1 << 7)        // post WM_QUIT message when window closes
-#define HHWIN_PROP_AUTO_SYNC (1 << 8)        // automatically ssync contents and index
+#define HHWIN_PROP_AUTO_SYNC (1 << 8)        // automatically sync contents and index
 #define HHWIN_PROP_TRACKING (1 << 9)         // send tracking notification messages
 #define HHWIN_PROP_TAB_SEARCH (1 << 10)      // include search tab in navigation pane
 #define HHWIN_PROP_TAB_HISTORY (1 << 11)     // include history tab in navigation pane
@@ -88,21 +88,21 @@ extern "C"
 #define HHWIN_PROP_TAB_CUSTOM7 (1 << 25)     // Use custom tab #7
 #define HHWIN_PROP_TAB_CUSTOM8 (1 << 26)     // Use custom tab #8
 #define HHWIN_PROP_TAB_CUSTOM9 (1 << 27)     // Use custom tab #9
-#define HHWIN_TB_MARGIN (1 << 28)            // the window type has a margin
+#define HHWIN_TB_MARGIN (1 << 28)            // the window type has margins
 
-#define HHWIN_PARAM_PROPERTIES (1 << 1)     // valid fsWinProperties
+#define HHWIN_PARAM_PROPERTIES (1 << 1)     // fsWinProperties is valid
 #define HHWIN_PARAM_STYLES (1 << 2)         // valid dwStyles
 #define HHWIN_PARAM_EXSTYLES (1 << 3)       // valid dwExStyles
 #define HHWIN_PARAM_RECT (1 << 4)           // valid rcWindowPos
 #define HHWIN_PARAM_NAV_WIDTH (1 << 5)      // valid iNavWidth
 #define HHWIN_PARAM_SHOWSTATE (1 << 6)      // valid nShowState
 #define HHWIN_PARAM_INFOTYPES (1 << 7)      // valid apInfoTypes
-#define HHWIN_PARAM_TB_FLAGS (1 << 8)       // valid fsToolBarFlags
-#define HHWIN_PARAM_EXPANSION (1 << 9)      // valid fNotExpanded
-#define HHWIN_PARAM_TABPOS (1 << 10)        // valid tabpos
-#define HHWIN_PARAM_TABORDER (1 << 11)      // valid taborder
-#define HHWIN_PARAM_HISTORY_COUNT (1 << 12) // valid cHistory
-#define HHWIN_PARAM_CUR_TAB (1 << 13)       // valid curNavType
+#define HHWIN_PARAM_TB_FLAGS (1 << 8)       // fsToolBarFlags is valid
+#define HHWIN_PARAM_EXPANSION (1 << 9)      // fNotExpanded is valid
+#define HHWIN_PARAM_TABPOS (1 << 10)        // valid tab position
+#define HHWIN_PARAM_TABORDER (1 << 11)      // valid tab order
+#define HHWIN_PARAM_HISTORY_COUNT (1 << 12) // cHistory is valid
+#define HHWIN_PARAM_CUR_TAB (1 << 13)       // curNavType is valid
 
 #define HHWIN_BUTTON_EXPAND (1 << 1)     // Expand/contract button
 #define HHWIN_BUTTON_BACK (1 << 2)       // Back button
@@ -190,12 +190,12 @@ extern "C"
 
     typedef struct tagHH_AKLINK
     {
-        int cbStruct;        // sizeof this structure
+        int cbStruct;        // size of this structure
         BOOL fReserved;      // must be FALSE (really!)
-        LPCTSTR pszKeywords; // semi-colon separated keywords
+        LPCTSTR pszKeywords; // semicolon-separated keywords
         LPCTSTR pszUrl;      // URL to jump to if no keywords found (may be NULL)
         LPCTSTR pszMsgText;  // Message text to display in MessageBox if pszUrl is NULL and no keyword match
-        LPCTSTR pszMsgTitle; // Message text to display in MessageBox if pszUrl is NULL and no keyword match
+        LPCTSTR pszMsgTitle; // Message title to display in MessageBox if pszUrl is NULL and no keyword match
         LPCTSTR pszWindow;   // Window to display URL in
         BOOL fIndexOnFail;   // Displays index if keyword lookup fails.
     } HH_AKLINK;
@@ -221,17 +221,17 @@ extern "C"
     typedef struct tagHH_ENUM_IT
     {
         int cbStruct;            // size of this structure
-        int iType;               // the type of the information type ie. Inclusive, Exclusive, or Hidden
-        LPCSTR pszCatName;       // Set to the name of the Category to enumerate the info types in a category; else NULL
-        LPCSTR pszITName;        // volitile pointer to the name of the infotype. Allocated by call. Caller responsible for freeing
-        LPCSTR pszITDescription; // volitile pointer to the description of the infotype.
+        int iType;               // the information type kind, i.e. Inclusive, Exclusive, or Hidden
+        LPCSTR pszCatName;       // Set to the name of the category to enumerate the info types in that category; otherwise NULL
+        LPCSTR pszITName;        // volatile pointer to the name of the information type. Allocated by the call. Caller is responsible for freeing it
+        LPCSTR pszITDescription; // volatile pointer to the description of the info type.
     } HH_ENUM_IT, *PHH_ENUM_IT;
 
     typedef struct tagHH_ENUM_CAT
     {
         int cbStruct;             // size of this structure
-        LPCSTR pszCatName;        // volitile pointer to the category name
-        LPCSTR pszCatDescription; // volitile pointer to the category description
+        LPCSTR pszCatName;        // volatile pointer to the category name
+        LPCSTR pszCatDescription; // pointer to the category description
     } HH_ENUM_CAT, *PHH_ENUM_CAT;
 
     typedef struct tagHH_SET_INFOTYPE
@@ -274,7 +274,7 @@ extern "C"
 
     typedef struct tagHH_FTS_QUERY
     {
-        int cbStruct;           // Sizeof structure in bytes.
+        int cbStruct;           // Size of this structure in bytes.
         BOOL fUniCodeStrings;   // TRUE if all strings are unicode.
         LPCTSTR pszSearchQuery; // String containing the search query.
         LONG iProximity;        // Word proximity.
@@ -290,7 +290,7 @@ extern "C"
     {
         int cbStruct;          // IN: size of this structure including all Information Types
         BOOL fUniCodeStrings;  // IN/OUT: TRUE if all strings are in UNICODE
-        LPCTSTR pszType;       // IN/OUT: Name of a type of window
+        LPCTSTR pszType;       // IN/OUT: Name of the window type
         DWORD fsValidMembers;  // IN: Bit flag of valid members (HHWIN_PARAM_)
         DWORD fsWinProperties; // IN/OUT: Properties/attributes of the window (HHWIN_)
 
@@ -301,23 +301,23 @@ extern "C"
         int nShowState;     // IN: show state (e.g., SW_SHOW)
 
         HWND hwndHelp;   // OUT: window handle
-        HWND hwndCaller; // OUT: who called this window
+        HWND hwndCaller; // OUT: caller of this window
 
         HH_INFOTYPE* paInfoTypes; // IN: Pointer to an array of Information Types
 
         // The following members are only valid if HHWIN_PROP_TRI_PANE is set
 
-        HWND hwndToolBar;    // OUT: toolbar window in tri-pane window
+        HWND hwndToolBar;    // OUT: toolbar window in a tri-pane window
         HWND hwndNavigation; // OUT: navigation window in tri-pane window
         HWND hwndHTML;       // OUT: window displaying HTML in tri-pane window
-        int iNavWidth;       // IN/OUT: width of navigation window
+        int iNavWidth;       // IN/OUT: width of the navigation window
         RECT rcHTML;         // OUT: HTML window coordinates
 
         LPCTSTR pszToc;                 // IN: Location of the table of contents file
         LPCTSTR pszIndex;               // IN: Location of the index file
         LPCTSTR pszFile;                // IN: Default location of the html file
         LPCTSTR pszHome;                // IN/OUT: html file to display when Home button is clicked
-        DWORD fsToolBarFlags;           // IN: flags controling the appearance of the toolbar
+        DWORD fsToolBarFlags;           // IN: flags controlling the appearance of the toolbar
         BOOL fNotExpanded;              // IN: TRUE/FALSE to contract or expand, OUT: current state
         int curNavType;                 // IN/OUT: UI to display in the navigational pane
         int tabpos;                     // IN/OUT: HHWIN_NAVTAB_TOP, HHWIN_NAVTAB_LEFT, or HHWIN_NAVTAB_BOTTOM
@@ -328,7 +328,7 @@ extern "C"
         LPCTSTR pszJump2;               // Text for HHWIN_BUTTON_JUMP2
         LPCTSTR pszUrlJump1;            // URL for HHWIN_BUTTON_JUMP1
         LPCTSTR pszUrlJump2;            // URL for HHWIN_BUTTON_JUMP2
-        RECT rcMinSize;                 // Minimum size for window (ignored in version 1)
+        RECT rcMinSize;                 // Minimum window size (ignored in version 1)
         int cbInfoTypes;                // size of paInfoTypes;
         LPCTSTR pszCustomTabs;          // multiple zero-terminated strings
     } HH_WINTYPE, *PHH_WINTYPE;
@@ -407,7 +407,7 @@ extern "C"
         HH_GPROPID_TOOLBAR_MARGIN = 2,  // long: Provides a left/right margin around the toolbar.
         HH_GPROPID_UI_LANGUAGE = 3,     // long: LangId of the UI.
         HH_GPROPID_CURRENT_SUBSET = 4,  // BSTR: Current subset.
-        HH_GPROPID_CONTENT_LANGUAGE = 5 // long: LandId for desired content.
+        HH_GPROPID_CONTENT_LANGUAGE = 5 // long: LangId for desired content.
     } HH_GPROPID;
 
 ///////////////////////////////////////////////////////////////////////////////
