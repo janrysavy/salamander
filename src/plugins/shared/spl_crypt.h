@@ -48,7 +48,7 @@
 #define SAL_AES_SALT_LENGTH(mode) (4 * (mode & 3) + 4)
 #define SAL_AES_MAC_LENGTH(mode) (10)
 
-/* Return codes of AESInit */
+/* Return codes for AESInit */
 #define SAL_AES_ERR_GOOD_RETURN 0
 #define SAL_AES_ERR_PASSWORD_TOO_LONG -100
 #define SAL_AES_ERR_BAD_MODE -101
@@ -57,13 +57,13 @@
 #define SAL_AES_ENCR_CTX_SIZE 264
 #define SAL_AES_AUTH_CTX_SIZE 160
 
-/* Internal control structure associated with each AES de/compression task.
+/* Internal control structure associated with each AES encryption/decryption task.
    Not to be modified by the plugin.
  */
 struct CSalAES
 {
     BYTE nonce[SAL_AES_BLOCK_SIZE];       /* the CTR nonce          */
-    BYTE encr_bfr[SAL_AES_BLOCK_SIZE];    /* encrypt buffer         */
+    BYTE encr_bfr[SAL_AES_BLOCK_SIZE];    /* encryption byte buffer   */
     BYTE encr_ctx[SAL_AES_ENCR_CTX_SIZE]; /* encryption context     */
     BYTE auth_ctx[SAL_AES_AUTH_CTX_SIZE]; /* authentication context */
     DWORD encr_pos;                       /* block position (enc)   */
@@ -100,15 +100,15 @@ public:
                                LPCSTR pwd,          /* User specified password (input)    */
                                size_t pwd_len,      /* Password length (input)            */
                                LPBYTE salt,         /* Salt (input)                       */
-                               LPWORD pwd_ver) = 0; /* 2 byte password verifier (output)  */
+                               LPWORD pwd_ver) = 0; /* 2-byte password verifier (output)  */
 
-    /* Encryption and decryption is performed in place */
+    /* Encryption and decryption are performed in place */
     virtual void WINAPI AESEncrypt(CSalAES* aes, LPVOID data, size_t dataLen) = 0;
     virtual void WINAPI AESDecrypt(CSalAES* aes, LPVOID data, size_t dataLen) = 0;
 
     /* AESEnd finishes encryption/decryption and calculates the MAC value,
-      the actual size (SAL_AES_MAC_LENGTH(aes->mode)) is returned in *pMacLen (optional).
-      To verify password correctness, compare the MAC's of encrypted and decrypted data. */
+          the actual size (SAL_AES_MAC_LENGTH(aes->mode)) is returned in *pMacLen (optional).
+          To verify password correctness, compare the MACs of the encrypted and decrypted data. */
     virtual void WINAPI AESEnd(CSalAES* aes, LPBYTE mac, LPDWORD pMacLen) = 0;
 
     /* SHA1 functions */
