@@ -124,7 +124,7 @@ BOOL __CallStk_T = TRUE;
 #include <ostream>
 #include <streambuf>
 
-#if defined(_DEBUG) && defined(_MSC_VER) // without passing file+line to 'new' operator, list of memory leaks shows only 'crtdbg.h(552)'
+#if defined(_DEBUG) && defined(_MSC_VER) // under _MSC_VER, without passing file+line to the 'new' operator, the memory leak list shows only 'crtdbg.h(552)'
 #define new new (_NORMAL_BLOCK, __FILE__, __LINE__)
 #endif
 
@@ -161,7 +161,7 @@ CWStr::CWStr(const char* s)
                 int res = MultiByteToWideChar(CP_ACP, 0, s, -1, AllocBuf, len);
                 if (res > 0 && res <= len)
                 {
-                    AllocBuf[res - 1] = 0; // success, ensure zero terminated string
+                    AllocBuf[res - 1] = 0; // success, ensure a null-terminated string
                     IsOK = TRUE;
                 }
                 else // MultiByteToWideChar failed
@@ -265,7 +265,7 @@ DWORD WINAPI __TraceMsgBoxThreadW(void* param)
 
 void C__Trace::SendMessageToServer(BOOL information, BOOL unicode, BOOL crash)
 {
-    // flush the current buffer contents
+    // flush to the buffer
     if (unicode)
         TraceStrStreamW.flush();
     else
@@ -366,8 +366,8 @@ void C__Trace::SendMessageToServer(BOOL information, BOOL unicode, BOOL crash)
             // trigger the crash in the code where TRACE_C/TRACE_MC lives so the bug report pinpoints
             // the macro location; as a result, the crash happens only after this method returns
         }
-        else // block other threads with TRACE_C until the message box opened for
-        {    // the first TRACE_C closes; then it crashes there as well to keep things tidy
+        else // block other threads with TRACE_C until the first TRACE_C message box closes
+        {    // the first TRACE_C, so let it crash there too, to keep things tidy
             if (msgBoxOpened)
             {
                 while (1)
@@ -393,10 +393,11 @@ void* _sal_safe_memcpy(void* dest, const void* src, size_t count)
 
 #endif // defined(TRACE_ENABLE) && !defined(INSIDE_SALAMANDER)
 
-// trap for custom definitions of these "forbidden" operators (to keep the check working
-// for forbidden WCHAR / char string combinations in TRACE macros, the following
-// operators must not be defined in other modules — otherwise the linker would not report an error; the idea is:
-// in the DEBUG build we catch linker errors, in the RELEASE build we catch custom operator definitions)
+// trap for custom definitions of these "forbidden" operators (for the check
+// for forbidden WCHAR / char string combinations in TRACE macros to work, the following
+// operators must not be defined in other modules - otherwise the linker would not report an error - idea:
+// in the DEBUG build we catch linker errors, in the RELEASE build we detect custom
+// operator definitions)
 #if !defined(_DEBUG) && !defined(INSIDE_SALAMANDER) && !defined(__BORLANDC__)
 
 #include <ostream>
