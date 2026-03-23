@@ -271,7 +271,7 @@ public:
                     LPCTSTR lpCaption, // address of title of message box
                     UINT uType);       // style of message box
 
-    int MessageBox(HWND hWnd,         // handle of owner window
+    int MessageBox(HWND hWnd,         // handle of the owner window
                    LPCTSTR lpText,    // address of text in message box
                    LPCTSTR lpCaption, // address of title of message box
                    UINT uType);       // style of message box
@@ -291,7 +291,7 @@ public:
 protected:
     C_HandlesDataArray Handles;       // all monitored handles
     C__HandlesData TemporaryHandle;   // set by SetInfo() when adding
-    C__HandlesOutputType OutputType;  // type of message output
+    C__HandlesOutputType OutputType;  // message output type
     CRITICAL_SECTION CriticalSection; // for multi-thread synchronization
     BOOL CanUseTrace;                 // TRUE only after the "dbg.h" module is initialized and TRACE_ macros can be used
 
