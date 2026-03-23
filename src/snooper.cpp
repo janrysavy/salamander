@@ -24,12 +24,12 @@ HANDLE SharesEvent = NULL;          // signaled when LanMan Shares changes
 int SnooperSuspended = 0;
 
 CRITICAL_SECTION TimeCounterSection; // synchronizes access to MyTimeCounter
-int MyTimeCounter = 0;               // current timestamp
+int MyTimeCounter = 0;               // current time
 
 HANDLE SafeFindCloseThread = NULL;              // "safe handle killer" thread
 TDirectArray<HANDLE> SafeFindCloseCNArr(10, 5); // safely (without hanging) closes change-notify handles
 CRITICAL_SECTION SafeFindCloseCS;               // protects access to the handle array
-BOOL SafeFindCloseTerminate = FALSE;            // indicates the thread should terminate
+BOOL SafeFindCloseTerminate = FALSE;            // FALSE until thread termination is requested
 HANDLE SafeFindCloseStart = NULL;               // thread "starter"—waits while non-signaled
 HANDLE SafeFindCloseFinished = NULL;            // signaled once the thread has closed all handles
 
@@ -40,7 +40,7 @@ void DoWantDataEvent()
     ReleaseMutex(DataUsageMutex);                  // release the shared data to the main thread
     WaitForSingleObject(WantDataEvent, INFINITE);  // wait until it takes ownership
     WaitForSingleObject(DataUsageMutex, INFINITE); // once it finishes, take ownership again
-    SetEvent(ContinueEvent);                       // data reclaimed; allow the main thread to continue
+    SetEvent(ContinueEvent);                       // we own it again, let the main thread continue
 }
 
 unsigned ThreadSnooperBody(void* /*param*/) // do not call main-thread functions (not even TRACE) !!!
@@ -59,7 +59,7 @@ unsigned ThreadSnooperBody(void* /*param*/) // do not call main-thread functions
         sharesKey = NULL;
         TRACE_E("Unable to open key in registry (LanMan Shares). error: " << GetErrorText(res));
     }
-    else // the key is fine, set up notifications (without this RegNotifyChangeKeyValue will never be called again)
+    else // the key is OK, enable notifications (otherwise RegNotifyChangeKeyValue will not be called again)
     {
         if ((res = RegNotifyChangeKeyValue(sharesKey, TRUE, REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET, SharesEvent,
                                            TRUE)) != ERROR_SUCCESS)
@@ -81,7 +81,7 @@ unsigned ThreadSnooperBody(void* /*param*/) // do not call main-thread functions
         ObjectArray.Add(BeginSuspendEvent);
         ObjectArray.Add(SharesEvent);
 
-        BOOL ignoreRefreshes = FALSE;        // TRUE = ignore refreshes (directory changes); otherwise operate normally
+        BOOL ignoreRefreshes = FALSE;        // TRUE = ignore refreshes (directory changes); FALSE = operate normally
         DWORD ignoreRefreshesAbsTimeout = 0; // when (int)(GetTickCount() - ignoreRefreshesAbsTimeout) >= 0, stop ignoring refreshes
         BOOL notEnd = TRUE;
         while (notEnd)
@@ -112,7 +112,7 @@ unsigned ThreadSnooperBody(void* /*param*/) // do not call main-thread functions
 
                 SetEvent(ContinueEvent); // already in suspend; allow the main thread to continue
 
-                TDirectArray<HWND> refreshPanels(10, 5); // collects panels in case the monitored directory was deleted
+                TDirectArray<HWND> refreshPanels(10, 5); // for the case where the monitored directory is deleted
 
                 ObjectArray[2] = EndSuspendEvent; // replace the begin event with the end-of-suspend event
 
@@ -151,7 +151,7 @@ unsigned ThreadSnooperBody(void* /*param*/) // do not call main-thread functions
                     }
 
                     case WAIT_TIMEOUT:
-                        break; // ignore it (the ignore-directory-changes mode just ended)
+                        break; // ignore it (the mode for ignoring directory changes has just ended)
 
                     default:
                     {
@@ -209,7 +209,7 @@ unsigned ThreadSnooperBody(void* /*param*/) // do not call main-thread functions
                                     }
                                     HANDLES(FindCloseChangeNotification((HANDLE)ObjectArray[index]));
                                     refreshPanels.Add(WindowArray[index]->HWindow); // remember the window to refresh
-                                    ObjectArray.Delete(index);                      // remove it from the watch list
+                                    ObjectArray.Delete(index);                      // delete it from the list at this index
                                     WindowArray.Delete(index);
                                 }
                             }
@@ -290,7 +290,7 @@ unsigned ThreadSnooperBody(void* /*param*/) // do not call main-thread functions
             }
 
             case WAIT_TIMEOUT:
-                break; // ignore it (the ignore-directory-changes mode just ended)
+                break; // ignore it (directory-change ignore mode has ended)
 
             default:
             {
@@ -332,7 +332,7 @@ unsigned ThreadSnooperBody(void* /*param*/) // do not call main-thread functions
 
                 HANDLE objects[4];
                 objects[0] = WantDataEvent;        // data may change during the refresh
-                objects[1] = TerminateEvent;       // in case it ends without completing the refresh
+                objects[1] = TerminateEvent;       // in case it terminates before the refresh finishes
                 objects[2] = BeginSuspendEvent;    // in case BeginSuspendMode is called during the refresh
                 objects[3] = RefreshFinishedEvent; // message from the main thread about finishing the refresh
 
@@ -366,7 +366,7 @@ unsigned ThreadSnooperBody(void* /*param*/) // do not call main-thread functions
                     {
                         if (sameHandle == (HANDLE)ObjectArray[index])
                         {
-                            int r = WaitForSingleObject(sameHandle, 0); // simulate waiting in case the error disappears
+                            int r = WaitForSingleObject(sameHandle, 0); // simulate the wait function in case the error clears
                             sameHandle = NULL;
 
                             HANDLES(EnterCriticalSection(&TimeCounterSection));
@@ -383,7 +383,7 @@ unsigned ThreadSnooperBody(void* /*param*/) // do not call main-thread functions
                     }
                 }
 
-                // pause briefly so the system is not overwhelmed
+                // set ignoreRefreshes = TRUE for a while so the system is not overwhelmed
                 ignoreRefreshes = TRUE;
                 ignoreRefreshesAbsTimeout = GetTickCount() + REFRESH_PAUSE;
 
@@ -412,7 +412,7 @@ unsigned ThreadSnooperEH(void* param)
     {
         TRACE_I("Thread Snooper: calling ExitProcess(1).");
         //    ExitProcess(1);
-        TerminateProcess(GetCurrentProcess(), 1); // more forceful exit (this path still performs some calls)
+        TerminateProcess(GetCurrentProcess(), 1); // more forceful exit (ExitProcess still invokes additional code)
         return 1;
     }
 #endif // CALLSTK_DISABLE
@@ -547,7 +547,7 @@ void TerminateThread()
 
     if (SafeFindCloseThread != NULL)
     {
-        SafeFindCloseTerminate = TRUE; // request termination of the thread
+        SafeFindCloseTerminate = TRUE; // set TRUE to request thread termination
         SetEvent(SafeFindCloseStart);
         if (WaitForSingleObject(SafeFindCloseThread, 1000) == WAIT_TIMEOUT) // wait for it to exit
         {
@@ -609,10 +609,10 @@ void AddDirectory(CFilesWindow* win, const char* path, BOOL registerDevNotificat
     }
     //---
     ReleaseMutex(DataUsageMutex);                 // release the DataUsageMutex back to the snooper
-    WaitForSingleObject(ContinueEvent, INFINITE); // and wait until it grabs it
+    WaitForSingleObject(ContinueEvent, INFINITE); // and wait until it acquires it
 }
 
-// thread used to close handles on a "disconnected" network device (can take a long time)
+// thread used to close handles for a "disconnected" network device (long wait)
 unsigned ThreadFindCloseChangeNotificationBody(void* param)
 {
     CALL_STACK_MESSAGE1("ThreadFindCloseChangeNotificationBody()");
@@ -621,7 +621,7 @@ unsigned ThreadFindCloseChangeNotificationBody(void* param)
 
     while (!SafeFindCloseTerminate)
     {
-        WaitForSingleObject(SafeFindCloseStart, INFINITE); // wait for start or termination
+        WaitForSingleObject(SafeFindCloseStart, INFINITE); // wait for start; termination is checked by the outer loop
 
         while (1)
         {
@@ -725,7 +725,7 @@ void ChangeDirectory(CFilesWindow* win, const char* newPath, BOOL registerDevNot
             if ((HANDLE)ObjectArray[i] == INVALID_HANDLE_VALUE)
             {
                 win->SetAutomaticRefresh(FALSE);
-                ObjectArray.Delete(i); // remove it from the watch list
+                ObjectArray.Delete(i); // delete it from the list
                 WindowArray.Delete(i);
                 TRACE_W("Unable to receive change notifications for directory '" << newPath << "' (auto-refresh will not work).");
             }
@@ -781,7 +781,7 @@ void ChangeDirectory(CFilesWindow* win, const char* newPath, BOOL registerDevNot
     }
     //---
     ReleaseMutex(DataUsageMutex);                 // release the DataUsageMutex back to the snooper
-    WaitForSingleObject(ContinueEvent, INFINITE); // and wait until it grabs it
+    WaitForSingleObject(ContinueEvent, INFINITE); // and wait until the snooper grabs it
 }
 
 void DetachDirectory(CFilesWindow* win, BOOL waitForHandleClosure, BOOL closeDevNotifification)
@@ -810,15 +810,15 @@ void DetachDirectory(CFilesWindow* win, BOOL waitForHandleClosure, BOOL closeDev
             HANDLES(LeaveCriticalSection(&SafeFindCloseCS));
             ResetEvent(SafeFindCloseFinished);                                             // wait for it to be signaled...
             SetEvent(SafeFindCloseStart);                                                  // start the cleanup
-            WaitForSingleObject(SafeFindCloseFinished, waitForHandleClosure ? 5000 : 200); // 200 ms timeout for closing the handle
+            WaitForSingleObject(SafeFindCloseFinished, waitForHandleClosure ? 5000 : 200); // 200 ms timeout for handle closure
 
-            ObjectArray.Delete(i); // remove it from the watch list
+            ObjectArray.Delete(i); // delete it from the list
             WindowArray.Delete(i);
             win->SetAutomaticRefresh(FALSE);
         }
     //---
     ReleaseMutex(DataUsageMutex);                 // release the DataUsageMutex back to the snooper
-    WaitForSingleObject(ContinueEvent, INFINITE); // and wait until it grabs it
+    WaitForSingleObject(ContinueEvent, INFINITE); // and wait until the snooper grabs it
 }
 
 /*
@@ -940,7 +940,7 @@ void EndSuspendMode(BOOL debugDoNotTestCaller)
     if (SnooperSuspended < 1)
     {
         TRACE_E("Incorrect call to EndSuspendMode()");
-        SnooperSuspended = 0; // reset; perhaps someone is misusing CM_LEFTREFRESH, CM_RIGHTREFRESH, or CM_ACTIVEREFRESH again
+        SnooperSuspended = 0; // reset; maybe someone is misusing CM_LEFTREFRESH, CM_RIGHTREFRESH, or CM_ACTIVEREFRESH again
     }
     else
     {
