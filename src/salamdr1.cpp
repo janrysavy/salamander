@@ -50,7 +50,7 @@ extern "C"
 
 #pragma comment(lib, "UxTheme.lib")
 
-// expose the original application entry point
+// make the original application entry point accessible
 extern "C" int WinMainCRTStartup();
 
 #ifdef X64_STRESS_TEST
@@ -72,14 +72,14 @@ void X64StressTestAlloc()
         while (VirtualAlloc(0, allocSize[i], MEM_RESERVE, PAGE_NOACCESS) <= (LPVOID)(UINT_PTR)0x00000000ffffffff) // we want an exception on access and we do not want MEM_COMMIT so we do not waste memory
             vaAllocated += allocSize[i];
 
-    // Now inflate the RTL heap
+    // Now fill up the RTL heap
     UINT64 rtlAllocated = 0;
     _int64 rtlAllocSize[] = {10000000, 1000000, 100000, 10000, 1000, 100, 10, 1, 0};
     for (int i = 0; rtlAllocSize[i] != 0; i++)
         while (_malloc_dbg(rtlAllocSize[i], _CRT_BLOCK, __FILE__, __LINE__) <= (LPVOID)(UINT_PTR)0x00000000ffffffff)
             rtlAllocated += rtlAllocSize[i];
 
-    // Verify success
+    // check whether allocating the char succeeded
     void* testNew = new char; // new goes through alloc, but we will verify it as well
     if (testNew <= (LPVOID)(UINT_PTR)0x00000000ffffffff)
         MessageBox(NULL, "new address <= 0x00000000ffffffff!\nPlease contact jan.rysavy@altap.cz with this information.", "X64_STRESS_TEST", MB_OK | MB_ICONEXCLAMATION);
@@ -91,7 +91,7 @@ void X64StressTestAlloc()
 int MyEntryPoint()
 {
 #ifdef X64_STRESS_TEST
-    // consume the lower 4GB of memory with allocations so that further allocations have pointers greater than a DWORD
+    // consume the lower 4GB with allocations so that subsequent allocations have pointers larger than DWORD
     X64StressTestAlloc();
 #endif //X64_STRESS_TEST
 
@@ -107,14 +107,14 @@ int MyEntryPoint()
         MessageBox(NULL, "Open Salamander Bug Reporter (salmon.exe) initialization has failed. Please reinstall Open Salamander.",
                    SALAMANDER_TEXT_VERSION, MB_OK | MB_ICONSTOP);
 
-    // the debugger does not reach this point; RTL shuts us down (tested under VC 2008 with our RTL)
+    // the debugger no longer reaches this point; we crash in RTL (tested with VC 2008 and our RTL)
 
-    // finish up
+    // we're done
     return ret;
 }
 
 BOOL SalamanderBusy = TRUE;       // is Salamander busy?
-DWORD LastSalamanderIdleTime = 0; // GetTickCount() from the moment when SalamanderBusy last switched to TRUE
+DWORD LastSalamanderIdleTime = 0; // GetTickCount() at the moment when SalamanderBusy last switched to TRUE
 
 int PasteLinkIsRunning = 0; // if it is greater than zero, the Paste Shortcuts command is currently running in one of the panels
 
@@ -194,7 +194,7 @@ BOOL ChangeLeftPanelToFixedWhenIdleInProgress = FALSE; // TRUE = the path is cur
 BOOL ChangeLeftPanelToFixedWhenIdle = FALSE;
 BOOL ChangeRightPanelToFixedWhenIdleInProgress = FALSE; // TRUE = the path is currently being changed; setting ChangeRightPanelToFixedWhenIdle to TRUE is redundant
 BOOL ChangeRightPanelToFixedWhenIdle = FALSE;
-BOOL OpenCfgToChangeIfPathIsInaccessibleGoTo = FALSE; // TRUE = during idle it opens the Drives configuration and focuses "If path in panel is inaccessible, go to:"
+BOOL OpenCfgToChangeIfPathIsInaccessibleGoTo = FALSE; // TRUE = during idle it opens the Drives configuration and focuses "If path in panel is inaccessible, go to:"; FALSE = inactive
 
 char IsSLGIncomplete[ISSLGINCOMPLETE_SIZE]; // if the string is empty, the SLG is fully translated; otherwise it contains a message-board URL for the respective language section
 
@@ -340,7 +340,7 @@ BOOL CriticalShutdown = FALSE;
 HANDLE SalOpenFileMapping = NULL;
 void* SalOpenSharedMem = NULL;
 
-// mutex for synchronizing load/save to the registry (two processes cannot do it at once; it ends badly)
+// mutex for synchronizing load/save to the Registry (two processes cannot do it at once; it has unfortunate consequences)
 CLoadSaveToRegistryMutex LoadSaveToRegistryMutex;
 
 BOOL IsNotAlphaNorNum[256]; // TRUE/FALSE array for characters (TRUE = not a letter or digit)
@@ -356,7 +356,7 @@ BOOL IsAlpha[256];          // TRUE/FALSE array for characters (TRUE = letter)
 // where you can choose between FF_SWISS and FF_ROMAN fonts (sans-serif/serif).
 int UserCharset = DEFAULT_CHARSET;
 
-DWORD AllocationGranularity = 1; // step size used by memory-mapped files
+DWORD AllocationGranularity = 1; // allocation granularity (needed for using memory-mapped files)
 
 #ifdef USE_BETA_EXPIRATION_DATE
 
@@ -456,7 +456,7 @@ COLORREF SalamanderColors[NUMBER_OF_COLORS] =
         RGBF(255, 255, 255, SCF_DEFAULT), // FOCUS_BK_INACTIVE_NORMAL
         RGBF(255, 255, 255, SCF_DEFAULT), // FOCUS_BK_INACTIVE_SELECTED
 
-        // text colors of items in the panel
+        // text colors of panel items
         RGBF(0, 0, 0, SCF_DEFAULT), // ITEM_FG_NORMAL
         RGBF(255, 0, 0, 0),         // ITEM_FG_SELECTED
         RGBF(0, 0, 0, SCF_DEFAULT), // ITEM_FG_FOCUSED
@@ -562,14 +562,14 @@ COLORREF NortonColors[NUMBER_OF_COLORS] =
         RGBF(0, 0, 128, 0),   // FOCUS_BK_INACTIVE_NORMAL
         RGBF(0, 0, 128, 0),   // FOCUS_BK_INACTIVE_SELECTED
 
-        // text colors of items in the panel
+        // text colors of panel items
         RGBF(0, 255, 255, 0),       // ITEM_FG_NORMAL
         RGBF(255, 255, 0, 0),       // ITEM_FG_SELECTED
         RGBF(0, 0, 0, SCF_DEFAULT), // ITEM_FG_FOCUSED
         RGBF(255, 255, 0, 0),       // ITEM_FG_FOCSEL
         RGBF(0, 0, 0, SCF_DEFAULT), // ITEM_FG_HIGHLIGHT
 
-        // background colors of items in the panel
+        // background colors of panel items
         RGBF(0, 0, 128, 0),         // ITEM_BK_NORMAL
         RGBF(0, 0, 128, 0),         // ITEM_BK_SELECTED
         RGBF(0, 128, 128, 0),       // ITEM_BK_FOCUSED
@@ -622,7 +622,7 @@ COLORREF NavigatorColors[NUMBER_OF_COLORS] =
         RGBF(255, 255, 0, 0),       // ITEM_FG_FOCSEL
         RGBF(0, 0, 0, SCF_DEFAULT), // ITEM_FG_HIGHLIGHT
 
-        // background colors of items in the panel
+        // background colors of panel items
         RGBF(80, 80, 80, 0),        // ITEM_BK_NORMAL
         RGBF(80, 80, 80, 0),        // ITEM_BK_SELECTED
         RGBF(0, 128, 128, 0),       // ITEM_BK_FOCUSED
@@ -692,15 +692,15 @@ void MakeCrc32Table(DWORD* crcTab)
     DWORD poly = 0xedb88320L; //polynomial exclusive-or pattern
 
     /*
-  // generate crc polonomial, using precomputed poly should be faster
-  // terms of polynomial defining this crc (except x^32):
-  static const Byte p[] = {0,1,2,4,5,7,8,10,11,12,16,22,23,26};
+      // generate CRC polynomial; using a precomputed poly should be faster
+      // terms of the polynomial defining this CRC (except x^32):
+      static const Byte p[] = {0,1,2,4,5,7,8,10,11,12,16,22,23,26};
 
-  // make exclusive-or pattern from polynomial (0xedb88320L)
-  poly = 0L;
-  for (n = 0; n < sizeof(p)/sizeof(Byte); n++)
-    poly |= 1L << (31 - p[n]);
-*/
+      // make the exclusive-or pattern from the polynomial (0xedb88320L)
+      poly = 0L;
+      for (n = 0; n < sizeof(p)/sizeof(Byte); n++)
+        poly |= 1L << (31 - p[n]);
+    */
     int n;
     for (n = 0; n < 256; n++)
     {
@@ -804,7 +804,7 @@ BOOL SalamanderIsNotBusy(DWORD* lastIdleTime)
     if (!SalamanderBusy)
         return TRUE;
     DWORD oldLastIdleTime = LastSalamanderIdleTime;
-    if (GetTickCount() - oldLastIdleTime <= 100)                                   // if SalamanderBusy has not been set for too long (for example, a modal dialog is open)
+    if (GetTickCount() - oldLastIdleTime <= 100)                                   // if SalamanderBusy has not lasted too long already (e.g. a modal dialog is open)
         Sleep(100);                                                                // wait to see whether SalamanderBusy changes
     return !SalamanderBusy || (int)(LastSalamanderIdleTime - oldLastIdleTime) > 0; // not "busy" or at least fluctuating
 }
@@ -886,7 +886,7 @@ void InitLocales()
     else
     {
         DecimalSeparatorLen--;
-        DecimalSeparator[DecimalSeparatorLen] = 0; // make sure the trailing zero is there
+        DecimalSeparator[DecimalSeparatorLen] = 0; // ensure there is a terminating zero at the end
     }
 
     if ((ThousandsSeparatorLen = GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_STHOUSAND, ThousandsSeparator, 5)) == 0 ||
@@ -967,14 +967,14 @@ HICON GetDriveIcon(const char* root, UINT type, BOOL accessible, BOOL large)
     int iconSize = IconSizes[large ? ICONSIZE_32 : ICONSIZE_16];
     return SalLoadIcon(ImageResDLL, id, iconSize);
 
-    // JRYFIXME - check whether IconLRFlags can be removed? (W7+)
+    // JRYFIXME - look into whether IconLRFlags can be removed (W7+)
 
-    /* JRYFIXME - search the sources globally for LoadImage / IMAGE_ICON
-  return (HICON)HANDLES(LoadImage(ImageResDLL, MAKEINTRESOURCE(id), IMAGE_ICON,
-                                  large ? ICON32_CX : ICON16_CX,
-                                  large ? ICON32_CX : ICON16_CX,
-                                  IconLRFlags));
-  */
+    /* JRYFIXME - search all source files for LoadImage / IMAGE_ICON
+      return (HICON)HANDLES(LoadImage(ImageResDLL, MAKEINTRESOURCE(id), IMAGE_ICON,
+                                      large ? ICON32_CX : ICON16_CX,
+                                      large ? ICON32_CX : ICON16_CX,
+                                      IconLRFlags));
+      */
 }
 
 HICON SalLoadIcon(HINSTANCE hDLL, int id, int iconSize)
@@ -992,7 +992,7 @@ char* BuildName(char* path, char* name, char* dosName, BOOL* skip, BOOL* skipAll
 {
     if (skip != NULL)
         *skip = FALSE;
-    int l1 = (int)strlen(path); // always on the stack ...
+    int l1 = (int)strlen(path); // is always on the stack ...
     int l2, len = l1;
     if (name != NULL)
     {
@@ -1028,16 +1028,16 @@ char* BuildName(char* path, char* name, char* dosName, BOOL* skip, BOOL* skipAll
                 params.Text = text;
                 char aliasBtnNames[200];
                 /* used by the export_mnu.py script that generates salmenu.mnu for the Translator
-   we let the message-box buttons resolve hotkey collisions by simulating a menu
-MENU_TEMPLATE_ITEM MsgBoxButtons[] =
-{
-  {MNTT_PB, 0
-  {MNTT_IT, IDS_MSGBOXBTN_SKIP
-  {MNTT_IT, IDS_MSGBOXBTN_SKIPALL
-  {MNTT_IT, IDS_MSGBOXBTN_FOCUS
-  {MNTT_PE, 0
-};
-*/
+                   we let the message box buttons handle hotkey collisions by pretending they are a menu
+                MENU_TEMPLATE_ITEM MsgBoxButtons[] =
+                {
+                  {MNTT_PB, 0
+                  {MNTT_IT, IDS_MSGBOXBTN_SKIP
+                  {MNTT_IT, IDS_MSGBOXBTN_SKIPALL
+                  {MNTT_IT, IDS_MSGBOXBTN_FOCUS
+                  {MNTT_PE, 0
+                };
+                */
                 sprintf(aliasBtnNames, "%d\t%s\t%d\t%s\t%d\t%s",
                         DIALOG_YES, LoadStr(IDS_MSGBOXBTN_SKIP),
                         DIALOG_NO, LoadStr(IDS_MSGBOXBTN_SKIPALL),
@@ -1089,7 +1089,7 @@ BOOL HasTheSameRootPath(const char* path1, const char* path2)
             return TRUE; // same root for a normal ("c:\path") path
         else
         {
-            if (path1[0] == '\\' && path1[1] == '\\') // both UNC
+            if (path1[0] == '\\' && path1[1] == '\\') // both are UNC paths
             {
                 const char* s1 = path1 + 2;
                 const char* s2 = path2 + 2;
@@ -1142,7 +1142,7 @@ BOOL HasTheSameRootPathAndVolume(const char* p1, const char* p2)
         lstrcpyn(resPath, p1, MAX_PATH);
         ResolveSubsts(resPath);
         GetRootPath(root, resPath);
-        if (!IsUNCPath(root) && GetDriveType(root) == DRIVE_FIXED) // searching for reparse points only makes sense on fixed disks
+        if (!IsUNCPath(root) && GetDriveType(root) == DRIVE_FIXED) // searching for reparse points only makes sense on DRIVE_FIXED disks
         {
             // if this is not a root path, try traversing via reparse points
             BOOL cutPathIsPossible = TRUE;
@@ -1156,7 +1156,7 @@ BOOL HasTheSameRootPathAndVolume(const char* p1, const char* p2)
                 {
                     if (!cutPathIsPossible || !CutDirectory(ourPath))
                     {
-                        strcpy(p1Volume, "fail"); // even the root did not succeed, unexpected (unfortunately happens on SUBST disks under W2K - tuned with Bachaalany - if both paths fail we return MATCH because it is more likely)
+                        strcpy(p1Volume, "fail"); // even the root failed, unexpectedly (unfortunately this happens on SUBST drives under W2K - debugged with Bachaalany - if both paths fail, we return MATCH because it is more likely)
                         break;
                     }
                     SalPathAddBackslash(ourPath, MAX_PATH);
@@ -1169,7 +1169,7 @@ BOOL HasTheSameRootPathAndVolume(const char* p1, const char* p2)
             p2NetPath[0] = 0;
             ResolveLocalPathWithReparsePoints(ourPath, p2, &cutPathIsPossible, NULL, NULL, NULL, NULL, p2NetPath);
 
-            if ((p1NetPath[0] == 0) != (p2NetPath[0] == 0) || // if only one of the paths is network or
+            if ((p1NetPath[0] == 0) != (p2NetPath[0] == 0) || // if only one of the paths is a network path or
                 p1NetPath[0] != 0 && !HasTheSameRootPath(p1NetPath, p2NetPath))
                 ret = FALSE; // the roots differ, report different volumes (cannot verify volumes on network paths)
 
@@ -1179,7 +1179,7 @@ BOOL HasTheSameRootPathAndVolume(const char* p1, const char* p2)
                 {
                     if (!cutPathIsPossible || !CutDirectory(ourPath))
                     {
-                        strcpy(p2Volume, "fail"); // even the root did not succeed, unexpected (unfortunately happens on SUBST disks under W2K - tuned with Bachaalany - if both paths fail we return MATCH because it is more likely)
+                        strcpy(p2Volume, "fail"); // even the root lookup failed, unexpectedly (unfortunately this happens on SUBST drives under W2K - debugged with Bachaalany - if both paths fail, we return MATCH because it is more likely)
                         break;
                     }
                     SalPathAddBackslash(ourPath, MAX_PATH);
@@ -1234,7 +1234,7 @@ BOOL PathsAreOnTheSameVolume(const char* path1, const char* path2, BOOL* resIsOn
                 while (!GetVolumeNameForVolumeMountPoint(ourPath, p1Volume, 100))
                 {
                     if (!cutPathIsPossible || !CutDirectory(ourPath))
-                    { // even the root did not succeed, unexpected (unfortunately happens on SUBST disks under W2K - tuned with Bachaalany - if both paths fail with the same roots we return MATCH because it is more likely)
+                    { // even the root did not succeed, unexpectedly (unfortunately this happens on SUBST drives under W2K - debugged with Bachaalany - if both paths fail with the same roots, we return MATCH because that is more likely)
                         numOfGetVolNamesFailed++;
                         break;
                     }
@@ -1251,14 +1251,14 @@ BOOL PathsAreOnTheSameVolume(const char* path1, const char* path2, BOOL* resIsOn
             }
             else
                 lstrcpyn(ourPath, root2, MAX_PATH);
-            if (path2NetPath[0] == 0) // cannot obtain the "volume name" from a network path, do not even try
+            if (path2NetPath[0] == 0) // the "volume name" cannot be obtained from a network path, so we will not even try
             {
                 if (path1NetPath[0] == 0)
                 {
                     while (!GetVolumeNameForVolumeMountPoint(ourPath, p2Volume, 100))
                     {
                         if (!cutPathIsPossible || !CutDirectory(ourPath))
-                        { // even the root did not succeed, unexpected (unfortunately happens on SUBST disks under W2K - tuned with Bachaalany - if both paths fail with the same roots we return MATCH because it is more likely)
+                        { // even getting the root failed, unexpectedly (unfortunately this happens on SUBST drives under W2K - debugged with Bachaalany - if both paths fail with the same roots, we return MATCH because that is more likely)
                             numOfGetVolNamesFailed++;
                             break;
                         }
@@ -1267,9 +1267,9 @@ BOOL PathsAreOnTheSameVolume(const char* path1, const char* path2, BOOL* resIsOn
                     if (numOfGetVolNamesFailed != 2)
                     {
                         if (numOfGetVolNamesFailed == 0 && resIsOnlyEstimation != NULL)
-                            *resIsOnlyEstimation = FALSE; // the only time we are sure of the result is when the "volume name" was obtained from both paths (which also means they could not be network paths)
+                            *resIsOnlyEstimation = FALSE; // the only case when we know the result for sure is when we managed to obtain the "volume name" from both paths, so *resIsOnlyEstimation can be set to FALSE (they also could not have been network paths)
                         if (numOfGetVolNamesFailed == 1 || strcmp(p1Volume, p2Volume) != 0)
-                            ret = FALSE; // only one "volume name" was obtained, so they are not the same volumes (and if they are, we cannot detect it - maybe if the failure was due to SUBST, resolving the target path from SUBST might help)
+                            ret = FALSE; // only one "volume name" was obtained, so ret = FALSE because they are treated as different volumes (and if they are not, we cannot detect it - maybe if the failure was due to SUBST, resolving the target path from SUBST might help)
                         trySimpleTest = FALSE;
                     }
                 }
@@ -1286,7 +1286,7 @@ BOOL PathsAreOnTheSameVolume(const char* path1, const char* path2, BOOL* resIsOn
                     GetRootPath(root1, path1NetPath);
                     GetRootPath(root2, path2NetPath);
                 }
-                else // only one path is network, so the volumes differ (and if not, we cannot detect it)
+                else // only one path is a network path, so they are not the same volumes (and if they are, we cannot detect it)
                 {
                     ret = FALSE;
                     trySimpleTest = FALSE;
@@ -1306,7 +1306,7 @@ BOOL PathsAreOnTheSameVolume(const char* path1, const char* path2, BOOL* resIsOn
             if (ResolveSubsts(path1NetPath) && ResolveSubsts(path2NetPath))
             {
                 if (IsTheSamePath(path1NetPath, path2NetPath))
-                    *resIsOnlyEstimation = FALSE; // identical paths = definitely the same volumes
+                    *resIsOnlyEstimation = FALSE; // identical paths = definitely the same volumes, so FALSE
             }
         }
     }
@@ -1359,7 +1359,7 @@ int CommonPrefixLength(const char* path1, const char* path2)
     if (*s1 == 0 && *s2 == '\\' || *s1 == '\\' && *s2 == 0 ||
         *s1 == 0 && *s2 == 0 && *(s1 - 1) != '\\')
     {
-        lastBackslash = s1; // this terminator will not be in lastBackslash
+        lastBackslash = s1; // this terminator will not be included in lastBackslash
         backslashCount++;
     }
 
@@ -1419,7 +1419,7 @@ BOOL IsDirError(DWORD err)
            err == ERROR_FILE_NOT_FOUND ||
            err == ERROR_PATH_NOT_FOUND ||
            err == ERROR_INVALID_NAME ||   // when a diacritic is in the path on English Windows this error is reported instead of ERROR_PATH_NOT_FOUND
-           err == ERROR_INVALID_FUNCTION; // reported to a guy on WinXP for network drive Y: when Salamander accessed a path that no longer existed (the path was not shortened and he was in deep trouble ;-) Shift+F7 on Y:\ fixed it)
+           err == ERROR_INVALID_FUNCTION; // reported by one guy on WinXP on network drive Y: when Salamander accessed a path that no longer existed (so the path was not shortened and the guy was really in trouble ;-) Shift+F7 on Y:\ fixed it)
 }
 
 // ****************************************************************************
@@ -1503,8 +1503,8 @@ int GetRootPath(char* root, const char* path)
 
 // ****************************************************************************
 
-// iterate through all colors from the configuration and if they have the default value set,
-// assign the corresponding color values
+// iterate through all colors in the configuration and, if they are set to the default value,
+// assign them the corresponding color values
 
 COLORREF GetHilightColor(COLORREF clr1, COLORREF clr2)
 {
@@ -1559,15 +1559,15 @@ COLORREF GetHilightColor(COLORREF clr1, COLORREF clr2)
     return res;
 }
 
-COLORREF GetFullRowHighlight(COLORREF bkHighlightColor) // returns a "heuristic" highlight for full row mode
+COLORREF GetFullRowHighlight(COLORREF bkHighlightColor) // returns a "heuristic" highlight color for full row mode
 {
-    // a bit of heuristics: slightly darken light backgrounds and slightly lighten dark backgrounds
+    // a bit of heuristic tuning: slightly darken light backgrounds and slightly lighten dark backgrounds
     WORD h, l, s;
     ColorRGBToHLS(bkHighlightColor, &h, &l, &s);
 
     if (l < 121) // [DARK]  0-120 -> progressively increase luminance 0..120 -> +40..+20
         l += 20 + 20 * (120 - l) / 120;
-    else // [LIGHT] 121-240 -> decrease luminance by a constant 20
+    else // [LIGHT] 121-240 -> decrease luminance by a constant value of 20
         l -= 20;
 
     return ColorHLSToRGB(h, l, s);
@@ -1618,7 +1618,7 @@ void UpdateDefaultColors(SALCOLOR* colors, CHighlightMasks* highlightMasks, BOOL
         // color of the selected icon tint
         if (GetFValue(colors[ICON_BLEND_SELECTED]) & SCF_DEFAULT)
         {
-            // normally copy the color from focused+selected into selected
+            // normally copy the focused+selected color into ICON_BLEND_SELECTED
             SetRGBPart(&colors[ICON_BLEND_SELECTED], GetCOLORREF(colors[ICON_BLEND_FOCSEL]));
             // if it is red (the Salamander profile and the color depth allows it)
             // use a lighter shade for selected
@@ -1798,7 +1798,7 @@ BOOL InitializeConstGraphics()
   strcpy(LogFont.lfFaceName, "MS Shell Dlg 2");
   */
 
-    // these paint resources come from the system and follow color changes on their own
+    // these brushes are allocated by the system and automatically change when the colors change
     HDialogBrush = GetSysColorBrush(COLOR_BTNFACE);
     HButtonTextBrush = GetSysColorBrush(COLOR_BTNTEXT);
     HMenuSelectedBkBrush = GetSysColorBrush(COLOR_HIGHLIGHT);
@@ -1983,7 +1983,7 @@ BOOL GetShortcutOverlay()
         SalRegQueryValueEx(hKey, "29", NULL, NULL, (LPBYTE)buff, &buffLen);
         if (buff[0] != 0)
         {
-            char* num = strrchr(buff, ','); // the icon number follows the last comma
+            char* num = strrchr(buff, ','); // the icon number is in the char sequence after the last comma
             if (num != NULL)
             {
                 int index = atoi(num + 1);
@@ -2317,7 +2317,7 @@ BOOL InitializeGraphics(BOOL colorsOnly)
             return FALSE;
         }
 
-        // pull the icons from shell32:
+        // load the icons from shell32:
         int indexes[] = {symbolsExecutable, symbolsDirectory, symbolsNonAssociated, symbolsAssociated, -1};
         int resID[] = {3, 4, 1, 2, -1};
         int vistaResID[] = {15, 4, 2, 90, -1};
@@ -2877,7 +2877,7 @@ typedef HRESULT(CALLBACK* DLLGETVERSIONPROC)(DLLVERSIONINFO*);
 HRESULT GetComCtlVersion(LPDWORD pdwMajor, LPDWORD pdwMinor)
 {
     HINSTANCE hComCtl;
-    //load the DLL
+    // load the DLL
     hComCtl = HANDLES(LoadLibrary(TEXT("comctl32.dll")));
     if (hComCtl)
     {
@@ -2888,7 +2888,7 @@ HRESULT GetComCtlVersion(LPDWORD pdwMajor, LPDWORD pdwMinor)
      don't implement this function. That makes the lack of implementation of the
      function a version marker in itself.
     */
-        pDllGetVersion = (DLLGETVERSIONPROC)GetProcAddress(hComCtl, TEXT("DllGetVersion")); // no header declared
+        pDllGetVersion = (DLLGETVERSIONPROC)GetProcAddress(hComCtl, TEXT("DllGetVersion")); // no header for it
         if (pDllGetVersion)
         {
             DLLVERSIONINFO dvi;
@@ -2962,8 +2962,8 @@ BOOL PackErrorHandler(HWND parent, const WORD err, ...)
 void ColorsChanged(BOOL refresh, BOOL colorsOnly, BOOL reloadUMIcons)
 {
     CALL_STACK_MESSAGE2("ColorsChanged(%d)", refresh);
-    // IMPORTANT! fonts must stay FALSE to avoid changing the font handle,
-    // which the toolbars that use it must be notified about
+    // IMPORTANT! fonts must be FALSE so that the font handle does not change,
+    // which would have to be reported to the toolbars that use it
     ReleaseGraphics(colorsOnly);
     InitializeGraphics(colorsOnly);
     ItemBitmap.ReCreateForScreenDC();
@@ -2984,7 +2984,7 @@ void ColorsChanged(BOOL refresh, BOOL colorsOnly, BOOL reloadUMIcons)
     // let the Find dialogs know about the color change
     FindDialogQueue.BroadcastMessage(WM_USER_COLORCHANGEFIND, 0, 0);
 
-    // propagate this update to the plug-ins as well
+    // propagate this update to the plugins as well
     Plugins.Event(PLUGINEVENT_COLORSCHANGED, 0);
 
     if (MainWindow != NULL && MainWindow->HTopRebar != NULL)
@@ -3147,7 +3147,7 @@ char RTCErrorDescription[RTC_ERROR_DESCRIPTION_SIZE] = {0};
 int MyRTCErrorFunc(int errType, const wchar_t* file, int line,
                    const wchar_t* module, const wchar_t* format, ...)
 {
-    // Prevent re-entrance.
+    // Prevent re-entry.
     static long running = 0;
     while (InterlockedExchange(&running, 1))
         Sleep(0);
@@ -3267,10 +3267,10 @@ void StartNotepad(const char* file)
 
 BOOL RunningInCompatibilityMode()
 {
-    // If we run on XP or a newer OS, an enthusiastic user might have enabled Compatibility Mode.
-    // If that happens we display a warning.
-    // NOTE: Application Verifier reports the Windows version as newer than it really is
-    // when testing the application for the "Windows 7 Software Logo".
+    // If we are running on XP or a later OS, there is a risk that a well-meaning user enabled
+    // Compatibility Mode. If so, we display a warning.
+    // NOTE: Application Verifier reports the Windows version as newer than it really is;
+    // it does this when testing the application while obtaining the "Windows 7 Software Logo".
     WORD kernel32major, kernel32minor;
     if (GetModuleVersion(GetModuleHandle("kernel32.dll"), &kernel32major, &kernel32minor))
     {
@@ -3297,12 +3297,13 @@ BOOL RunningInCompatibilityMode()
         const DWORD SAL_MANIFESTED_FOR_MAJOR = 10;
         const DWORD SAL_MANIFESTED_FOR_MINOR = 0;
 
-        // GetVersionEx never reports more than os.dwMajorVersion == SAL_MANIFESTED_FOR_MAJOR
+        // GetVersionEx never returns anything higher than os.dwMajorVersion == SAL_MANIFESTED_FOR_MAJOR
         // and os.dwMinorVersion == SAL_MANIFESTED_FOR_MINOR; if kernel32.dll has a higher
-        // version we cannot reliably detect Compatibility Mode. Salamander needs to be
-        // manifested for newer Windows and the constants SAL_MANIFESTED_FOR_MAJOR and
-        // SAL_MANIFESTED_FOR_MINOR adjusted; we at least detect Compatibility Mode set to
-        // an older Windows version than Salamander is manifested for
+        // version, we are not able to detect Compatibility Mode with 100% reliability.
+        // Salamander needs to be manifested for newer Windows and the constants
+        // SAL_MANIFESTED_FOR_MAJOR and SAL_MANIFESTED_FOR_MINOR adjusted; at least we can
+        // detect Compatibility Mode set to an older Windows version than Salamander is
+        // manifested for
         if (kernel32major > SAL_MANIFESTED_FOR_MAJOR ||
             kernel32major == SAL_MANIFESTED_FOR_MAJOR && kernel32minor > SAL_MANIFESTED_FOR_MINOR)
         {
@@ -3348,7 +3349,7 @@ void GetCommandLineParamExpandEnvVars(const char* argv, char* target, DWORD targ
 // returns TRUE when the parameters are valid, otherwise FALSE
 BOOL ParseCommandLineParameters(LPSTR cmdLine, CCommandLineParams* cmdLineParams)
 {
-    // we do not want to change paths, the icon, or the prefix -- everything needs to be reset
+    // we do not want to change the paths, icon, or prefix -- everything needs to be cleared
     ZeroMemory(cmdLineParams, sizeof(CCommandLineParams));
 
     char buf[4096];
@@ -3419,7 +3420,7 @@ BOOL ParseCommandLineParameters(LPSTR cmdLine, CCommandLineParams* cmdLineParams
                     char* s = argv[i + 1];
                     if (*s == '\\' && *(s + 1) == '\\' || // UNC full path
                         *s != 0 && *(s + 1) == ':')       // "c:\" full path
-                    {                                     // absolute path
+                    {                                     // full path
                         lstrcpyn(ConfigurationName, argv[i + 1], MAX_PATH);
                     }
                     else // relative name
@@ -3538,11 +3539,11 @@ int WinMainBody(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine,
 
     LastCrtCheckMemoryTime = GetTickCount();
 
-    // in this scenario of overwriting past the end of memory, the protection triggers -- during IDLE a message box is shown
-    // and debug logs are poured into TraceServer
-    //
-//  char *p1 = (char*)malloc( 4 );
-//  strcpy( p1 , "Oops" );
+        // in this case of writing past the end of allocated memory, the protection kicks in -- in IDLE a message box is shown
+        // and debug messages are sent to TraceServer
+        //
+    //  char *p1 = (char*)malloc( 4 );
+    //  strcpy( p1 , "Oops" );
 #endif //_DEBUG
 
     /*
@@ -3576,9 +3577,9 @@ int WinMainBody(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine,
     HInstance = hInstance;
     CALL_STACK_MESSAGE4("WinMainBody(0x%p, , %s, %d)", hInstance, cmdLine, cmdShow);
 
-    // I cannot help it... when the competition does this, we
-    // must do it too - inspired by Explorer.
-    // And I wondered why their painting works so well.
+    // I cannot help that... when the competition does this, we
+    // have to do it too - inspired by Explorer.
+    // And I wondered why their painting worked so well.
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
 
     SetTraceProcessName("Salamander");
@@ -3593,7 +3594,7 @@ int WinMainBody(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine,
         return 1;
     }
 
-    //  HOldWPHookProc = SetWindowsHookEx(WH_CALLWNDPROC,     // HANDLES cannot handle this!
+    //  HOldWPHookProc = SetWindowsHookEx(WH_CALLWNDPROC,     // HANDLES does not work here!
     //                                    WPMessageHookProc,
     //                                    NULL, GetCurrentThreadId());
 
@@ -3607,7 +3608,7 @@ int WinMainBody(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine,
     if (NtDLL == NULL)
         TRACE_E("Unable to load library ntdll.dll."); // not a fatal error
 
-    // detect the default user charset for fonts
+    // detect the user's default charset for fonts
     CHARSETINFO ci;
     memset(&ci, 0, sizeof(ci));
     char bufANSI[10];
@@ -3678,7 +3679,7 @@ int WinMainBody(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine,
     if (!GetWindowsDirectory(WindowsDirectory, MAX_PATH))
         WindowsDirectory[0] = 0;
 
-    // we care about the ITaskbarList3 interface that Microsoft introduced with Windows 7 - for example taskbar button progress
+    // we need the ITaskbarList3 interface, which Microsoft introduced in Windows 7 - for example, taskbar button progress
     if (Windows7AndLater)
     {
         TaskbarBtnCreatedMsg = RegisterWindowMessage("TaskbarButtonCreated");
@@ -3700,11 +3701,11 @@ int WinMainBody(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR cmdLine,
 
     LoadSaveToRegistryMutex.Init();
 
-    // try to read the "AutoImportConfig" value from the current configuration -> present when we are performing an UPGRADE
+    // try to retrieve the "AutoImportConfig" value from the current configuration -> it exists when we are performing an UPGRADE
     BOOL autoImportConfig = FALSE;
     char autoImportConfigFromKey[200];
     autoImportConfigFromKey[0] = 0;
-    if (!GetUpgradeInfo(&autoImportConfig, autoImportConfigFromKey, 200)) // the user requested to exit the application
+    if (!GetUpgradeInfo(&autoImportConfig, autoImportConfigFromKey, 200)) // the user requested to exit the application during autoImportConfig retrieval
     {
         myExitCode = 0;
     EXIT_1a:
@@ -3764,7 +3765,7 @@ FIND_NEW_SLG_FILE:
 
         char prevVerSLGName[MAX_PATH];
         if (!autoImportConfig &&                            // during UPGRADE this is pointless (the language was read a few lines above; this routine would just read it again)
-            FindLanguageFromPrevVerOfSal(prevVerSLGName) && // import the language from the previous version; the user likely wants to keep it (importing the old Salamander configuration)
+            FindLanguageFromPrevVerOfSal(prevVerSLGName) && // import the language from the previous version; it is quite likely that the user wants to use it again (this is importing the old Salamander configuration)
             slgDialog.SLGNameExists(prevVerSLGName))
         {
             lstrcpy(Configuration.SLGName, prevVerSLGName);
@@ -3775,9 +3776,9 @@ FIND_NEW_SLG_FILE:
             if (langIndex == -1) // this installation does not contain a language matching the current user locale in Windows
             {
 
-// if this is commented out, we will not send people to download language versions from the web (for example when none exist)
-// JRY: for AS 2.53, which ships with Czech, German, and English, we direct users of other languages to the discussion board section
-//      "Translations" section on the Altap community site - maybe it will motivate someone to create their own translation
+// if this is commented out, we will not send people to fetch language versions from the web (for example when there are none)
+// JRY: for AS 2.53, which ships with Czech, German, and English, we send users of other languages to the forum section
+//      "Translations" https://forum.altap.cz/viewforum.php?f=23 - maybe it will motivate someone to create their own translation
 #define OFFER_OTHERLANGUAGE_VERSIONS
 
 #ifndef OFFER_OTHERLANGUAGE_VERSIONS
@@ -3838,7 +3839,7 @@ FIND_NEW_SLG_FILE:
     // let the already running Salmon load the chosen SLG (it was using a temporary one so far)
     SalmonSetSLG(Configuration.SLGName);
 
-    // configure localized messages for the ALLOCHAN module (handles low-memory notifications, Retry button, and Cancel to terminate when all else fails)
+    // set localized messages for the ALLOCHAN module (it handles out-of-memory messages for the user + Retry button + when everything fails, also Cancel to terminate the application)
     SetAllocHandlerMessage(LoadStr(IDS_ALLOCHANDLER_MSG), SALAMANDER_TEXT_VERSION,
                            LoadStr(IDS_ALLOCHANDLER_WRNIGNORE), LoadStr(IDS_ALLOCHANDLER_WRNABORT));
 
@@ -3862,7 +3863,7 @@ FIND_NEW_SLG_FILE:
 
 #ifdef USE_BETA_EXPIRATION_DATE
     // the beta version is time-limited, see BETA_EXPIRATION_DATE
-    // if today is the date specified by that variable or later, show a dialog and exit
+    // if today is the date specified by that variable or any later date, show a dialog; if it is canceled, exit
     SYSTEMTIME st;
     GetLocalTime(&st);
     SYSTEMTIME* expire = &BETA_EXPIRATION_DATE;
@@ -3879,8 +3880,8 @@ FIND_NEW_SLG_FILE:
 
     GetSystemDPI(NULL);
 
-    // if the configuration does not exist or will be changed during import, the user
-    // has to live with the default or previous splash-screen setting
+    // if the configuration does not exist or is later changed during import from a file, the user
+    // is out of luck and the splash screen will use the default or previous value
     LoadSaveToRegistryMutex.Enter();
     if (OpenKey(HKEY_CURRENT_USER, configKey, hSalamander))
     {
@@ -3911,9 +3912,9 @@ FIND_NEW_SLG_FILE:
         goto EXIT_2;
     }
 
-    SetWinLibStrings(LoadStr(IDS_INVALIDNUMBER), MAINWINDOW_NAME); // j.r. - posunout na spravne misto
+    SetWinLibStrings(LoadStr(IDS_INVALIDNUMBER), MAINWINDOW_NAME); // j.r. - move to the correct place
 
-    // initialize the packers; previously done in constructors, now moved here
+    // initialize the packer-related components; previously done in constructors, now moved here
     // once the language DLL has been chosen
     PackerFormatConfig.InitializeDefaultValues();
     ArchiverConfig.InitializeDefaultValues();
@@ -3942,8 +3943,8 @@ FIND_NEW_SLG_FILE:
 
     CALL_STACK_MESSAGE1("WinMainBody::FindLatestConfiguration");
 
-    // pointer into 'SalamanderConfigurationRoots' to the configuration to load
-    // (NULL -> none; use default values)
+    // pointer to the configuration in 'SalamanderConfigurationRoots' that should be loaded
+    // (NULL -> none; default values are used)
     if (autoImportConfig)
         SALAMANDER_ROOT_REG = autoImportConfigFromKey; // during UPGRADE it makes no sense to search for a configuration
     else
@@ -3972,7 +3973,7 @@ FIND_NEW_SLG_FILE:
         goto EXIT_2;
     }
 
-    // verify the Common Controls version
+    // check the Common Controls version
     if (GetComCtlVersion(&CCVerMajor, &CCVerMinor) != S_OK) // JRYFIXME - move common controls checks to Windows 7+
     {
         CCVerMajor = 0; // this should never happen - they would lack comctl32.dll
@@ -4059,14 +4060,14 @@ FIND_NEW_SLG_FILE:
     // initialize the worker (disk operations)
     InitWorker();
 
-    // initialize the library that communicates with SalShExt/SalamExt/SalExtX86/SalExtX64.DLL (shell copy hook + shell context menu)
+    // initialize the library for communication with SalShExt/SalamExt/SalExtX86/SalExtX64.DLL (shell copy hook + shell context menu)
     InitSalShLib();
 
     // initialize the library for working with shell icon overlays (Tortoise SVN + CVS)
     LoadIconOvrlsInfo(SALAMANDER_ROOT_REG);
     InitShellIconOverlays();
 
-    // initialize functions that browse next/previous files in the panel/Find from the viewer
+    // initialize functions for navigating to the next/previous file in the panel/Find from the viewer
     InitFileNamesEnumForViewers();
 
     // load the list of shared directories
@@ -4092,7 +4093,7 @@ FIND_NEW_SLG_FILE:
                                         SHELLEXECUTE_CLASSNAME,
                                         NULL);
 
-    Associations.ReadAssociations(FALSE); // load associations from the registry
+    Associations.ReadAssociations(FALSE); // load associations from the registry; see ReadAssociations(FALSE)
 
     // register shell extensions
     // if we find a library in the "utils" subdirectory, verify its registration and register it if needed
@@ -4230,14 +4231,14 @@ FIND_NEW_SLG_FILE:
                     AccelTable1 = HANDLES(LoadAccelerators(HInstance, MAKEINTRESOURCE(IDA_MAINACCELS1)));
                     AccelTable2 = HANDLES(LoadAccelerators(HInstance, MAKEINTRESOURCE(IDA_MAINACCELS2)));
 
-                    MainWindow->CanClose = TRUE; // only now allow closing the main window
-                    // keep files from popping in one by one as their icons load
+                    MainWindow->CanClose = TRUE; // only now set TRUE to allow closing the main window
+                    // so files do not appear one by one as their icons load
                     UpdateWindow(MainWindow->HWindow);
 
                     BOOL doNotDeleteImportedCfg = FALSE;
                     if (autoImportConfig && // check whether the new version has fewer plugins and therefore part of the old configuration would be skipped
                         FindPluginsWithoutImportedCfg(&doNotDeleteImportedCfg))
-                    {                               // need to exit without saving the configuration
+                    {                               // the application needs to exit without saving the configuration
                         SALAMANDER_ROOT_REG = NULL; // this should reliably prevent writing configuration data into the registry
                         PostMessage(MainWindow->HWindow, WM_USER_FORCECLOSE_MAINWND, 0, 0);
                     }
@@ -4248,7 +4249,7 @@ FIND_NEW_SLG_FILE:
                             || Configuration.AddX86OnlyPlugins
 #endif // _WIN64
                         )
-                        {                                            // auto-install plug-ins from the standard "plugins" subdirectory
+                        {                                            // auto-install plugins from the standard "plugins" subdirectory
 #ifndef _WIN64                                                       // FIXME_X64_WINSCP
                             Configuration.AddX86OnlyPlugins = FALSE; // only once is necessary
 #endif                                                               // _WIN64
@@ -4261,16 +4262,16 @@ FIND_NEW_SLG_FILE:
                         // plug-ins were installed before Salamander was run)
                         if (Plugins.ReadPluginsVer(MainWindow->HWindow, Configuration.ConfigVersion < THIS_CONFIG_VERSION))
                             saveNewConfig = TRUE; // the new configuration must be saved (to avoid repeating this next time)
-                        // load plug-ins that have the load-on-start flag
+                        // load plugins that have the load-on-start flag
                         Plugins.HandleLoadOnStartFlag(MainWindow->HWindow);
-                        // if we start for the first time with a different language, load all plug-ins to check
-                        // whether they have this language and optionally let the user choose fallback languages
+                        // if we are starting for the first time with a changed language, load all plugins to check
+                        // whether they support this language and, if needed, let the user choose replacement languages
                         if (langChanged)
                             Plugins.LoadAll(MainWindow->HWindow);
 
-                        // FTP and WinSCP plug-ins now call SalamanderGeneral->SetPluginUsesPasswordManager() to subscribe to password manager events
-                        // introduced with configuration version 45 -- give all plug-ins a chance to subscribe
-                        if (Configuration.ConfigVersion < 45) // introduction of the password manager
+                        // FTP and WinSCP plugins now call SalamanderGeneral->SetPluginUsesPasswordManager() to subscribe to password manager events
+                        // introduced with configuration version 45 -- give all plugins a chance to subscribe
+                        if (Configuration.ConfigVersion < 45) // password manager introduced
                             Plugins.LoadAll(MainWindow->HWindow);
 
                         // future saves will go into the newest key
@@ -4281,15 +4282,15 @@ FIND_NEW_SLG_FILE:
                         {
                             MainWindow->SaveConfig();
                         }
-                        // scan the array; if any root is marked for deletion, remove it together with the old configuration
-                        // after UPGRADE it also clears the "AutoImportConfig" value in this version's configuration key
+                        // scan the array and, if any root is marked for deletion, delete it and also delete the old configuration
+                        // after UPGRADE; it also deletes the "AutoImportConfig" value in this version's Salamander configuration key
                         MainWindow->DeleteOldConfigurations(deleteConfigurations, autoImportConfig, autoImportConfigFromKey,
                                                             doNotDeleteImportedCfg);
 
-                        // only the first Salamander instance: check whether TEMP needs cleaning from leftover disk-cache files
-                        // (after a crash or another application locking them the files may remain)
-                        // we must test a global (cross-session) variable so two Salamander instances launched via Fast User Switching see each other
-                        // problem reported on the message board (Altap community topic 2643)
+                        // only the first Salamander instance: check whether TEMP needs to be cleaned of unnecessary disk-cache files
+                        // (after a crash or locking by another application, files may remain in TEMP)
+                        // we must test a global (across all sessions) variable so two Salamander instances launched under Fast User Switching can see each other
+                        // Problem reported on the forum: https://forum.altap.cz/viewtopic.php?t=2643
                         if (FirstInstance_3_or_later)
                         {
                             DiskCache.ClearTEMPIfNeeded(MainWindow->HWindow, MainWindow->GetActivePanelHWND());
@@ -4319,17 +4320,17 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                             PostMessage(MainWindow->HWindow, WM_USER_FORCECLOSE_MAINWND, 0, 0);
                         }
                         /*
-            // trigger the Tip of the Day dialog if needed
-            // 0xffffffff = open quietly - if it fails, do not bother the user
-            if (Configuration.ShowTipOfTheDay)
-              PostMessage(MainWindow->HWindow, WM_COMMAND, CM_HELP_TIP, 0xffffffff);
-  */
+                                    // if needed (Configuration.ShowTipOfTheDay == TRUE), trigger the Tip of the Day dialog
+                                    // 0xffffffff = open quietly - if it fails, do not bother the user
+                                    if (Configuration.ShowTipOfTheDay)
+                                      PostMessage(MainWindow->HWindow, WM_COMMAND, CM_HELP_TIP, 0xffffffff);
+                          */
                     }
 
                     // from now on closed paths will be remembered
                     MainWindow->CanAddToDirHistory = TRUE;
 
-                    // users want the start-up path in the history even if they have not touched it
+                    // users want the startup path to appear in the history even if they have not worked with it
                     MainWindow->LeftPanel->UserWorkedOnThisPath = TRUE;
                     MainWindow->RightPanel->UserWorkedOnThisPath = TRUE;
 
@@ -4354,7 +4355,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                         if (msg.message != WM_USER_SHOWWINDOW && msg.message != WM_USER_WAKEUP_FROM_IDLE && /*msg.message != WM_USER_SETPATHS &&*/
                             msg.message != WM_QUERYENDSESSION && msg.message != WM_USER_SALSHEXT_PASTE &&
                             msg.message != WM_USER_CLOSE_MAINWND && msg.message != WM_USER_FORCECLOSE_MAINWND)
-                        { // apart from "connect", "shutdown", "do-paste", and "close-main-wnd", every message starts the BUSY mode
+                        { // except for "connect", "shutdown", "do-paste", and "close-main-wnd" messages, every message puts Salamander into BUSY mode
                             SalamanderBusy = TRUE;
                             LastSalamanderIdleTime = GetTickCount();
                         }
@@ -4405,9 +4406,9 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                         {
                             if (msg.message == WM_QUIT)
                                 break;      // equivalent to GetMessage() returning FALSE
-                            haveMSG = TRUE; // we already have a message, process it without calling GetMessage()
+                            haveMSG = TRUE; // haveMSG is TRUE, so process the message without calling GetMessage()
                         }
-                        else // if there is no message in the queue, perform Idle processing
+                        else // if there are no messages in the queue, perform idle processing
                         {
 #ifdef _DEBUG
                             // check heap consistency every three seconds
@@ -4432,7 +4433,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                                 CannotCloseSalMainWnd = TRUE; // prevent the main window from closing while we run the following routines
                                 MainWindow->OnEnterIdle();
 
-                                // wait for ESC to be released only when a panel refresh follows immediately
+                                // wait for ESC to be released only when a panel listing refresh follows immediately
                                 // (which does not happen during IDLE)
                                 if (WaitForESCReleaseBeforeTestingESC)
                                     WaitForESCReleaseBeforeTestingESC = FALSE;
@@ -4494,14 +4495,14 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                                         PostMessage(MainWindow->HWindow, WM_USER_CONFIGURATION, 6, 0);
                                 }
 
-                                // if any plug-in requested an unload or menu rebuild, perform it (only when not "busy")
+                                // if any plugin requested an unload or menu rebuild, perform it (only when not "busy")
                                 if (!SalamanderBusy && ExecCmdsOrUnloadMarkedPlugins)
                                 {
                                     int cmd;
                                     CPluginData* data;
                                     Plugins.GetCmdAndUnloadMarkedPlugins(MainWindow->HWindow, &cmd, &data);
                                     ExecCmdsOrUnloadMarkedPlugins = (cmd != -1);
-                                    if (cmd >= 0 && cmd < 500) // run a Salamander command requested by a plug-in
+                                    if (cmd >= 0 && cmd < 500) // run a Salamander command requested by a plugin
                                     {
                                         int wmCmd = GetWMCommandFromSalCmd(cmd);
                                         if (wmCmd != -1)
@@ -4522,7 +4523,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                                         if (cmd >= 500 && cmd < 1000500) // run a menuExt command requested by a plug-in
                                         {
                                             int id = cmd - 500;
-                                            SalamanderBusy = TRUE; // executing a menu command, we are "busy" again
+                                            SalamanderBusy = TRUE; // going to execute a menu command - set "busy" to TRUE again
                                             LastSalamanderIdleTime = GetTickCount();
                                             if (data != NULL && data->GetLoaded())
                                             {
@@ -4531,7 +4532,7 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
                                                     CALL_STACK_MESSAGE4("CPluginInterfaceForMenuExt::ExecuteMenuItem(, , %d,) (%s v. %s)",
                                                                         id, data->DLLName, data->Version);
 
-                                                    // temporarily lower thread priority to "normal" (so the operation does not overload the machine)
+                                                    // lower the thread priority to "normal" (so the operation does not put too much load on the machine)
                                                     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
 
                                                     CSalamanderForOperations sm(MainWindow->GetActivePanel());
@@ -4637,13 +4638,13 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
     else
         TRACE_E("Unable to register main window class.");
 
-    // in case of an error try to close the dialog
+    // try to close the dialog in case of an error
     SplashScreenCloseIfExist();
 
     // restore the original thread priority
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
 
-    //--- give all windows one second to close, then disconnect them
+    //--- give all windows one second to close, then let them disconnect
     int timeOut = 10;
     int winsCount = WindowsManager.GetCount();
     while (timeOut-- && winsCount > 0)
@@ -4662,10 +4663,10 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
     TRACE_I("WindowsManager: " << WindowsManager.maxWndCount << " windows, " << WindowsManager.search << " searches, " << WindowsManager.cache << " cached searches.");
 #endif
     //---
-    DestroySafeWaitWindow(TRUE); // send "terminate" to the safe-wait-message thread
+    DestroySafeWaitWindow(TRUE); // send the "terminate" command (TRUE) to the safe-wait-message thread
     Sleep(1000);                 // allow all viewer threads time to finish
     NBWNetAC3Thread.Close(TRUE); // terminate the running thread (move to AuxThreads) and block further actions
-    TerminateAuxThreads();       // forcibly end the rest
+    TerminateAuxThreads();       // forcibly terminate the rest
                                  //---
     TerminateThread();
     ReleaseFileNamesEnumForViewers();
@@ -4700,8 +4701,8 @@ MENU_TEMPLATE_ITEM MsgBoxButtons[] =
     }
 
     //OleSpyStressTest(); // multi-threaded stress test
-    // OleSpyRevoke();     // detach OLESPY
-    OleUninitialize(); // deinitialize OLE
+    // OleSpyRevoke();     // revoke OLESPY
+    OleUninitialize(); // uninitialize OLE
     // OleSpyDump();       // dump any leaks
 
     TRACE_I("End");
@@ -4729,7 +4730,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR cmdLine, int cmdShow
     {
         TRACE_I("Thread Main: calling ExitProcess(1).");
         //    ExitProcess(1);
-        TerminateProcess(GetCurrentProcess(), 1); // harder exit (this one still performs some calls)
+        TerminateProcess(GetCurrentProcess(), 1); // more forceful exit (ExitProcess still calls something)
         return 1;
     }
 #endif // CALLSTK_DISABLE
