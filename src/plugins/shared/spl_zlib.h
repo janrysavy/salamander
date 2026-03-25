@@ -45,7 +45,7 @@
 #define SAL_Z_BUF_ERROR (-5)
 #define SAL_Z_VERSION_ERROR (-6)
 
-/* Control structure associated with each de/compression task */
+/* Control structure associated with each compression/decompression task */
 struct CSalZLIB
 {
     BYTE* next_in;  /* next input byte */
@@ -60,8 +60,8 @@ struct CSalZLIB
 };
 
 /* Any function of CSalamanderZLIBAbstract can be called from any thread.
-   Single instance can be used many times, using different zlibInfo structs.
-   For usage howtos, see the comment at the top of this file. */
+   A single instance can be used many times with different zlibInfo structs.
+   For usage instructions, see the comment at the top of this file. */
 
 class CSalamanderZLIBAbstract
 {
