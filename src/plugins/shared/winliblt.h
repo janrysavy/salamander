@@ -25,13 +25,13 @@ void SetWinLibStrings(const char* invalidNumber, // "not a number" (for numeric 
 // otherwise a class-name collision occurs and WinLib cannot work—the first plugin started would be the only one functioning);
 // 'dllInstance' is the plugin module (used when registering WinLib universal classes)
 BOOL InitializeWinLib(const char* pluginName, HINSTANCE dllInstance);
-// must be called after WinLib is used; 'dllInstance' is the plugin module (used when unregistering WinLib universal classes)
+// must be called after using WinLib; 'dllInstance' is the plugin module (used when unregistering WinLib's universal classes)
 void ReleaseWinLib(HINSTANCE dllInstance);
 
-// callback type for hooking into HTML help
+// callback type for HTML Help integration
 typedef void(WINAPI* FWinLibLTHelpCallback)(HWND hWindow, UINT helpID);
 
-// configure the callback for hooking into HTML Help
+// set the callback for connecting to HTML Help
 void SetupWinLibHelp(FWinLibLTHelpCallback helpCallback);
 
 // constants for WinLib strings (internal use within WinLib only)
@@ -44,7 +44,7 @@ enum CWLS
 };
 
 extern char CWINDOW_CLASSNAME[100];  // class name of the universal window
-extern char CWINDOW_CLASSNAME2[100]; // class name of the universal window - lacks CS_VREDRAW | CS_HREDRAW
+extern char CWINDOW_CLASSNAME2[100]; // char array holding the window class name for the universal window - without CS_VREDRAW | CS_HREDRAW
 
 // ****************************************************************************
 
@@ -52,12 +52,12 @@ enum CObjectOrigin // used when windows and dialogs are destroyed
 {
     ooAllocated, // will be deallocated during WM_DESTROY
     ooStatic,    // WM_DESTROY sets HWindow to NULL
-    ooStandard   // modal dlg => ooStatic, modeless dlg => ooAllocated
+    ooStandard   // for modal dlg => ooStatic, for modeless dlg => ooAllocated
 };
 
 // ****************************************************************************
 
-enum CObjectType // to recognize the object type
+enum CObjectType // used to identify the object type
 {
     otBase,
     otWindow,
@@ -70,11 +70,11 @@ enum CObjectType // to recognize the object type
 
 // ****************************************************************************
 
-class CWindowsObject // base class of all MS Windows objects
+class CWindowsObject // base class of all MS-Windows objects
 {
 public:
     HWND HWindow;
-    UINT HelpID; // -1 = empty value (do not use help)
+    UINT HelpID; // -1 = no value (help not used)
 
     CWindowsObject(CObjectOrigin origin)
     {
@@ -89,7 +89,7 @@ public:
         SetHelpID(helpID);
     }
 
-    virtual ~CWindowsObject() {} // ensures descendants have their destructors invoked
+    virtual ~CWindowsObject() {} // so derived class destructors are called
 
     virtual BOOL Is(int) { return FALSE; } // object identification
     virtual int GetObjectType() { return otBase; }
@@ -134,8 +134,8 @@ public:
     // registers the WinLib universal classes, called automatically (unregistration is also automatic)
     static BOOL RegisterUniversalClass(HINSTANCE dllInstance);
 
-    // registration of a custom universal class; WARNING: when the plugin unloads the class must be unregistered,
-    // otherwise loading the plugin again will fail because of a conflict with the old class
+    // registers a custom universal class; WARNING: when the plugin is unloaded, the class must be unregistered,
+    // otherwise registering it again when the plugin is reloaded will fail because of a conflict with the old class
     static BOOL RegisterUniversalClass(UINT style,
                                        int cbClsExtra,
                                        int cbWndExtra,
@@ -189,7 +189,7 @@ protected:
 
 enum CTransferType
 {
-    ttDataToWindow,  // data go to the window
+    ttDataToWindow,  // data is transferred to the window
     ttDataFromWindow // data come from the window
 };
 
@@ -198,7 +198,7 @@ enum CTransferType
 class CTransferInfo
 {
 public:
-    int FailCtrlID; // INT_MAX - everything is OK, otherwise the control ID with the error
+    int FailCtrlID; // INT_MAX - everything is OK; otherwise, the ID of the control with the error
     CTransferType Type;
 
     CTransferInfo(HWND hDialog, CTransferType type)
@@ -217,15 +217,15 @@ public:
     void RadioButton(int ctrlID, int ctrlValue, int& value);
     void CheckBox(int ctrlID, int& value); // 0-unchecked, 1-checked, 2-grayed
 
-    // validates a double value (if it is not a number, it fails); the separator can be '.' or ',';
-    // 'format' is used in sprintf when converting the number to a string (e.g. "%.2f" or "%g")
+    // validates a double value (if it is not a number, validation fails); the decimal separator can be '.' or ',';
+    // 'format' is used by sprintf when converting the number to a string (e.g. "%.2f" or "%g")
     void EditLine(int ctrlID, double& value, char* format, BOOL select = TRUE);
 
-    // validates an int value (if it is not a number, it fails)
+    // validates an integer value (if it is not numeric, validation fails)
     void EditLine(int ctrlID, int& value, BOOL select = TRUE);
 
 protected:
-    HWND HDialog; // handle of the dialog for which the transfer is executed
+    HWND HDialog; // handle of the dialog for which the transfer is performed
 };
 
 // ****************************************************************************
@@ -293,12 +293,12 @@ class CPropertyDialog;
 class CPropSheetPage : protected CDialog
 {
 public:
-    CDialog::HWindow; // keep HWindow accessible
+    CDialog::HWindow; // keep HWindow available
 
     CDialog::SetObjectOrigin; // expose allowed base-class methods
     CDialog::Transfer;
 
-    // tested with a page dialog resource with the style:
+    // tested with a property page dialog resource with the style:
     // DS_CONTROL | DS_3DLOOK | WS_CHILD | WS_CAPTION;
     // if we want to use the title directly from the resource, set 'title'==NULL and
     // 'flags'==0
@@ -341,11 +341,11 @@ protected:
 class CPropertyDialog : public TIndirectArray<CPropSheetPage>
 {
 public:
-    // it is best to add objects of individual pages to this object
-    // and then add them as "static" (default option) through the Add method;
-    // 'startPage' and 'lastPage' can be just a single variable (value in/reference out);
-    // 'flags' see the help for 'PROPSHEETHEADER', the most useful constants are
-    // PSH_NOAPPLYNOW, PSH_USECALLBACK, and PSH_HASHELP (otherwise 'flags'==0 is enough)
+    // it is best to add the individual page objects to this object
+    // and then add them via the Add method as "static" (the default option);
+    // 'startPage' and 'lastPage' can be a single variable (value in/reference out);
+    // for 'flags', see the help for 'PROPSHEETHEADER'; the most useful constants are
+    // PSH_NOAPPLYNOW, PSH_USECALLBACK, and PSH_HASHELP (otherwise 'flags'==0 is sufficient)
     CPropertyDialog(HWND parent, HINSTANCE modul, char* caption,
                     int startPage, DWORD flags, HICON icon = NULL,
                     DWORD* lastPage = NULL, PFNPROPSHEETCALLBACK callback = NULL)
@@ -437,17 +437,17 @@ public:
     }
     ~CWindowQueue();
 
-    BOOL Add(CWindowQueueItem* item); // add an item to the queue, returns success
+    BOOL Add(CWindowQueueItem* item); // adds an item to the queue; returns TRUE on success
     void Remove(HWND hWindow);        // remove an item from the queue
     BOOL Empty();                     // returns TRUE if the queue is empty
 
-    // send (PostMessage - windows can be in different threads) a message to all windows
+    // posts a message to all windows (using PostMessage - the windows may be in different threads)
     void BroadcastMessage(DWORD uMsg, WPARAM wParam, LPARAM lParam);
 
-    // broadcast WM_CLOSE, then wait for an empty queue (at most the time defined by 'force' using either 'forceWaitTime'
-    // or 'waitTime'); returns TRUE if the queue is empty (all windows were closed)
-    // or if 'force' is TRUE; INFINITE means waiting without a limit
-    // Note: with 'force' TRUE it always returns TRUE, there is no point waiting, so forceWaitTime = 0
+    // broadcasts WM_CLOSE, then waits for the queue to become empty (up to either 'forceWaitTime'
+    // or 'waitTime', depending on 'force'); returns TRUE if the queue is empty (all windows closed)
+    // or if 'force' is TRUE; INFINITE means waiting indefinitely
+    // Note: when 'force' is TRUE, it always returns TRUE, so there is no point in waiting, therefore forceWaitTime = 0
     BOOL CloseAllWindows(BOOL force, int waitTime = 1000, int forceWaitTime = 0);
 };
 
