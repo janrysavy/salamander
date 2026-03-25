@@ -16,7 +16,7 @@
 #endif // _MSC_VER
 #include <limits.h>
 #include <stdio.h>
-//#include <commctrl.h>  // I need HIMAGELIST
+//#include <commctrl.h>  // need HIMAGELIST
 #include <ostream>
 #ifdef __BORLANDC__
 #include <stdlib.h>
@@ -44,7 +44,7 @@
 char CWINDOW_CLASSNAME[100] = "";
 char CWINDOW_CLASSNAME2[100] = ""; // lacks CS_VREDRAW | CS_HREDRAW
 
-ATOM AtomObject = 0; // window "property" with a pointer to the object (used in WindowsManager)
+ATOM AtomObject = 0; // window "property" containing a pointer to the object (used by WindowsManager)
 CWindowsManager WindowsManager;
 
 char WinLibStrings[WLS_COUNT][101] = {
@@ -140,7 +140,7 @@ HWND CWindow::CreateEx(DWORD dwExStyle,        // extended window style
                        int nHeight,            // window height
                        HWND hwndParent,        // handle of parent or owner window
                        HMENU hmenu,            // handle of menu or child-window identifier
-                       HINSTANCE hinst,        // handle of application instance
+                       HINSTANCE hinst,        // handle to the application instance
                        LPVOID lpvParam)        // pointer to the window object being created
 {
     HWND hWnd = CreateWindowEx(dwExStyle,
@@ -158,13 +158,13 @@ HWND CWindow::CreateEx(DWORD dwExStyle,        // extended window style
     if (hWnd != 0)
     {
         if (WindowsManager.GetWindowPtr(hWnd) == NULL) // if it is not already in WindowsManager
-            AttachToWindow(hWnd);                      // add it -> subclassing
+            AttachToWindow(hWnd);                      // then add it -> subclassing
     }
     return hWnd;
 }
 
 HWND CWindow::Create(LPCTSTR lpszClassName,  // address of registered class name
-                     LPCTSTR lpszWindowName, // address of window name
+                     LPCTSTR lpszWindowName, // pointer to the window name
                      DWORD dwStyle,          // window style
                      int x,                  // horizontal position of window
                      int y,                  // vertical position of window
@@ -172,7 +172,7 @@ HWND CWindow::Create(LPCTSTR lpszClassName,  // address of registered class name
                      int nHeight,            // window height
                      HWND hwndParent,        // handle of parent or owner window
                      HMENU hmenu,            // handle of menu or child-window identifier
-                     HINSTANCE hinst,        // handle of application instance
+                     HINSTANCE hinst,        // handle to the application instance
                      LPVOID lpvParam)        // pointer to the window object being created
 {
     return CreateEx(0,
@@ -207,7 +207,7 @@ void CWindow::AttachToWindow(HWND hWnd)
     HWindow = hWnd;
     SetWindowLongPtr(HWindow, GWLP_WNDPROC, (LONG_PTR)CWindowProc);
 
-    if (DefWndProc == CWindow::CWindowProc) // that would be recursion
+    if (DefWndProc == CWindow::CWindowProc) // that would cause recursion
     {
         TRACE_C("This should never happen.");
         DefWndProc = DefWindowProc;
@@ -252,7 +252,7 @@ CWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             return TRUE;
         }
         if (GetWindowLong(HWindow, GWL_STYLE) & WS_CHILD)
-            break;   // if we do not handle F1 and it is a child window, let F1 pass to the parent
+            break;   // if we do not handle F1 and this is a child window, let F1 fall through to the parent
         return TRUE; // if it is not a child, finish handling F1
     }
     }
@@ -265,9 +265,9 @@ CWindow::CWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     CWindow* wnd;
     switch (uMsg)
     {
-    case WM_CREATE: // first message - attach the object to the window
+    case WM_CREATE: // first message - attaching the object to the window
     {
-        // handle MDI_CHILD_WINDOW
+        // for an MDI child window, get the object from lpCreateParams
         if (((CREATESTRUCT*)lParam)->dwExStyle & WS_EX_MDICHILD)
             wnd = (CWindow*)((MDICREATESTRUCT*)((CREATESTRUCT*)lParam)->lpCreateParams)->lParam;
         else
@@ -280,7 +280,7 @@ CWindow::CWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         else
         {
             wnd->HWindow = hwnd;
-            //--- insert the window into the list by hwnd
+            //--- add the window to the window list by hwnd
             if (!WindowsManager.AddWindow(hwnd, wnd)) // error
             {
                 TRACE_E("Error during creating of window.");
@@ -295,7 +295,7 @@ CWindow::CWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         wnd = (CWindow*)WindowsManager.GetWindowPtr(hwnd);
         if (wnd != NULL && wnd->Is(otWindow))
         {
-            // Petr: moved it below wnd->WindowProc() so that messages still arrive during WM_DESTROY (Lukas needed it)
+            // Petr: I moved it below wnd->WindowProc() so messages would still be delivered during WM_DESTROY
             // WindowsManager.DetachWindow(hwnd);
 
             LRESULT res = wnd->WindowProc(uMsg, wParam, lParam);
@@ -314,7 +314,7 @@ CWindow::CWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             else
                 wnd->HWindow = NULL; // it is no longer attached
             if (res == 0)
-                return 0; // the application handled it
+                return 0; // the application handled it; return 0
             wnd = NULL;
         }
         break;
@@ -337,7 +337,7 @@ CWindow::CWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         return wnd->WindowProc(uMsg, wParam, lParam);
     else
         return DefWindowProc(hwnd, uMsg, wParam, lParam);
-    // error or the message arrived before WM_CREATE
+    // error, or the message was received before WM_CREATE
 }
 
 BOOL CWindow::RegisterUniversalClass(HINSTANCE dllInstance)
@@ -452,7 +452,7 @@ CDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         {
             WinLibLTHelpCallback(HWindow, HelpID);
         }
-        return TRUE; // do not let F1 fall through to the parent even if WinLibLTHelpCallback() is not called
+        return TRUE; // return TRUE so F1 does not go to the parent even if WinLibLTHelpCallback() is not called
     }
 
     case WM_COMMAND:
@@ -678,11 +678,11 @@ CPropSheetPage::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_NOTIFY:
     {
-        if (((NMHDR*)lParam)->code == PSN_KILLACTIVE) // page deactivation
+        if (((NMHDR*)lParam)->code == PSN_KILLACTIVE) // PSN_KILLACTIVE: page deactivation
         {
             if (ValidateData())
                 SetWindowLongPtr(HWindow, DWLP_MSGRESULT, FALSE);
-            else // do not allow the page to deactivate
+            else // do not allow the page to be deactivated
                 SetWindowLongPtr(HWindow, DWLP_MSGRESULT, TRUE);
             return TRUE;
         }
@@ -704,7 +704,7 @@ CPropSheetPage::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         }
 
         if (((NMHDR*)lParam)->code == PSN_APPLY)
-        { // ApplyNow or OK button pressed
+        { // Apply Now or OK button pressed
             if (TransferData(ttDataFromWindow))
                 SetWindowLongPtr(HWindow, DWLP_MSGRESULT, PSNRET_NOERROR);
             else
@@ -749,7 +749,7 @@ CPropSheetPage::CPropSheetPageProc(HWND hwndDlg, UINT uMsg, WPARAM wParam,
     CPropSheetPage* dlg;
     switch (uMsg)
     {
-    case WM_INITDIALOG: // first message - attach the object to the dialog
+    case WM_INITDIALOG: // first message: attach the object to the dialog
     {
         dlg = (CPropSheetPage*)((PROPSHEETPAGE*)lParam)->lParam;
         if (dlg == NULL)
@@ -913,7 +913,7 @@ CWindowQueue::~CWindowQueue()
 {
     if (!Empty())
         TRACE_E("Some window is still opened in " << QueueName << " queue!"); // should not happen...
-    // multi-threading is no longer a risk here (the plugin is shutting down, threads are/were terminated)
+    // multi-threading is no longer an issue here (the plugin is shutting down, the threads have been terminated)
     // free at least some memory
     CWindowQueueItem* last;
     CWindowQueueItem* item = Head;
@@ -946,7 +946,7 @@ void CWindowQueue::Remove(HWND hWindow)
     CWindowQueueItem* item = Head;
     while (item != NULL)
     {
-        if (item->HWindow == hWindow) // found, remove it
+        if (item->HWindow == hWindow) // found; remove it
         {
             if (last != NULL)
                 last->Next = item->Next;
@@ -988,7 +988,7 @@ BOOL CWindowQueue::CloseAllWindows(BOOL force, int waitTime, int forceWaitTime)
     // send a request to close all windows
     BroadcastMessage(WM_CLOSE, 0, 0);
 
-    // wait until/if they close
+    // wait to see whether they close
     DWORD ti = GetTickCount();
     DWORD w = force ? forceWaitTime : waitTime;
     while ((w == INFINITE || w > 0) && !Empty())
@@ -1018,7 +1018,7 @@ BOOL CWindowQueue::CloseAllWindows(BOOL force, int waitTime, int forceWaitTime)
 BOOL CTransferInfo::GetControl(HWND& ctrlHWnd, int ctrlID, BOOL ignoreIsGood)
 {
     if (!ignoreIsGood && !IsGood())
-        return FALSE; // no point processing anything else
+        return FALSE; // no point in processing anything else; return FALSE
     ctrlHWnd = GetDlgItem(HDialog, ctrlID);
     if (ctrlHWnd == NULL)
     {
