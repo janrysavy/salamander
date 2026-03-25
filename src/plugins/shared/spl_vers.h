@@ -17,7 +17,7 @@
 #error this file is not editable by Microsoft Visual C++
 #endif //defined(APSTUDIO_INVOKED) && !defined(APSTUDIO_READONLY_SYMBOLS)
 
-// conversion macros num->str
+// number-to-string conversion macros
 #define VERSINFO_xstr(s) VERSINFO_str(s)
 #define VERSINFO_str(s) #s
 
@@ -25,7 +25,7 @@
 #define VERSINFO_SALAMANDER_MINORA 0
 #define VERSINFO_SALAMANDER_MINORB 0
 
-#if (VERSINFO_SALAMANDER_MINORB == 0) // we do not write zero in the hundredths 2.50 -> 2.5
+#if (VERSINFO_SALAMANDER_MINORB == 0) // we omit the trailing zero in the hundredths place: 2.50 -> 2.5
 #define VERSINFO_SALAMANDER_VERSION VERSINFO_xstr(VERSINFO_SALAMANDER_MAJOR) "." VERSINFO_xstr(VERSINFO_SALAMANDER_MINORA) VERSINFO_BETAVERSION_TXT
 #define VERSINFO_SAL_SHORT_VERSION VERSINFO_xstr(VERSINFO_SALAMANDER_MAJOR) VERSINFO_xstr(VERSINFO_SALAMANDER_MINORA) VERSINFO_BETAVERSIONSHORT_TXT
 #else
@@ -33,8 +33,8 @@
 #define VERSINFO_SAL_SHORT_VERSION VERSINFO_xstr(VERSINFO_SALAMANDER_MAJOR) VERSINFO_xstr(VERSINFO_SALAMANDER_MINORA) VERSINFO_xstr(VERSINFO_SALAMANDER_MINORB) VERSINFO_BETAVERSIONSHORT_TXT
 #endif
 
-#ifdef VERSINFO_MAJOR      // defined only when it is used from a plugin
-#if (VERSINFO_MINORB == 0) // we do not write zero in the hundredths 2.50 -> 2.5
+#ifdef VERSINFO_MAJOR      // defined only when used by a plugin
+#if (VERSINFO_MINORB == 0) // we do not write the trailing zero in the hundredths place: 2.50 -> 2.5
 #define VERSINFO_VERSION VERSINFO_xstr(VERSINFO_MAJOR) "." VERSINFO_xstr(VERSINFO_MINORA) VERSINFO_BETAVERSION_TXT
 #define VERSINFO_VERSION_NO_PLATFORM VERSINFO_xstr(VERSINFO_MAJOR) "." VERSINFO_xstr(VERSINFO_MINORA) VERSINFO_BETAVERSION_TXT_NO_PLATFORM
 #else
@@ -51,11 +51,12 @@
 
 // VERSINFO_BUILDNUMBER:
 //
-// Used to easily distinguish the versions of all modules between individual Salamander
-// releases (this is the last component of the version number of all plugins and Salamander).
-// Increase it with every release (IB, DB, PB, beta, final, or even a test build sent to a
-// single user). An overview of the version categories is in doc\versions.txt. Always add a
-// comment that states which Salamander version the newly used build number belongs to.
+// Used to easily distinguish versions of all modules across individual Salamander
+// versions (it is the last component of the version number of all plugins and
+// Salamander). Increase it with every version (IB, DB, PB, beta, release, or even
+// just a test version sent to a single user). An overview of the different version
+// types is in doc\versions.txt. Always add a comment describing which Salamander
+// version the newly used build number belongs to.
 //
 // Overview of used VERSINFO_BUILDNUMBER values:
 // 9 - 2.5 beta 9
@@ -96,20 +97,20 @@
 // 182 - 4.0 (CB182)
 // 183 - 5.0
 
-// ! IMPORTANT: new build numbers must be recorded in the "default" branch, and then
-//             only then into the side branch (the complete list exists only in the "default" branch)
+// ! IMPORTANT: new build numbers must be recorded in the "default" branch first, and only
+//             then in the secondary branch (the complete list exists only in the "default" branch)
 #define VERSINFO_BUILDNUMBER 183
 
 // VERSINFO_BETAVERSION_TXT:
 //
-// Changes with every build; for a release version VERSINFO_BETAVERSION_TXT will be "".
-// If we publish corrective beta versions such as 2.5 beta 9a, we increase
+// Changes with every build; in a release version, VERSINFO_BETAVERSION_TXT will be "".
+// If we publish special beta fix releases such as 2.5 beta 9a, we increase
 // VERSINFO_BUILDNUMBER by one and set VERSINFO_BETAVERSION_TXT == " beta 9a".
 //
-// VERSINFO_BETAVERSIONSHORT_TXT is used for naming bug reports; it should be as short as possible
+// VERSINFO_BETAVERSIONSHORT_TXT is used to name bug reports; it should be as short as possible
 
-// examples ("x86" is for the 32-bit version, "x64" for the 64-bit version; in the following examples they are
-// interchangeable as x86/x64): " (x86)" (for release versions), " beta 2 (x64)", " beta 2 (SDK x86)",
+// examples ("x86" is for the 32-bit version, "x64" for the 64-bit version; in the following examples,
+// x86/x64 are interchangeable): " (x86)" (for release versions), " beta 2 (x64)", " beta 2 (SDK x86)",
 // " RC1 (x64)", " beta 2 (IB21 x86)", " beta 2 (DB21 x64)", " beta 2 (PB21 x86)"
 #define VERSINFO_BETAVERSION_TXT " (" SAL_VER_PLATFORM ")"
 #define VERSINFO_BETAVERSION_TXT_NO_PLATFORM "" // copy the line above + remove SAL_VER_PLATFORM + if the parentheses are empty, remove them + delete extra spaces
