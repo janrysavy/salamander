@@ -9,7 +9,7 @@
 #include <ostream>
 #include <commctrl.h> // need LPCOLORMAP
 
-#if defined(_DEBUG) && defined(_MSC_VER) // without passing file+line to 'new' operator, list of memory leaks shows only 'crtdbg.h(552)'
+#if defined(_DEBUG) && defined(_MSC_VER) // without passing the file and line to the 'new' operator, the memory leak list shows only 'crtdbg.h(552)'
 #define new new (_NORMAL_BLOCK, __FILE__, __LINE__)
 #endif
 
@@ -543,11 +543,11 @@ C__Handles::~C__Handles()
     // check and list the remaining handles
     if (Handles.Count != 0)
     {
-        // I had to replace the code below that used MESSAGE_E, because when this destructor runs the stream facets in ALTAPDB
-        // have already been destroyed and sending an int or a handle to the stream simply crashes (happens only in VC2010 and VC2012; it still
-        // works in VC2008). Salamander does not misbehave, probably because the RTL lives in a DLL (it is static in ALTAPDB) or something
-        // similar. I did not investigate further; a better solution would be to ensure the facets are destroyed after this module, but
-        // unfortunately I do not know how to do that (only at the "lib" level).
+        // The code below using MESSAGE_E had to be replaced because when this destructor runs, the stream facets in ALTAPDB
+        // have already been destroyed, and sending an int or a handle to the stream simply crashes (this happens only in VC2010 and VC2012;
+        // it still works in VC2008). Salamander does not exhibit this problem, probably because the RTL is in a DLL (it is static in ALTAPDB)
+        // or for a similar reason. This was not investigated further; a better solution would be to ensure the facets are destroyed after this
+        // module, but unfortunately that cannot be done here (only at the "lib" level).
         char msgBuf[1000];
         sprintf_s(msgBuf,
 #ifdef MESSAGES_DEBUG
@@ -2345,7 +2345,7 @@ HFILE
 C__Handles::OpenFile(LPCSTR lpFileName, LPOFSTRUCT lpReOpenBuff, UINT uStyle)
 {
     HFILE ret = ::OpenFile(lpFileName, lpReOpenBuff, uStyle);
-    CheckCreate(ret != HFILE_ERROR, __htFile, __hoOpenFile, (HANDLE)(UINT_PTR)ret, GetLastError(), TRUE); // lpFileName is only char even in the Unicode version = unusable function (obsolete), so I removed it from the parameter output
+    CheckCreate(ret != HFILE_ERROR, __htFile, __hoOpenFile, (HANDLE)(UINT_PTR)ret, GetLastError(), TRUE); // lpFileName is char-only even in the Unicode version = unusable function (obsolete), so I removed it from the parameter list
     return ret;
 }
 
@@ -2377,7 +2377,7 @@ HDWP C__Handles::DeferWindowPos(HDWP hWinPosInfo, HWND hWnd, HWND hWndInsertAfte
 {
     HDWP ret = ::DeferWindowPos(hWinPosInfo, hWnd, hWndInsertAfter, x, y, cx, cy, uFlags);
 
-    if (ret != hWinPosInfo) // the structure was reallocated—we must update the value of the monitored handle
+    if (ret != hWinPosInfo) // the structure was reallocated, so we must update the tracked handle value
     {
         CheckClose(TRUE, (HANDLE)hWinPosInfo, __htDeferWindowPos, __GetHandlesOrigin(__hoDeferWindowPos), ERROR_SUCCESS, FALSE);
         CheckCreate(ret != NULL, __htDeferWindowPos, __hoDeferWindowPos, (HANDLE)ret, GetLastError());
