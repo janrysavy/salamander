@@ -76,8 +76,8 @@
 // CIconList
 //
 //
-// Following the W2K approach we store items in a bitmap that is four icons wide.
-// Operations on such a bitmap orientation are likely faster.
+// Following the W2K approach, we store items in a bitmap four icons wide.
+// Operations on a bitmap laid out this way will probably be faster.
 
 #define IL_DRAW_BLEND 0x00000001       // use 50% of the blendClr color
 #define IL_DRAW_TRANSPARENT 0x00000002 // preserve the original background during \
@@ -113,7 +113,7 @@ private:
     static int TmpImageHeight;               // height of HTmpImage in pixels
     static int MemDCLocks;                   // used when destroying HMemDC
     static CRITICAL_SECTION CriticalSection; // access synchronization
-    static int CriticalSectionLocks;         // for constructing/destructing the section
+    static int CriticalSectionLocks;         // for constructing/destructing CriticalSection
 
 public:
     //    BOOL     Dump; // if TRUE, raw data are dumped to TRACE
@@ -140,12 +140,12 @@ public:
     virtual BOOL WINAPI ReplaceIcon(int index, HICON hIcon);
 
     // create an icon from position 'index'; returns its handle or NULL on failure
-    // Destroy the returned icon using DestroyIcon
+    // the returned icon must be destroyed after use using the API DestroyIcon
     virtual HICON WINAPI GetIcon(int index);
     HICON GetIcon(int index, BOOL useHandles);
 
     // create an image list (one row, column count equals item count); returns its handle or NULL on failure
-    // destroy the returned image list using ImageList_Destroy()
+    // the returned image list must be destroyed after use using the API ImageList_Destroy()
     virtual HIMAGELIST WINAPI GetImageList();
 
     // copies one item from 'srcIL' at position 'srcIndex' to position 'dstIndex'
