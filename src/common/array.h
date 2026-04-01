@@ -32,10 +32,10 @@ enum CDeleteType
 enum CErrorType
 {
     etNone,         // OK
-    etLowMemory,    // new - NULL
+    etLowMemory,    // new returned NULL
     etUnknownIndex, // index is outside the array range
-    etBadInsert,    // index of the inserted item is outside the array range
-    etBadDispose,   // index of the disposed item is outside the array range
+    etBadInsert,    // index of the inserted item is out of range for the array
+    etBadDispose,   // index of the disposed item is out of range for the array
     etDestructed,   // the array has already been destroyed via Destroy()
 };
 
@@ -81,7 +81,7 @@ public:
     void Insert(int index, const DATA_TYPE& member);
     int Add(const DATA_TYPE& member); // appends an item and returns its index
 
-    void Insert(int index, const DATA_TYPE* members, int count); // insert 'count' items from 'members'
+    void Insert(int index, const DATA_TYPE* members, int count); // inserts 'count' items from 'members'
     int Add(const DATA_TYPE* members, int count);                // append 'count' items from 'members'
 
     DATA_TYPE& At(int index) // returns a reference to the item at 'index'
@@ -358,7 +358,7 @@ public:
     void Insert(int index, const DATA_TYPE& member);
     inline WORD Add(const DATA_TYPE& member);      // adds an item to the end of the array,
                                                    // returns the item index
-    WORD Add(const DATA_TYPE* members, int count); // adds 'count' members items
+    WORD Add(const DATA_TYPE* members, int count); // adds 'count' items from 'members'
 
     DATA_TYPE& At(int index) // returns a reference to the item at the position
     {                        // int used only to silence warnings—the range is up to 65535
@@ -694,7 +694,7 @@ TDirectArray<DATA_TYPE>::TDirectArray(int base, int delta)
 template <class DATA_TYPE>
 void TDirectArray<DATA_TYPE>::Destroy()
 {
-    if (State == etNone) // it can be also etDestructed
+    if (State == etNone) // State can also be etDestructed
     {
         if (Data != NULL)
         {
@@ -783,13 +783,13 @@ void TDirectArray<DATA_TYPE>::Insert(int index, const DATA_TYPE* members, int co
 #if defined(_DEBUG) || defined(__ARRAY_DEBUG)
     if (State == etNone)
     {
-        if (Count + count > Available && members + count - 1 >= Data && // array will be reallocated and inserted items are from this array (items will be released after array reallocation)
+        if (Count + count > Available && members + count - 1 >= Data && // the array will be reallocated, and the inserted items come from this array (they will be released after reallocation)
             members < Data + Count)
         {
             TRACE_C("Inserted items could become invalid during operation.");
             return;
         }
-        if (Count + count <= Available &&                  // if array will not be reallocated
+        if (Count + count <= Available &&                  // if the array will not be reallocated
             members + count - 1 >= Data + index + count && // and if inserted part is from memory where array will be enlarged
             members < Data + Count + count)
         {
@@ -1189,7 +1189,7 @@ template <class DATA_TYPE, WORD Base, WORD Delta>
 void TSmallerDirectArray<DATA_TYPE, Base, Delta>::Destroy()
 {
 #if defined(_DEBUG) || defined(__ARRAY_DEBUG)
-    if (State == etNone) // etDestructed can also occur
+    if (State == etNone) // State can also be etDestructed
     {
 #endif
         if (Data != NULL)
