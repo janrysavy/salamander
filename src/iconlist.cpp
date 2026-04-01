@@ -10,13 +10,13 @@
 // CIconList
 //
 
-// number of items per row; following the Windows 2000 style we use 4
-// probably to speed up the operations a bit
+// number of items in one row; following the W2K convention, we use 4
+// probably to make the operations faster
 const int IL_ITEMS_IN_ROW = 4;
 
 #define IL_TYPE_NORMAL 0 // regular icon that can be drawn using BitBlt
 #define IL_TYPE_XOR 1    // icon containing areas that require XOR blending
-#define IL_TYPE_ALPHA 2  // icon that includes an alpha channel
+#define IL_TYPE_ALPHA 2  // icon containing an alpha channel
 
 HDC CIconList::HMemDC = NULL;
 HBITMAP CIconList::HOldBitmap = NULL;
@@ -265,7 +265,7 @@ BOOL CIconList::CreateFromImageList(HIMAGELIST hIL, int requiredImageSize)
     if (!Create(cx, cy, count))
         return FALSE;
 
-    // j.r. an optimization is possible here: pass via ImageList_Draw instead of icon by icon
+    // j.r. this could be optimized here: instead of passing icons one by one, pass them via ImageList_Draw
     if (count > 20)
     {
         TRACE_E("CIconList::CreateFromImageList(): Let me know that you need so many icons, it would deserve some optimizations here. Jan.");
@@ -288,9 +288,9 @@ BOOL CIconList::CreateFromImageList(HIMAGELIST hIL, int requiredImageSize)
     return TRUE;
 }
 
-// On W2K with a 32bpp desktop we get XP icons with the full alpha channel intact.
-// Switching the desktop to 16bpp trims the alpha channel (zeroed).
-// If ApplyMaskToImage therefore receives an icon with alpha, it returns
+// On W2K with a 32bpp desktop, we get XP icons with the alpha channel intact.
+// Switching the desktop to 16bpp trims the alpha channel (sets it to zero).
+// If ApplyMaskToImage therefore receives an icon including the alpha channel, it returns
 // IL_TYPE_ALPHA and Salamander will render such icons correctly even on pre-XP systems
 
 BYTE CIconList::ApplyMaskToImage(int index, BYTE forceXOR)
@@ -323,8 +323,8 @@ BYTE CIconList::ApplyMaskToImage(int index, BYTE forceXOR)
                 if ((*maskPtr != 0) && (*ptr != 0))
                 {
                     type = IL_TYPE_XOR;
-                    // the fact the icon is a candidate for XOR does not mean
-                    // it won't be ALPHA, so we cannot exit yet
+                    // the fact that the icon is a candidate for XOR does not mean
+                    // it will not be ALPHA, so we cannot exit yet
                 }
                 ptr++;
                 maskPtr++;
@@ -351,7 +351,7 @@ SKIP:
                 if (*maskPtr != 0)
                 {
                     // completely transparent area
-                    // the alpha channel is in the top byte; set it to 00 and keep the background color in the rest
+                    // the alpha channel is in the highest byte; set it to 00, the rest will be the background color
                     *ptr = bkClr;
                 }
                 else
@@ -593,14 +593,14 @@ CIconList::GetIcon(int index)
             DWORD argb = *imagePtr;
             BYTE alpha = (BYTE)((argb & 0xFF000000) >> 24);
 
-            if (type == IL_TYPE_ALPHA) // starting with XP the system returns icons with an alpha channel
+            if (type == IL_TYPE_ALPHA) // only on XP and newer systems does the system return icons with an alpha channel
             {
                 *tmpPtr = argb;
             }
             else
             {
-                // the image list color sits in the transparent area but we must
-                // supply black here so that XOR drawing works correctly
+                // the transparent area contains the image list background color, but we
+                // must supply black there so that the XOR drawing mechanism works
                 if (alpha != 0)
                     *tmpPtr = argb;
                 else
@@ -612,7 +612,7 @@ CIconList::GetIcon(int index)
         }
     }
 
-    // transfer HTmpImage to hColor
+    // copy HTmpImage to hColor
     SelectObject(HMemDC, HTmpImage);
     hDC = HANDLES(CreateCompatibleDC(NULL));
     HBITMAP hOldBmp = (HBITMAP)SelectObject(hDC, hColor);
@@ -678,7 +678,7 @@ BOOL CIconList::Draw(int index, HDC hDC, int x, int y, COLORREF blendClr, DWORD 
         return FALSE;
     }
 
-    if (flags & IL_DRAW_MASK) // mask is used for drag&drop, for example on shared directories; see StateImageList_Draw()
+    if (flags & IL_DRAW_MASK) // the mask is used for drag and drop, for example for shared directories; see StateImageList_Draw()
         return DrawMask(hDC, x, y, index, RGB(0, 0, 0), RGB(255, 255, 255));
     if (flags & IL_DRAW_BLEND)
         return AlphaBlend(hDC, x, y, index, BkColor, blendClr);
@@ -718,15 +718,15 @@ BOOL CIconList::DrawMask(HDC hDC, int x, int y, int index, COLORREF fgColor, COL
 
     //DumpToTrace(index);
 
-    // grab the screen data into HTmpImage
+    // pull the screen data into HTmpImage
     // our DrawMask only sets black pixels where the mask is so we can easily merge with an overlay
-    // when called from StateImageList_Draw(); if additional overlays are needed later it will require
-    // a merger in StateImageList_Draw() based on boolean BitBlt operations and this method could
-    // then also set fgColor; the *** condition below would disappear
+    // when called from StateImageList_Draw(); if more overlays ever need to be displayed, it will be necessary
+    // to implement merging in StateImageList_Draw() based on boolean BitBlt operations, and this method could
+    // then also set fgColor; the *** condition below would no longer be needed
     SelectObject(HMemDC, HTmpImage);
     BitBlt(HMemDC, 0, 0, ImageWidth, ImageHeight, hDC, x, y, SRCCOPY);
 
-    // we will draw into HTmpImage
+    // draw into HTmpImage
     int row;
     for (row = 0; row < ImageHeight; row++)
     {
@@ -763,7 +763,7 @@ BOOL CIconList::DrawXOR(HDC hDC, int x, int y, int index, COLORREF bkColor)
     int iX = ImageWidth * (index % IL_ITEMS_IN_ROW);
     int iY = ImageHeight * (index / IL_ITEMS_IN_ROW);
 
-    // we will draw into HTmpImage
+    // draw into HTmpImage
     BYTE bkR = GetRValue(bkColor);
     BYTE bkG = GetGValue(bkColor);
     BYTE bkB = GetBValue(bkColor);
@@ -863,7 +863,7 @@ BOOL CIconList::DrawALPHALeaveBackground(HDC hDC, int x, int y, int index)
     // in the first phase transfer data from the target DC to HMask
     SelectObject(HMemDC, HTmpImage);
     BitBlt(HMemDC, 0, 0, ImageWidth, ImageHeight, hDC, x, y, SRCCOPY);
-    GdiFlush(); // MSDN recommends calling this before accessing raw data
+    GdiFlush(); // MSDN states this call is needed before accessing raw data
 
     /*
   BYTE bkR = GetRValue(bkColor);
@@ -979,7 +979,7 @@ BOOL CIconList::AlphaBlend(HDC hDC, int x, int y, int index, COLORREF bkColor, C
     int bitsPerPixel = GetCurrentBPP(hDC);
     if (bitsPerPixel <= 8)
     {
-        // 256 colors or fewer: instead of blending we overlay with a checkerboard
+        // 256 colors or fewer: instead of blending, overlay a checkerboard
         DWORD bkClrOpaque = GetRValue(bkColor) << 16 | GetGValue(bkColor) << 8 | GetBValue(bkColor);
         DWORD bkClr;
         if (fgColor != CLR_NONE)
@@ -1167,8 +1167,8 @@ BOOL CIconList::Copy(int dstIndex, CIconList* srcIL, int srcIndex)
         return FALSE;
     }
 
-    // version that copies by direct memory access; should be faster and produce
-    // an identical copy (BitBlt could discard the alpha channel)
+    // version that copies by direct access to the data; it should be faster and
+    // produce an absolutely identical copy (BitBlt could discard the alpha channel)
     HANDLES(EnterCriticalSection(&CriticalSection));
     int srcX = ImageWidth * (srcIndex % IL_ITEMS_IN_ROW);
     int srcY = ImageHeight * (srcIndex / IL_ITEMS_IN_ROW);
@@ -1191,7 +1191,7 @@ BOOL CIconList::Copy(int dstIndex, CIconList* srcIL, int srcIndex)
     ImageFlags[dstIndex] = srcIL->ImageFlags[srcIndex];
     HANDLES(LeaveCriticalSection(&CriticalSection));
 
-    // copying variant using BitBlt
+    // copying version using BitBlt
     //  HDC hSrcMemDC = HANDLES(CreateCompatibleDC(NULL));
     //  if (hSrcMemDC == NULL)
     //  {
@@ -1302,7 +1302,7 @@ BOOL CIconList::CopyFromBitmapIternal(int dstIndex, HBITMAP hSrcBitmap, int srcI
     BitBlt(HMemDC, dstX, dstY, ImageWidth * imageCount, ImageHeight, hSrcMemDC, srcX, srcY, SRCCOPY);
     ImageFlags[dstIndex] = IL_TYPE_NORMAL;
 
-    GdiFlush(); // MSDN recommends calling this before accessing raw data
+    GdiFlush(); // MSDN states this call is needed before accessing raw data
 
     // set the alpha channel based on the transparent color
     int row;
@@ -1429,12 +1429,12 @@ CIconList::GetImageList()
     return hIL;
 
     /*
-  // extract the bitmap dimensions
+  // get the bitmap dimensions
   HDC hDC = HANDLES(GetDC(NULL));
   BITMAPINFO bi;
   memset(&bi, 0, sizeof(bi));
   bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
-  bi.bmiHeader.biBitCount = 0;   // no palette wanted
+  bi.bmiHeader.biBitCount = 0;   // we do not want a palette
   
   if (!GetDIBits(hDC, 
                 hSrc,
@@ -1459,7 +1459,7 @@ CIconList::GetImageList()
   HIMAGELIST hIL = ImageList_Create(16, 16, GetImageListColorFlags() | ILC_MASK, 0, 1);
   if (hIL != NULL)
   {
-    // ImageList_AddMasked destroys the transparent color in hSrc, so we add the icons gradually and carefully
+    // ImageList_AddMasked destroys the transparent color in hSrc, so we add the icons one by one
     int count = bi.bmiHeader.biWidth / 16;
     int i;
     for (i = 0; i < count; i++)
@@ -2041,7 +2041,7 @@ BOOL CIconList::CreateFromRawPNG(const void* rawPNG, DWORD rawPNGSize, int image
                     }
                     }
                     HANDLES(LeaveCriticalSection(&CriticalSection));
-                    png_free_data(&png); // release palette, etc allocated in png_get_data
+                    png_free_data(&png); // release the palette, etc. allocated in png_get_data
                 }
                 free(buff);
             }
@@ -2088,7 +2088,7 @@ unsigned PNGBitmapWriteCallback(void* input, size_t size, size_t numel, void* us
 
 BOOL CIconList::SaveToPNG(BYTE** rawPNG, DWORD* rawPNGSize)
 {
-    // prepare the icons into a single long row
+    // arrange the icons into a single long row
     DWORD* buff = (DWORD*)malloc(ImageWidth * ImageCount * ImageHeight * 4);
     int index;
     for (index = 0; index < ImageCount; index++)
