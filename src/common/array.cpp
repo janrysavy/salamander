@@ -8,7 +8,7 @@
 #include <limits.h>
 #include <ostream>
 
-#if defined(_DEBUG) && defined(_MSC_VER) // without passing file+line to 'new' operator, list of memory leaks shows only 'crtdbg.h(552)'
+#if defined(_DEBUG) && defined(_MSC_VER) // without passing the file and line to the 'new' operator, the memory leak list shows only 'crtdbg.h(552)'
 #define new new (_NORMAL_BLOCK, __FILE__, __LINE__)
 #endif
 
