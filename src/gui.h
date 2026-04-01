@@ -40,12 +40,12 @@ protected:
     CBitmap* Bitmap;     // bitmap used by memDC -> drawing cache
     int BarX;            // X coordinate of the rectangle for indeterminate progress (Progress == -1)
     BOOL MoveBarRight;   // is the rectangle moving to the right?
-    DWORD SelfMoveTime;  // 0: after SetProgress(-1) the bar moves only one step (default value)
-                         // >0: time in ms the bar continues to move after SetProgress(-1)
+    DWORD SelfMoveTime;  // 0: after calling SetProgress(-1), the indicator moves by only one step (default value)
+                         // >0: time in ms for which the indicator keeps moving after calling SetProgress(-1)
     DWORD SelfMoveTicks; // stored GetTickCount() value from the last SetSelfMoveTime() call
-    DWORD SelfMoveSpeed; // how fast the bar moves: value in ms determining when the rectangle shifts
-                         // minimum is 10 ms, default is 50 ms -- 20 steps per second
-                         // beware of low values; the animation alone can significantly load the CPU
+    DWORD SelfMoveSpeed; // speed of the indicator's movement: the value is in ms and specifies the time after which the indicator moves
+                         // minimum is 10 ms, default value is 50 ms -- that is, 20 moves per second
+                         // watch out for low values; the animation itself can then noticeably tax the CPU
     BOOL TimerIsRunning; // is the timer running?
     char* Text;          // displayed instead of the numeric value when not NULL
     HFONT HFont;         // font for the progress bar
@@ -155,7 +155,7 @@ protected:
     BOOL ExecuteIt();
 
 protected:
-    char File[MAX_PATH]; // when non-zero it is passed to ShellExecute
+    char File[MAX_PATH]; // when non-empty, it is passed to ShellExecute
     WORD Command;        // when non-zero this command is executed during the action
     HWND HDialog;        // parent dialog
 };
@@ -234,7 +234,7 @@ protected:
     BOOL MouseIsTracked;  // mouse leave tracking has been installed
     char* ToolTipText;    // string that will be shown as our tooltip
     HWND HToolTipNW;      // notification window
-    DWORD ToolTipID;      // ID under which the tooltip asks for text
+    DWORD ToolTipID;      // ID the tooltip uses to request the text
     DWORD DropDownUpTime; // time in [ms] when the drop-down was released, used to prevent immediate re-press
     // XP Theme support
     BOOL Hot;
@@ -349,42 +349,43 @@ protected:
 class CAnimate: public CWindow
 {
   protected:
-    HBITMAP          HBitmap;             // bitmap containing the animation frames
+    HBITMAP          HBitmap;             // bitmap from which we take individual animation frames
     int              FramesCount;         // number of frames in the bitmap
-    int              FirstLoopFrame;      // frame to jump to when looping
-    SIZE             FrameSize;           // frame size in pixels
+    int              FirstLoopFrame;      // if looping, jump from the end back to this frame
+    SIZE             FrameSize;           // frame size in points
     CRITICAL_SECTION GDICriticalSection;  // critical section for access to GDI resources
     CRITICAL_SECTION DataCriticalSection; // critical section for access to data
     HANDLE           HThread;
-    HANDLE           HRunEvent;           // when signaled the animation thread runs
-    HANDLE           HTerminateEvent;     // when signaled the thread terminates
+    HANDLE           HRunEvent;           // when signaled, the animation thread runs
+    HANDLE           HTerminateEvent;     // when signaled, the thread terminates
     COLORREF         BkColor;
 
     // control variables used when HRunEvent is signaled
-    BOOL             SleepThread;         // the thread should sleep; HRunEvent will be reset
+    BOOL             SleepThread;         // the thread should go to sleep; HRunEvent will be reset
 
     int              CurrentFrame;        // zero-based index of the currently displayed frame
     int              NestedCount;
-    BOOL             MouseIsTracked;      // have we installed mouse leave tracking?
+    BOOL             MouseIsTracked;      // mouse leave tracking has been installed
 
   public:
-    // 'hBitmap'          bitmap used for drawing animation frames;
-    //                    frames must be stacked vertically with equal height
-    // 'framesCount'      total number of frames in the bitmap
-    // 'firstLoopFrame'   zero-based frame index to return to when cycling
+    // 'hBitmap'          bitmap from which animation frames are drawn;
+    //                    the frames must be stacked vertically and must have a constant height
+    // 'framesCount'      specifies the total number of frames in the bitmap
+    // 'firstLoopFrame'   zero-based index of the frame to return to in cyclic
+    //                    animation after reaching the end
     CAnimate(HBITMAP hBitmap, int framesCount, int firstLoopFrame, COLORREF bkColor, CObjectOrigin origin = ooAllocated);
     BOOL IsGood();                // did the constructor succeed?
 
-    void Start();                 // start the animation if not already running
-    void Stop();                  // stop the animation and show the first frame
-    void GetFrameSize(SIZE *sz);  // returns the frame size in pixels
+    void Start();                 // if not animating, start
+    void Stop();                  // stops the animation and displays the initial frame
+    void GetFrameSize(SIZE *sz);  // returns the size in points needed to display a frame
 
   protected:
     virtual LRESULT WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam);
 
-    void Paint(HDC hdc = NULL);   // draw the current frame; grab the window DC if hdc is NULL
-    void FirstFrame();            // set Frame to the initial cell
-    void NextFrame();             // advance to the next frame, skipping the intro sequence
+    void Paint(HDC hdc = NULL);   // display the current frame; if hdc is NULL, get the window DC
+    void FirstFrame();            // set Frame to the initial frame
+    void NextFrame();             // set Frame to the next frame; skip the initial sequence
 
     // thread bodies
     static unsigned ThreadF(void *param);
