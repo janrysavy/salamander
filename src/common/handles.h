@@ -655,7 +655,7 @@ public:
     BOOL OpenProcessToken(HANDLE ProcessHandle, DWORD DesiredAccess, PHANDLE TokenHandle);
 
 protected:
-    void AddHandle(C__HandlesHandle handle); // adds the current TemporaryHandle entry
+    void AddHandle(C__HandlesHandle handle); // adds TemporaryHandle
 
     // removes the handle; returns TRUE on success
     BOOL DeleteHandle(C__HandlesType& type, HANDLE handle,
