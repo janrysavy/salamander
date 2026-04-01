@@ -107,11 +107,11 @@ void CElasticLayout::FindMoveCtrls()
     POINT p = {rEnvelope.right, rEnvelope.bottom};
     ScreenToClient(HWindow, &p);
     int envelopeBottom = p.y;
-    // store each moving control's Y offset measured from the envelope's bottom edge
+    // 'MoveCtrlsY' coordinates will be relative to the envelope's bottom edge
     for (int i = 0; i < MoveCtrls.Count; i++)
         MoveCtrls[i].Pos.y = envelopeBottom - MoveCtrls[i].Pos.y;
 
-    // cache how far each resizable control's bottom edge sits above that envelope
+    // for ResizeCtrls elements, store their bottom-edge distance from the envelope's bottom edge
     for (int i = 0; i < ResizeCtrls.Count; i++)
     {
         if (ResizeCtrls[i].Pos.y == 0)
@@ -424,7 +424,7 @@ CPropSheetPage::CPropSheetPageProc(HWND hwndDlg, UINT uMsg, WPARAM wParam,
             if (dlg->IsAllocated())
                 delete dlg;
             else
-                dlg->HWindow = NULL; // notify the object that the window was detached
+                dlg->HWindow = NULL; // information that the window was detached
         }
         return ret;
     }
@@ -441,11 +441,11 @@ CPropSheetPage::CPropSheetPageProc(HWND hwndDlg, UINT uMsg, WPARAM wParam,
 #endif
     }
     }
-    // finally call the dialog object's DialogProc(...)
+    // call the DialogProc(...) method of the corresponding dialog object
     if (dlg != NULL)
         return dlg->DialogProc(uMsg, wParam, lParam);
     else
-        return FALSE; // report an error or that the message missed the WM_INITDIALOG...WM_DESTROY window
+        return FALSE; // error, or the message did not arrive between WM_INITDIALOG and WM_DESTROY
 }
 
 //
@@ -968,7 +968,7 @@ void CTreePropHolderDlg::LayoutControls()
                                       cRect.right - MarginSize.cx - captionX,
                                       CaptionHeight,
                                       SWP_NOZORDER));
-        // hosted child dialog
+        // child dialog
         int dlgX = MarginSize.cx + TreeWidth + MarginSize.cx;
         int dlgY = MarginSize.cy + CaptionHeight + MarginSize.cy;
         ChildDialogRect.left = dlgX;
@@ -1047,7 +1047,7 @@ int CTreePropHolderDlg::BuildAndMeasureTree()
         tvis.item.cchTextMax = (int)_tcslen(TPD->At(i)->Title);
         tvis.item.state = 0;
         // NOTE: expandable items must be expanded here, otherwise TreeView_GetItemRect() later returns FALSE
-        // and random data in the RECT r rectangle
+        // and the RECT r rectangle contains random data
         if (TPD->At(i)->Expanded != NULL)
             tvis.item.state |= TVIS_EXPANDED;
         tvis.item.stateMask = tvis.item.state;
