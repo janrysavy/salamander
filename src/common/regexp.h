@@ -123,10 +123,10 @@ public:
     int SearchBackward(int length, int& foundLen);
 
     // replaces variables \1 ... \9 with the text captured by the corresponding parentheses
-    // 'pattern' is the template that replaces the found match, 'buffer' is the buffer
-    // for output, 'bufSize' is the maximum text length including the terminating NULL
-    // character, in the 'count' variable it returns the number of characters copied into the buffer
-    // returns TRUE if the expression fit entirely into the buffer
+    // 'pattern' is the replacement pattern for the found match, 'buffer' is the output buffer
+    // 'bufSize' is the maximum text length including the terminating NULL
+    // character, and 'count' returns the number of characters copied to the buffer
+    // returns TRUE if the expanded text fit entirely into the buffer
     BOOL ExpandVariables(char* pattern, char* buffer,
                          int bufSize, int* count);
 
