@@ -391,9 +391,9 @@ struct C__PipeDataHeader
     DWORD UniqueThreadID;    // unikatni cislo threadu (systemove ID se opakuji)
     SYSTEMTIME Time;         // cas vzniku message
     DWORD MessageSize;       // delka bufferu potrebneho pro prijem textu
-    DWORD MessageTextOffset; // offset textu ve spolecnem bufferu s filem
+    DWORD MessageTextOffset; // message text offset in the shared buffer with the file
     DWORD Line;              // cislo radky
-    double Counter;          // presne pocitadlo v ms
+    double Counter;          // precise counter in ms
 };
 
 #define __SIZEOF_PIPEDATAHEADER 48
