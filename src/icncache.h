@@ -25,8 +25,8 @@ private:
                            //   for Flag==4,5,6 this is a thumbnail-cache index
     DWORD ReadingDone : 1; // 1 = we have already tried to load (even if it failed), 0 = not attempted yet
     DWORD Flag : 3;        // flag for this type in CIconCache:
-                           //   icons: 0 - not loaded, 1 - ok, 2 - old version, 3 - icon specified via icon-location
-                           //   thumbnails: 4 - not loaded, 5 - ok, 6 - old version (or low quality/smaller)
+                           //   icons: 0 - not loaded, 1 - OK, 2 - old version, 3 - icon specified via icon-location
+                           //   thumbnails: 4 - not loaded, 5 - OK, 6 - old version (or lower quality/smaller)
 
 public:
     int GetIndex()
@@ -262,7 +262,7 @@ public:
     // sorts the array for quick searches
     void SortArray(int left, int right);
 
-    // returns "found?" and the item index or where it should be inserted (sorted array);
+    // returns whether found and the item index, or the insertion position (sorted array);
     // 'name' must be DWORD-aligned;
     BOOL GetIndex(const char* name, int& index);
 
