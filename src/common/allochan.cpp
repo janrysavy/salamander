@@ -28,15 +28,15 @@
 // boundaries so we can find the real functions
 // that we need to call for initialization.
 
-#pragma warning(disable : 4075) // we want to define the initialization order of the module
+#pragma warning(disable : 4075) // we want to define the module initialization order
 
 typedef void(__cdecl* _PVFV)(void);
 
 #pragma section(".i_alc$a", read)
-__declspec(allocate(".i_alc$a")) const _PVFV i_allochan = (_PVFV)1; // at the start of the .i_alc section we place the variable i_allochan
+__declspec(allocate(".i_alc$a")) const _PVFV i_allochan = (_PVFV)1; // at the start of the .i_alc section we place the i_allochan variable
 
 #pragma section(".i_alc$z", read)
-__declspec(allocate(".i_alc$z")) const _PVFV i_allochan_end = (_PVFV)1; // and at the end of the .i_alc section we place the variable i_allochan_end
+__declspec(allocate(".i_alc$z")) const _PVFV i_allochan_end = (_PVFV)1; // and at the end of the .i_alc section we place the i_allochan_end variable
 
 void Initialize__Allochan()
 {
@@ -101,7 +101,7 @@ int C__AllocHandlerInit::AltapNewHandler(size_t size)
     int ret = 1;
     int ti = GetTickCount();
     EnterCriticalSection(&__AllocHandlerInit.CriticalSection);
-    if (GetTickCount() - ti <= 500) // we show the message box only if we did not force the user to deal with the same issue moments ago in another thread
+    if (GetTickCount() - ti <= 500) // show the message box only if we did not just force the user to deal with the same issue in another thread
     {
         TCHAR buf[550];
         _sntprintf_s(buf, _countof(buf) - 1, __AllocHandlerMessage, size);
@@ -127,11 +127,11 @@ int C__AllocHandlerInit::AltapNewHandler(size_t size)
                 }
             } while (res == 0);
             if (res == IDYES)
-                TerminateProcess(GetCurrentProcess(), 777); // a more forceful exit (ExitProcess still calls something)
+                TerminateProcess(GetCurrentProcess(), 777); // a harder exit (ExitProcess still calls something)
         }
         else
         {
-            if (res == IDIGNORE) // the user wants to pass the allocation issue to the application (return NULL); places allocating large blocks should be handled (otherwise it will crash on NULL access)
+            if (res == IDIGNORE) // the user wants to let the application handle the allocation failure (return NULL); code paths allocating large blocks should handle this case (otherwise it will crash when dereferencing NULL)
             {
                 do
                 {
@@ -143,7 +143,7 @@ int C__AllocHandlerInit::AltapNewHandler(size_t size)
                     }
                 } while (res == 0);
                 if (res == IDYES)
-                    ret = 0; // we return NULL to the application
+                    ret = 0; // return NULL to the application
             }
         }
     }
