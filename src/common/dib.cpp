@@ -82,7 +82,7 @@ HBITMAP LoadBitmapAndMapColors(HINSTANCE hInst, HRSRC hRsrc, int mapCount,
         TRACE_E("Unable to create bitmap.");
     HANDLES(ReleaseDC(NULL, hDCScreen));
 
-    // free copy of bitmap info struct and resource itself
+    // free the bitmap info copy and the resource itself
     free(lpBitmapInfo);
     FreeResource(hglb);
 
@@ -94,8 +94,8 @@ HBITMAP LoadBitmapAndMapColors(HINSTANCE hInst, HRSRC hRsrc, int mapCount,
 
 #define WIDTHBYTES(bits) (((bits) + 31) / 32 * 4)
 
-// Given a pointer to a DIB header, return TRUE if is a Windows 3.0 style
-//  DIB, false if otherwise (PM style DIB).
+// Given a pointer to a DIB header, return TRUE if it is a Windows 3.0-style
+//  DIB, FALSE otherwise (PM-style DIB).
 
 #define IS_WIN30_DIB(lpbi) ((*(LPDWORD)(lpbi)) == sizeof(BITMAPINFOHEADER))
 
