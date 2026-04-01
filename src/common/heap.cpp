@@ -112,7 +112,7 @@ public:
                 FreeLibrary(hUsedModules[i]);
 
             // show a warning message box
-            MSG msg; // remove possibly buffered ESC key (not to close msgbox immediately)
+            MSG msg; // remove any buffered ESC key so the message box does not close immediately
             while (PeekMessage(&msg, NULL, WM_KEYFIRST, WM_KEYLAST, PM_REMOVE))
                 ;
             MessageBoxA(NULL, "Detected memory leaks!", "Heap Message",
