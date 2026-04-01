@@ -146,11 +146,11 @@ int MemICmp(const void* buf1, const void* buf2, int n);
 // reads str in four-byte chunks -> requires a larger buffer
 // int StrLen(const char *str);    // only 2× faster, unnecessary risk of accessing unaligned memory
 
-// copies the text into newly allocated memory, NULL = low memory
+// copies the text into newly allocated memory, NULL = out of memory
 char* DupStr(const char* txt);
 
-// copies the text into newly allocated memory, NULL = low memory,
-// additionally sets 'err' to TRUE when memory is insufficient
+// copies the text into newly allocated memory, NULL = out of memory,
+// also sets 'err' to TRUE on out-of-memory
 char* DupStrEx(const char* str, BOOL& err);
 
 // returns the first occurrence of 'pattern' in 'txt' or NULL, case-insensitive
@@ -160,8 +160,8 @@ const char* StrIStr(const char* txt, const char* pattern);
 const char* StrIStr(const char* txtStart, const char* txtEnd,
                     const char* patternStart, const char* patternEnd);
 
-// appends the 'src' string after the 'dest' string, but does not exceed 'dstSize'
-// terminates the string with a null character that counts toward 'dstSize'
+// appends the 'src' string to the end of the 'dst' string, but does not exceed 'dstSize'
+// terminates the string with a null character, which counts toward 'dstSize'
 // returns 'dst'
 char* StrNCat(char* dst, const char* src, int dstSize);
 
