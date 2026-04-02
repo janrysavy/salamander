@@ -121,7 +121,7 @@
 
 // LAST_VERSION_OF_SALAMANDER:
 //
-// Support for checking whether the Salamander version is current, which internal plugins
+// Support for checking whether the Salamander version is up to date, which internal plugins
 // (distributed in a single package with Salamander) perform during their entry point
 // (SalamanderPluginEntry); see the CSalamanderPluginEntryAbstract::GetVersion() method
 // (in spl_base.h). It serves mainly for convenience: an internal plugin can call any method
@@ -130,8 +130,8 @@
 // version, which must also contain these methods).
 //
 // It is also used the other way around: for an internal plugin to be sure that Salamander will
-// call all methods (including the newest ones), it returns this version as the one it was built
-// against (see the SalamanderPluginGetReqVer plugin export).
+// call all methods (including the newest ones), it returns this version as the version it was built
+// for (see the SalamanderPluginGetReqVer plugin export).
 //
 // If a plugin returns from SalamanderPluginGetReqVer a lower version than
 // LAST_VERSION_OF_SALAMANDER (for backward compatibility with older Salamander versions),
@@ -159,7 +159,7 @@
 //   14 - 2.5 beta 10
 //   15 - 2.5 beta 10a
 //   16 - 2.5 beta 11
-//   17 - 2.5 beta 12 (internal only, we released RC1 instead)
+//   17 - 2.5 beta 12 (internal only, RC1 was released instead)
 //   18 - 2.5 RC1
 //   19 - 2.5 RC2
 //   20 - 2.5 RC3
@@ -186,8 +186,8 @@
 //   79 - 3.07
 //   81 - 3.08
 // ! IMPORTANT: all versions from VC2008 must be < 100, all versions from VC2019 must be >= 100,
-//             new version numbers must be recorded in the "default" branch, and then
-//             only then into the side branch (the complete list exists only in the "default" branch)
+//             new version numbers must be recorded in the "default" branch, and only then
+//             in the side branch (the complete list exists only in the "default" branch)
 //   101 - 4.0 beta 1 (DB177)
 //   102 - 4.0
 //   103 - 5.0
