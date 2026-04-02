@@ -33,15 +33,15 @@ enum CArrayDirection
 
 enum CDeleteType
 {
-    dtNoDelete, // delete is not called for pointers stored in indirect array
-    dtDelete    // delete is called for pointers stored in indirect array
+    dtNoDelete, // delete is not called for pointers stored in the indirect array
+    dtDelete    // delete is called for pointers stored in the indirect array
 };
 
 enum CErrorType
 {
     etNone,         // OK
     etLowMemory,    // new returned NULL
-    etUnknownIndex, // index is out of array range
+    etUnknownIndex, // index is out of the array range
     etBadInsert,    // index of inserted item is out of array range
     etDestructed,   // array was already destroyed using the Destroy() method
 };
@@ -82,7 +82,7 @@ public:
     void Insert(int index, const DATA_TYPE& member);
     int Add(const DATA_TYPE& member); // adds an item to the end of the array, returns the item index
 
-    void Insert(int index, const DATA_TYPE* members, int count); // insert 'count' of 'members' items
+    void Insert(int index, const DATA_TYPE* members, int count); // insert 'count' items from 'members'
     int Add(const DATA_TYPE* members, int count);                // add 'count' items from 'members'
 
     DATA_TYPE& At(int index) // returns reference to item at 'index' position
@@ -97,7 +97,7 @@ public:
             TRACE_C("Index is out of range (index = " << index
                                                       << ", Count = " << Count << ").");
             Error(etUnknownIndex);
-            return Data[0]; // because of compiler we must return (invalid) item
+            return Data[0]; // required by the compiler; returns an invalid item
         }
 #endif
     }
@@ -114,7 +114,7 @@ public:
             TRACE_C("Index is out of range (index = " << index
                                                       << ", Count = " << Count << ").");
             Error(etUnknownIndex);
-            return Data[0]; // because of compiler we must return (invalid) item
+            return Data[0]; // the compiler requires us to return an (invalid) item
         }
 #endif
     }
@@ -154,7 +154,7 @@ protected:
     void EnlargeArray(); // enlarges array
     void ReduceArray();  // reduces array
 
-    void Move(CArrayDirection direction, int first, int count); // move selected items to next/previous index
+    void Move(CArrayDirection direction, int first, int count); // move selected items to the next/previous index
 
     void CallCopyConstructor(DATA_TYPE* placement, const DATA_TYPE& member)
     {
@@ -295,7 +295,7 @@ TDirectArray<DATA_TYPE>::TDirectArray(int base, int delta)
 template <class DATA_TYPE>
 void TDirectArray<DATA_TYPE>::Destroy()
 {
-    if (State == etNone) // it can also be etDestructed
+    if (State == etNone) // State can also be etDestructed
     {
         if (Data != NULL)
         {
