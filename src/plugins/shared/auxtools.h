@@ -94,7 +94,7 @@ public:
 
 protected:                                                 // internal non-synchronized methods
     BOOL Add(CThreadQueueItem* item);                      // adds an item to the queue, returns success
-    BOOL FindAndLockItem(HANDLE thread);                   // finds the item for HANDLE 'thread' in the queue and locks it
+    BOOL FindAndLockItem(HANDLE thread);                   // finds the item for 'thread' in the queue and locks it
     void UnlockItem(HANDLE thread, BOOL deleteIfUnlocked); // unlocks the item for 'thread' in the queue, optionally deletes it
     void ClearFinishedThreads();                           // removes threads that have already finished from the queue
     static DWORD WINAPI ThreadBase(void* param);           // generic thread entry point
