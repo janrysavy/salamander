@@ -63,7 +63,7 @@
 struct CSalAES
 {
     BYTE nonce[SAL_AES_BLOCK_SIZE];       /* the CTR nonce          */
-    BYTE encr_bfr[SAL_AES_BLOCK_SIZE];    /* encryption byte buffer   */
+    BYTE encr_bfr[SAL_AES_BLOCK_SIZE];    /* encryption buffer      */
     BYTE encr_ctx[SAL_AES_ENCR_CTX_SIZE]; /* encryption context     */
     BYTE auth_ctx[SAL_AES_AUTH_CTX_SIZE]; /* authentication context */
     DWORD encr_pos;                       /* block position (enc)   */
