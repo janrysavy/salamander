@@ -17,7 +17,7 @@
 #endif // _MSC_VER
 
 // suppress warning C4996: This function or variable may be unsafe. Consider using strcat_s instead.
-// reason: lstrcat and other Windows routines simply are not safe, so there is no point handling it here
+// reason: lstrcat and other Windows routines simply are not safe, so there is no point addressing it here
 #pragma warning(push)
 #pragma warning(disable : 4996)
 
@@ -287,19 +287,19 @@ void C__Trace::SendMessageToServer(BOOL information, BOOL unicode, BOOL crash)
                 SalamanderDebug->TraceE(File, Line, TraceStringBuf.c_str());
         }
     }
-    // only when crash == TRUE:
-    // clone the data, because starting the message-box thread may itself trigger another TRACE
-    // message (for example, in DllMain when reacting to DLL_THREAD_ATTACH); if we stayed inside the
-    // CriticalSection we would deadlock;
+    // only if crash == TRUE:
+    // make a copy of the data, because starting the message-box thread may itself trigger another TRACE
+    // message (for example, in DllMain in response to DLL_THREAD_ATTACH); if we did not leave the
+    // CriticalSection, a deadlock would occur;
     // TRACE_C must not be used in DllMain, otherwise a deadlock occurs:
-    //   - if it is placed in DLL_THREAD_ATTACH: it wants to spawn a new thread for the message box,
-    //     which DllMain blocks
+    //   - if it is placed in DLL_THREAD_ATTACH: it tries to create a new thread for the message box,
+    //     and that is blocked from DllMain
     //   - if it is placed in DLL_THREAD_DETACH: while waiting for the message-box thread from the
-    //     previous TRACE_C to close we catch TRACE_C from DLL_THREAD_DETACH and leave it
-    //     spinning in an infinite loop, see below
-    // we also guard against spawning multiple message boxes when several TRACE_C run at once;
-    // that would only cause confusion. Now the box opens just for the first one and, once closed, it
-    // triggers the crash; the other TRACE_C stay parked in the infinite wait loop described below
+    //     previous TRACE_C to close, we catch TRACE_C from DLL_THREAD_DETACH and leave it
+    //     waiting in an infinite loop, see below
+    // we also guard against multiple message boxes when several TRACE_C occur at once;
+    // that would only cause confusion. Now a message box opens only for the first one and, once closed, it
+    // triggers the crash; the other TRACE_C remain stuck in the infinite wait loop described below
     static BOOL msgBoxOpened = FALSE;
     C__TraceMsgBoxThreadData threadData;
     C__TraceMsgBoxThreadDataW threadDataW;
@@ -307,7 +307,7 @@ void C__Trace::SendMessageToServer(BOOL information, BOOL unicode, BOOL crash)
         memset(&threadDataW, 0, sizeof(threadDataW));
     else
         memset(&threadData, 0, sizeof(threadData));
-    if (crash) // breakpoint/crash after printing the TRACE error message (TRACE_C and TRACE_MC)
+    if (crash) // break/crash after printing the TRACE error message (TRACE_C and TRACE_MC)
     {
         if (!msgBoxOpened)
         {
@@ -349,7 +349,7 @@ void C__Trace::SendMessageToServer(BOOL information, BOOL unicode, BOOL crash)
     LeaveCriticalSection(&CriticalSection);
     if (crash)
     {
-        if (unicode && threadDataW.Msg != NULL || // breakpoint/crash after printing the TRACE error message (TRACE_C and TRACE_MC)
+        if (unicode && threadDataW.Msg != NULL || // break/crash after printing the TRACE error message (TRACE_C and TRACE_MC)
             !unicode && threadData.Msg != NULL)
         {
             // display the message in another thread so the current thread does not have to pump messages
