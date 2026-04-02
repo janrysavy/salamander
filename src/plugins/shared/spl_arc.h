@@ -37,8 +37,8 @@ private: // protection against incorrect direct method calls (see CPluginInterfa
 public:
 #endif // INSIDE_SALAMANDER
 
-    // function for the "panel archiver view"; called to load the contents of the
-    // archive 'fileName'; the contents are stored in the 'dir' object; Salamander gets
+    // function for the "panel archiver view"; called to load the contents of archive
+    // 'fileName'; the contents are stored in the 'dir' object; Salamander gets
     // the values of columns added by the plugin through the 'pluginData' interface (if the
     // plugin does not add columns, it sets 'pluginData' == NULL); returns TRUE if the
     // archive contents were loaded successfully; if it returns FALSE, the value of
@@ -70,15 +70,15 @@ public:
     // function for the "panel archiver view"; called when requested to unpack a single file for viewing/editing
     // from archive 'fileName' into directory 'targetDir'; the file name in the archive is 'nameInArchive';
     // 'pluginData' is the interface for working with file information specific to the plugin
-    // (for example, data for added columns; it is the same interface returned by ListArchive
-    // in the 'pluginData' parameter—so it may also be NULL); 'fileData' is a pointer to the CFileData
-    // structure of the file being unpacked (the structure was built by the plugin when listing the archive);
+    // (for example, data from added columns; it is the same interface returned by the ListArchive method
+    // in the 'pluginData' parameter, so it may also be NULL); 'fileData' is a pointer to the CFileData
+    // structure of the unpacked file (the structure was built by the plugin when listing the archive);
     // 'newFileName' (if not NULL) is a new name for the extracted file (used when the original archive name
-    // cannot be written to disk, for example "aux", "prn", etc.); set 'renamingNotSupported' to TRUE
-    // (only if 'newFileName' is not NULL) when the plugin does not support renaming during extraction
-    // (Salamander then shows the standard error message "renaming not supported");
-    // returns TRUE when the file is unpacked successfully (the file exists at the requested path and neither
-    // Cancel nor Skip was used); 'salamander' is a set of helper methods exported from Salamander
+    // cannot be unpacked to disk, for example "aux", "prn", etc.); set 'renamingNotSupported' to TRUE
+    // (only if 'newFileName' is not NULL) if the plugin does not support renaming during unpacking
+    // (the standard error message "renaming not supported" is then displayed by Salamander);
+    // returns TRUE if the file is unpacked successfully (the file is at the specified path and neither
+    // Cancel nor Skip was used); 'salamander' is a set of useful methods exported by Salamander
     virtual BOOL WINAPI UnpackOneFile(CSalamanderForOperationsAbstract* salamander, const char* fileName,
                                       CPluginDataInterfaceAbstract* pluginData, const char* nameInArchive,
                                       const CFileData* fileData, const char* targetDir,
@@ -95,13 +95,13 @@ public:
                                       const char* archiveRoot, BOOL move, const char* sourcePath,
                                       SalEnumSelection2 next, void* nextParam) = 0;
 
-    // function for "panel archiver edit"; called when a request is made to delete files/directories from archive
+    // function for "panel archiver edit"; called when a request is made to delete files/directories from the archive
     // 'fileName'; the files/directories are specified by the path 'archiveRoot' and the enumeration function
     // 'next' with parameter 'nextParam'; 'pluginData' is an interface for working with file/directory
     // information specific to the plugin (for example, data from added columns; it is the same interface
-    // returned by ListArchive in the 'pluginData' parameter, so it may also be NULL); returns TRUE if it
+    // returned by the ListArchive method in the 'pluginData' parameter, so it may also be NULL); returns TRUE if it
     // succeeds in deleting all files/directories (Cancel was not used; Skip may have been) - the source
-    // items in the panel are deselected; otherwise returns FALSE (they are not deselected);
+    // items in the panel are deselected; otherwise it returns FALSE (they are not deselected);
     // 'salamander' is a set of useful methods exported by Salamander
     virtual BOOL WINAPI DeleteFromArchive(CSalamanderForOperationsAbstract* salamander, const char* fileName,
                                           CPluginDataInterfaceAbstract* pluginData, const char* archiveRoot,
