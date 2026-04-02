@@ -244,7 +244,7 @@ int StrNICmp(const char* s1, const char* s2, int n)
         // load up arguments
     mov     ecx,[n] // ecx = byte count
     or      ecx,ecx        
-    jz      toend // if count = 0, we are done
+    jz      toend // if count is 0, we are done
                            
     mov     esi,s1 // esi = s1
     mov     edi,s2 // edi = s2
@@ -324,7 +324,7 @@ int MemICmp(const void* buf1, const void* buf2, int n)
         // load up arguments
     mov     ecx,[n] // ecx = byte count
     or      ecx,ecx        
-    jz      toend // if count = 0, we are done
+    jz      toend // if count is 0, we are done
                            
     mov     esi,buf1 // esi = buf1
     mov     edi,buf2 // edi = buf2
@@ -425,7 +425,7 @@ int StrICmpEx(const char* s1, int l1, const char* s2, int l2)
             // load up arguments
       mov     ecx,[l] // ecx = byte count
       or      ecx,ecx        
-      jz      toend // if count = 0, we are done
+      jz      toend // if count is 0, we are done
                            
       mov     esi,s1 // esi = buf1
       mov     edi,s2 // edi = buf2
@@ -566,7 +566,7 @@ int StrLen(const char *str)
   while (1)
   {
     if ((((*(DWORD *)s) & 0xF0F0F0F0) - 0x10101010) & 0x8F0F0F0F)
-    {                            // there is a character < 16
+    {                            // contains a character < 16
       if (*s != 0) s++;
       else break;
       if (*s != 0) s++;
