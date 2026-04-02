@@ -501,8 +501,8 @@ diff_t<equal_t, edit_t>::operator()(
     size_t p, s;
 
     // The ses function assumes the SES will begin and end with a delete or
-    // insert. The following will insure this is true by eating any beginning
-    // matches. This is also a quick to process sequences that match entirely.
+    // insert. The following ensures this is true by consuming any leading
+    // matches. This is also a quick way to process sequences that match entirely.
 
     // eat common prefix
     p = 0;
