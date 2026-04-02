@@ -142,7 +142,7 @@ public:
     // calls TraceSetThreadName and SetThreadNameInVC for 'name' (see both methods for details)
     virtual void WINAPI SetThreadNameInVCAndTrace(const char* name) = 0;
 
-    // If we are not yet connected to the Trace Server, tries to establish the connection (the server
+    // If not yet connected to the Trace Server, tries to establish the connection (the server
     // must be running). SDK builds of Salamander only (including Preview Builds): if auto-start of the
     // server is enabled and the server is not running (for example, the user terminated it), it tries to start it
     // before connecting.
@@ -280,12 +280,12 @@ public:
     virtual void WINAPI ForceRemovePanelArchiver(const char* extension) = 0;
 
     // adds the plugin to the list for "file viewer",
-    // 'masks' are file masks that should be handled by this plugin
+    // 'masks' are viewer extensions that should be handled by this plugin
     // (the separator is ';' (the escape sequence for ';' is ";;"), and the wildcards '*' and '?' are used;
     // avoid spaces if possible, and the '|' character is forbidden (inverse masks are not allowed)),
     // if this is not an upgrade of "file viewer" (or the addition of the whole plugin) and 'force' is FALSE,
-    // the call is ignored; if 'force' is TRUE, 'masks' are always added (if they are not already on
-    // the list) - it is necessary to prevent repeated 'force'==TRUE calls (constant re-adding of 'masks')
+    // the call is ignored; if 'force' is TRUE, it always adds 'masks' (if they are not already on
+    // the list) - it is necessary to prevent repeated 'force'==TRUE calls (continually re-adding 'masks')
     virtual void WINAPI AddViewer(const char* masks, BOOL force) = 0;
 
     // removes a mask from the "file viewer" list (only from items related to this plugin),
@@ -403,8 +403,8 @@ class CDynamicString
 {
 public:
     // returns TRUE if the string 'str' of length 'len' was added successfully; if 'len' is -1,
-    // 'len' is determined as "strlen(str)" (added without the terminating zero); if 'len' is -2,
-    // 'len' is determined as "strlen(str)+1" (added including the terminating zero)
+    // 'len' is determined as "strlen(str)" (added without the null terminator); if 'len' is -2,
+    // 'len' is determined as "strlen(str)+1" (added including the null terminator)
     virtual BOOL WINAPI Add(const char* str, int len = -1) = 0;
 };
 
@@ -864,7 +864,7 @@ inline BOOL SalIsWindowsVersionOrGreater(WORD wMajorVersion, WORD wMinorVersion,
                                                                                VER_MINORVERSION, VER_GREATER_EQUAL),
                                                            VER_SERVICEPACKMAJOR, VER_GREATER_EQUAL);
 
-    SecureZeroMemory(&osvi, sizeof(osvi)); // replacement for memset (does not require the RTL)
+    SecureZeroMemory(&osvi, sizeof(osvi)); // replacement for memset (does not require the runtime library)
     osvi.dwOSVersionInfoSize = sizeof(osvi);
     osvi.dwMajorVersion = wMajorVersion;
     osvi.dwMinorVersion = wMinorVersion;
