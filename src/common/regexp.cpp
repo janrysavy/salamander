@@ -208,7 +208,7 @@ BOOL CRegularExpression::SetLine(const char* start, const char* end)
             memcpy(Line, start, LineLength);
             Line[LineLength] = 0;
         }
-        else // insensitive
+        else // case-insensitive
         {
             char* l = Line;
             while (start < end)
@@ -272,7 +272,7 @@ BOOL CRegularExpression::ExpandVariables(char* pattern, char* buffer, int bufSiz
         {
             sour++;
             if (!*sour)
-                break; // I should probably throw an error here; such a sequence is not defined
+                break; // An error should probably be thrown here; such a sequence is not defined
             if (*sour >= '1' && *sour <= '9')
             {
                 int n = *sour - '0';
@@ -405,7 +405,7 @@ void CRegularExpression::ReverseRegExp(char*& dstExpEnd, char* srcExp, char* src
                 {
                     if (*ss != 0)
                         ss++;
-                    break; // the character after '\\' cannot be treated as a bracket
+                    break; // the character after '\\' cannot be treated as a parenthesis
                 }
                 }
             }
@@ -829,9 +829,9 @@ char* reg(int paren /* Parenthesized? */, int* flagp)
 }
 
 /*
- - regbranch - one alternative of an | operator
+ - regbranch - one alternative of a | operator
  *
- * Implements the concatenation operator.
+ * Implements concatenation.
  */
 char* regbranch(int* flagp)
 {
@@ -1086,9 +1086,9 @@ void regc(char b)
 }
 
 /*
- - reginsert - insert an operator in front of already-emitted operand
+ - reginsert - insert an operator in front of an already-emitted operand
  *
- * Means relocating the operand.
+ * This means relocating the operand.
  */
 void reginsert(char op, char* opnd)
 {
