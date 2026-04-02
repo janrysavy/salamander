@@ -639,7 +639,7 @@ CDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_INITDIALOG:
     {
         TransferData(ttDataToWindow);
-        return TRUE; // request focus from DefDlgProc
+        return TRUE; // let DefDlgProc set the focus
     }
 
     case WM_HELP:
