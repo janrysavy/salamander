@@ -238,14 +238,14 @@ public:
     // Sets the action to PostCommand(WM_COMMAND, command, 0) for the parent window.
     virtual void WINAPI SetActionPostCommand(WORD command) = 0;
 
-    // Assigns the action that displays the hint and tooltip 'text'.
+    // Sets the action that shows the hint and tooltip text.
     // If text is NULL, the tooltip can be assigned by calling SetToolTipText
     // or SetToolTip; the method then always returns TRUE.
-    // If text is not NULL, the method returns TRUE if it managed to
-    // allocate a copy of the text; otherwise it returns FALSE.
+    // If text is not NULL, the method returns TRUE if it successfully
+    // allocates a copy of the text; otherwise it returns FALSE.
     // The tooltip can be shown with the Space/Up/Down keys (while the focus
     // is on the control) and by clicking the mouse; the hint (tooltip) is then displayed directly
-    // under the text and does not close until the user clicks outside it with the mouse or
+    // under the text and stays open until the user clicks outside it with the mouse or
     // presses a key.
     virtual BOOL WINAPI SetActionShowHint(const char* text) = 0;
 
