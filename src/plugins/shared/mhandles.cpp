@@ -132,7 +132,7 @@ struct C__MessageBoxData
 
 int CALLBACK __MessagesMessageBoxThreadF(C__MessageBoxData* data)
 { // must not wait for a response from the calling thread, because it will not respond
-    // therefore parent == NULL -> leave the owner windows enabled, etc.
+    // therefore parent == NULL -> no window disabling, etc.
     data->Return = MessageBox(NULL, data->Text, data->Caption, data->Type | MB_SETFOREGROUND);
     return 0;
 }
@@ -838,7 +838,7 @@ BOOL C__Handles::DeleteHandle(C__HandlesType& type, HANDLE handle,
             {
                 C__HandlesOrigin org = Handles[i].Handle.Origin;
                 if (org != __hoLoadAccelerators && org != __hoLoadIcon &&
-                    org != __hoGetStockObject) // this handle is not one of those that can be left unreleased (we prioritize releasing handles that must be released first)
+                    org != __hoGetStockObject) // this is not a handle that can be left unreleased (we prioritize releasing handles that must be released)
                 {
                     if (origin != NULL)
                         *origin = org;
