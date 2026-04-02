@@ -104,8 +104,8 @@ void ReleaseWinLib(HINSTANCE dllInstance)
 {
     if (WindowsManager.WindowsCount != 0)
     {
-        // serious trouble - after the plugin unload the program can crash because a window procedure
-        //                   in an unloaded DLL would be called (if the windows were destroyed within terminated threads, it is OK)
+        // serious problem - after unloading the plugin, the application can crash because a window procedure
+        //                in the unloaded DLL may be called (if the windows were destroyed within terminated threads, that is OK)
         TRACE_E("Unable to release WinLibLT - some window or dialog (count = " << WindowsManager.WindowsCount << ") is still attached to WinLibLT!");
         // return;  // if the window belonged to a terminated thread, WinLibLT can be released; otherwise the unregister function returns an error
     }
@@ -296,6 +296,7 @@ CWindow::CWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         if (wnd != NULL && wnd->Is(otWindow))
         {
             // Petr: I moved it below wnd->WindowProc() so messages would still be delivered during WM_DESTROY
+            //          (Lukas needed this)
             // WindowsManager.DetachWindow(hwnd);
 
             LRESULT res = wnd->WindowProc(uMsg, wParam, lParam);
@@ -312,9 +313,9 @@ CWindow::CWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             if (wnd->IsAllocated())
                 delete wnd;
             else
-                wnd->HWindow = NULL; // it is no longer attached
+                wnd->HWindow = NULL; // no longer attached
             if (res == 0)
-                return 0; // the application handled it; return 0
+                return 0; // handled by the application; return 0
             wnd = NULL;
         }
         break;
@@ -442,7 +443,7 @@ CDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_INITDIALOG:
     {
         TransferData(ttDataToWindow);
-        return TRUE; // I want focus from DefDlgProc
+        return TRUE; // Let DefDlgProc set the focus
     }
 
     case WM_HELP:
@@ -662,7 +663,7 @@ CPropSheetPage::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         ParentDialog->HWindow = Parent;
         TransferData(ttDataToWindow);
-        return TRUE; // I want focus from DefDlgProc
+        return TRUE; // Let DefDlgProc set the focus
     }
 
     case WM_HELP:
@@ -673,7 +674,7 @@ CPropSheetPage::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             WinLibLTHelpCallback(HWindow, HelpID);
             return TRUE;
         }
-        break; // let F1 pass to the parent
+        break; // let F1 fall through to the parent
     }
 
     case WM_NOTIFY:
@@ -767,7 +768,7 @@ CPropSheetPage::CPropSheetPageProc(HWND hwndDlg, UINT uMsg, WPARAM wParam,
                 TRACE_E("Error during creating of dialog.");
                 return TRUE;
             }
-            dlg->NotifDlgJustCreated(); // introduced as a place to adjust the dialog layout
+            dlg->NotifDlgJustCreated(); // added as a place to adjust the dialog layout
         }
         break;
     }
@@ -808,7 +809,7 @@ CPropSheetPage::CPropSheetPageProc(HWND hwndDlg, UINT uMsg, WPARAM wParam,
     if (dlg != NULL)
         return dlg->DialogProc(uMsg, wParam, lParam);
     else
-        return FALSE; // error or the message did not arrive between WM_INITDIALOG and WM_DESTROY
+        return FALSE; // error, or the message was not received between WM_INITDIALOG and WM_DESTROY
 }
 
 //
@@ -1018,7 +1019,7 @@ BOOL CWindowQueue::CloseAllWindows(BOOL force, int waitTime, int forceWaitTime)
 BOOL CTransferInfo::GetControl(HWND& ctrlHWnd, int ctrlID, BOOL ignoreIsGood)
 {
     if (!ignoreIsGood && !IsGood())
-        return FALSE; // no point in processing anything else; return FALSE
+        return FALSE; // no point in continuing; return FALSE
     ctrlHWnd = GetDlgItem(HDialog, ctrlID);
     if (ctrlHWnd == NULL)
     {
@@ -1173,7 +1174,7 @@ void CTransferInfo::EditLine(int ctrlID, int& value, BOOL select)
             }
 
             char* endptr;
-            value = strtoul(buff, &endptr, 10); // replacement for atoi / _ttoi, which return 2147483647 instead of 4000000000 (because it is SIGNED INT)
+            value = strtoul(buff, &endptr, 10); // replacement for atoi / _ttoi, which return 2147483647 instead of 4000000000 (because they use signed int)
             break;
         }
         }
