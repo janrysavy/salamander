@@ -58,7 +58,7 @@ BOOL InitLCUtils(CSalamanderPluginEntryAbstract* salamander, const char* pluginN
 
     // this plugin is made for the current version of Salamander and higher - perform a check
     if (SalamanderVersion < LAST_VERSION_OF_SALAMANDER)
-    { // Error cannot be called here because it uses SG->SalMessageBox (SG is not initialized + this is an incompatible interface)
+    { // Error cannot be called here because it uses SG->SalMessageBox (SG is not initialized + the interface is incompatible)
         MessageBox(salamander->GetParentWindow(),
                    REQUIRE_LAST_VERSION_OF_SALAMANDER,
                    pluginName, MB_OK | MB_ICONERROR);
