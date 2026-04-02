@@ -161,14 +161,14 @@ BOOL C__TraceThreadCache::GetIndex(DWORD tid, int& index)
     {
         m = (l + r) / 2;
         DWORD hw = Data[m].TID;
-        if (hw == tid) // nalezeno
+        if (hw == tid) // found
         {
             index = m;
             return TRUE;
         }
         else if (hw > tid)
         {
-            if (l == r || l > m - 1) // nenalezeno
+            if (l == r || l > m - 1) // not found
             {
                 index = m; // mel by byt na teto pozici
                 return FALSE;
@@ -177,7 +177,7 @@ BOOL C__TraceThreadCache::GetIndex(DWORD tid, int& index)
         }
         else
         {
-            if (l == r) // nenalezeno
+            if (l == r) // not found
             {
                 index = m + 1; // mel by byt az za touto pozici
                 return FALSE;
@@ -201,7 +201,7 @@ BOOL C__TraceThreadCache::Add(HANDLE handle, DWORD tid)
                 if (!GetExitCodeThread(Data[i].Handle, &code) || code != STILL_ACTIVE)
                 {
                     DWORD id = Data[i].TID;                         // aktualizace cache:
-                    if (CacheUID[__TraceCacheGetIndex(id)] != -1 && // platny zaznam
+                    if (CacheUID[__TraceCacheGetIndex(id)] != -1 && // valid entry
                         CacheTID[__TraceCacheGetIndex(id)] == id)   // shodny TID
                     {
                         CacheUID[__TraceCacheGetIndex(id)] = -1; // zneplatneni
@@ -241,10 +241,10 @@ BOOL C__TraceThreadCache::Add(HANDLE handle, DWORD tid)
 DWORD
 C__TraceThreadCache::GetUniqueThreadId(DWORD tid)
 {
-    if (CacheUID[__TraceCacheGetIndex(tid)] != -1 && // je-li platny zaznam
+    if (CacheUID[__TraceCacheGetIndex(tid)] != -1 && // if the entry is valid
         CacheTID[__TraceCacheGetIndex(tid)] == tid)  // a je-li shodny s tid
     {
-        return CacheUID[__TraceCacheGetIndex(tid)]; // uid je v cache
+        return CacheUID[__TraceCacheGetIndex(tid)]; // the UID is in the cache
     }
 
     int index;
@@ -255,7 +255,7 @@ C__TraceThreadCache::GetUniqueThreadId(DWORD tid)
         return Data[index].UID;
     }
     else
-        return -1; // nenalezeno -> to by se nemelo stat
+        return -1; // not found -> this should not happen
 }
 
 //*****************************************************************************
@@ -446,7 +446,7 @@ BOOL C__Trace::Connect(BOOL onUserRequest)
             lstrcpynW(s, L"altap_traces", int(end - s));
             s += wcslen(s);
 
-            if ((s - tmpDir) + 15 < MAX_PATH) // dost mista pro pripojeni "_2000000000.log"
+            if ((s - tmpDir) + 15 < MAX_PATH) // enough space to append "_2000000000.log"
             {
                 int num = 1;
                 while (1)
@@ -466,7 +466,7 @@ BOOL C__Trace::Connect(BOOL onUserRequest)
                 }
                 if (HTraceFile == INVALID_HANDLE_VALUE)
                     HTraceFile = NULL;
-                else // zapis headeru do souboru (identifikace sloupcu)
+                else // write the file header (column labels)
                 {
                     DWORD wr;
                     const WCHAR* fileHeader = L"\xFEFF" /* BOM */ L"Type\tTID\t"
@@ -493,7 +493,7 @@ BOOL C__Trace::Connect(BOOL onUserRequest)
         // pokusim se otevrit Mutex pro pristup ke sdilene pameti
         HANDLE hOpenConnectionMutex;
         hOpenConnectionMutex = OpenMutex(/*MUTEX_ALL_ACCESS*/ SYNCHRONIZE, FALSE, __OPEN_CONNECTION_MUTEX);
-        if (hOpenConnectionMutex != NULL) // server nalezen
+        if (hOpenConnectionMutex != NULL) // server found
         {
             // prevezmu ConnectionMutex
             DWORD waitRet;
@@ -504,7 +504,7 @@ BOOL C__Trace::Connect(BOOL onUserRequest)
                 if (waitRet != WAIT_ABANDONED)
                     break;
             }
-            if (waitRet == WAIT_OBJECT_0) // podaril se prevzit
+            if (waitRet == WAIT_OBJECT_0) // successfully acquired
             {
                 // otevru FileMapping
                 HANDLE hFileMapping;
@@ -565,7 +565,7 @@ BOOL C__Trace::Connect(BOOL onUserRequest)
                                             // podivam se na vysledek ze serveru
                                             if (*((BOOL*)mapAddress) == TRUE)
                                             {
-                                                if (expectedServerVer == TRACE_CLIENT_VERSION) // hura, povedlo se pripojit na novy Trace Server!
+                                                if (expectedServerVer == TRACE_CLIENT_VERSION) // Connected to the new Trace Server successfully
                                                 {
 #ifdef TRACE_IGNORE_AUTOCLEAR
                                                     ret = SendIgnoreAutoClear(TRUE); // ignorovat, pri chybe provedeme disconnect
@@ -585,7 +585,7 @@ BOOL C__Trace::Connect(BOOL onUserRequest)
 
                                                 // pockam, az server data zpracuje
                                                 waitRet = WaitForSingleObject(hAcceptedEvent, __COMMUNICATION_WAIT_TIMEOUT);
-                                                if (waitRet == WAIT_OBJECT_0 && *((BOOL*)mapAddress) == TRUE) // podivam se na vysledek ze serveru
+                                                if (waitRet == WAIT_OBJECT_0 && *((BOOL*)mapAddress) == TRUE) // check the result from the server
                                                 {
                                                     HANDLE hWritePipeFromSrv = NULL;
                                                     HANDLE hPipeSemaphoreFromSrv = NULL;
@@ -617,7 +617,7 @@ BOOL C__Trace::Connect(BOOL onUserRequest)
                                                     // pri uspechu: pockam, az server nastartuje thread cteni dat z pipy a posle vysledek
                                                     // pri neuspechu: dame serveru vedet, ze se to nepovedlo, vrati nam opet neuspech
                                                     waitRet = WaitForSingleObject(hAcceptedEvent, __COMMUNICATION_WAIT_TIMEOUT);
-                                                    if (waitRet == WAIT_OBJECT_0 && // podivam se na vysledek ze serveru
+                                                    if (waitRet == WAIT_OBJECT_0 && // check the result from the server
                                                         *((int*)mapAddress) == 2 /* 2 = uspesne nastartovany cteci thread v serveru */)
                                                     {
                                                         CloseHandle(HPipeSemaphore);
@@ -626,7 +626,7 @@ BOOL C__Trace::Connect(BOOL onUserRequest)
                                                         CloseHandle(HWritePipe);
                                                         HWritePipe = hWritePipeFromSrv; // pouzijeme pipu ze serveru (tu klientskou zavreme)
 
-                                                        if (expectedServerVer == TRACE_CLIENT_VERSION) // hura, povedlo se pripojit na novy Trace Server!
+                                                        if (expectedServerVer == TRACE_CLIENT_VERSION) // Connected to the new Trace Server successfully
                                                         {
 #ifdef TRACE_IGNORE_AUTOCLEAR
                                                             ret = SendIgnoreAutoClear(TRUE); // ignorovat, pri chybe provedeme disconnect
@@ -645,7 +645,7 @@ BOOL C__Trace::Connect(BOOL onUserRequest)
                                                             CloseHandle(hPipeSemaphoreFromSrv);
                                                     }
                                                 }
-                                                else // connect se nepovedl ani jednim zpusobem (asi stary Trace Server)
+                                                else // connection failed both ways (probably an old Trace Server)
                                                 {
                                                     if (expectedServerVer == TRACE_CLIENT_VERSION) // zkouseli jsme novou verzi serveru
                                                     {
@@ -752,12 +752,12 @@ BOOL C__Trace::WritePipe(LPCVOID lpBuffer, DWORD nNumberOfBytesToWrite)
             BytesAllocatedForWriteToPipe += 1024;
         else
         {
-            if (res == WAIT_TIMEOUT) // timeout, zkontrolujem, jestli pipe na server jeste zije
+            if (res == WAIT_TIMEOUT) // timeout, check whether the pipe to the server is still alive
             {
                 if (!WriteFile(HWritePipe, lpBuffer, 0, &numberOfBytesWritten, NULL))
                     return FALSE;
             }
-            else // jina chyba, radsi koncime, at z toho neni nekonecny cyklus
+            else // another error, it is safer to stop so this does not turn into an infinite loop
                 return FALSE;
         }
     }
@@ -966,7 +966,7 @@ C__Trace::SendMessageToServer(C__MessageType type, BOOL crash)
         ::QueryPerformanceCounter(&perfCounter);
 
         static LONGLONG lastPC = 0;
-        if (lastPC != 0 && lastPC > perfCounter.QuadPart) // counter musi stale rust, snizeni je chyba (na vicejadrovych procesorech se tahle chyba objevuje, resenim je nastaveni affinity na jedine jadro pro ladeny proces v Task Manageru)
+        if (lastPC != 0 && lastPC > perfCounter.QuadPart) // the counter must keep increasing; a decrease is an error (this bug occurs on multi-core processors; the solution is to set affinity to a single core for the debugged process in Task Manager)
         {
             perfCounter.QuadPart = lastPC + 1; // umele zvysime hodnotu counteru na posledni hodnotu plus jedna (jen aby se nesnizil a nedoslo k uplne spatnemu zarazeni v Trace Serveru)
             pcWarningLen = unicode ? (int)wcslen(pcWarningW) : (int)strlen(pcWarning);
@@ -1084,7 +1084,7 @@ C__Trace::SendMessageToServer(C__MessageType type, BOOL crash)
     static BOOL msgBoxOpened = FALSE;
     C__TraceMsgBoxThreadData threadData;
     C__TraceMsgBoxThreadDataW threadDataW;
-    if (crash) // break/padacka po vypisu TRACE error hlasky (TRACE_C a TRACE_MC)
+    if (crash) // break/crash after printing the TRACE error message (TRACE_C and TRACE_MC)
     {
         if (!msgBoxOpened)
         {
@@ -1126,7 +1126,7 @@ C__Trace::SendMessageToServer(C__MessageType type, BOOL crash)
     LeaveCriticalSection(&CriticalSection);
     if (crash)
     {
-        if (unicode && threadDataW.Msg != NULL || // break/padacka po vypisu TRACE error hlasky (TRACE_C a TRACE_MC)
+        if (unicode && threadDataW.Msg != NULL || // break/crash after displaying the TRACE error message (TRACE_C and TRACE_MC)
             !unicode && threadData.Msg != NULL)
         {
             // vypiseme hlasku v jinem threadu, aby nepumpovala zpravy aktualniho threadu
@@ -1144,7 +1144,7 @@ C__Trace::SendMessageToServer(C__MessageType type, BOOL crash)
             // bylo v bug reportu videt presne kde makra lezi; padacka tedy nasleduje
             // po dokonceni teto metody
         }
-        else // ostatni thready s TRACE_C zablokujeme, az se zavre msgbox otevreny pro
+        else // block the other threads with TRACE_C until the message box opened for the first TRACE_C is closed
         {    // prvni TRACE_C, tak to tam i spadne, at v tom neni bordel
             if (msgBoxOpened)
             {
