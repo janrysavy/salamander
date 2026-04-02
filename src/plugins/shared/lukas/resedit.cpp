@@ -99,8 +99,8 @@ try_again:
         goto error;
     }
 
-    // loaded the section headers, allocate one more in case there is no .rsrc
-    // section among them so we can add it without reallocation
+    // allocate one extra section header in case there is no .rsrc
+    // section among them, so we can add it without reallocation
     Sections = (IMAGE_SECTION_HEADER*)malloc(sizeof(IMAGE_SECTION_HEADER) * (PEHead.NumberOfSections + 1));
     if (!Sections)
     {
