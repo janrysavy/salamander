@@ -263,8 +263,8 @@ URLText
 #define BUTTONS_YESNOCANCEL 0x00000005      // Yes / No / Cancel
 #define BUTTONS_YESALLCANCEL 0x00000006     // Yes / All / Cancel
 #define BUTTONS_MASK 0x000000FF             // internal mask, do not use
-// I keep the detection of whether a combination has a SKIP or YES button inline so that
-// when introducing new combinations it remains visible and we remember to extend it
+// keep the detection of combinations with a SKIP or YES button inline so that
+// new combinations remain visible and easy to extend
 inline BOOL ButtonsContainsSkip(DWORD btn)
 {
     return (btn & BUTTONS_MASK) == BUTTONS_SKIPCANCEL ||
@@ -504,7 +504,7 @@ typedef void(WINAPI* SalPluginOperationFromDisk)(const char* sourcePath, SalEnum
 
 // icons for GetSalamanderIcon
 #define SALICON_EXECUTABLE 1    // exe/bat/pif/com
-#define SALICON_DIRECTORY 2     // dir
+#define SALICON_DIRECTORY 2     // directory
 #define SALICON_NONASSOCIATED 3 // non-associated file
 #define SALICON_ASSOCIATED 4    // associated file
 #define SALICON_UPDIR 5         // up-dir ".."
@@ -561,7 +561,7 @@ class CSalamanderREGEXPSearchData
 {
 public:
     // sets the regular expression; 'pattern' is a null-terminated regular-expression string; 'flags'
-    // are algorithm flags (see the SASF_XXX constants); returns FALSE on error and the error description
+    // are algorithm flags (see the SASF_XXX constants); returns FALSE on failure and the error description
     // can be obtained by calling the GetLastErrorText method
     virtual BOOL WINAPI Set(const char* pattern, WORD flags) = 0;
 
@@ -709,10 +709,10 @@ public:
 // Object life cycle:
 //
 //   1) Allocate using the CSalamanderGeneralAbstract::AllocSalamanderMD5 method
-//   2) Call the Update() method successively for the data whose MD5 we want to compute
+//   2) Call the Update() method successively for the data whose MD5 is to be computed
 //   3) Call the Finalize() method
 //   4) Retrieve the computed MD5 using the GetDigest() method
-//   5) If we want to reuse the object, call the Init() method
+//   5) If the object will be reused, call the Init() method
 //      (called automatically in step (1)) and continue with step (2)
 //   6) Destroy the object using the CSalamanderGeneralAbstract::FreeSalamanderMD5 method
 //
@@ -963,13 +963,13 @@ public:
     virtual void WINAPI GetDiskFreeSpace(CQuadWord* retValue, const char* path, CQuadWord* total) = 0;
 
     // custom clone of the Windows GetDiskFreeSpace: can obtain correct data for paths containing
-    // SUBST drives and reparse points under Windows 2000/XP/Vista/7 (Salamander 2.5 works with
-    // junction points only); 'path' is the path for which we query free space; the remaining parameters
+    // SUBST drives and reparse points under Windows 2000/XP/Vista/7 (Salamander 2.5 works only
+    // with junction points); 'path' is the path for which free space is queried; the remaining parameters
     // correspond to the standard Win32 API function GetDiskFreeSpace
     //
-    // WARNING: do not use the return values 'lpNumberOfFreeClusters' and 'lpTotalNumberOfClusters', because
-    //          on larger disks they contain nonsense (DWORD may not be sufficient for the total number of clusters);
-    //          handle it via the previous GetDiskFreeSpace method, which returns 64-bit numbers
+    // WARNING: do not use the output values 'lpNumberOfFreeClusters' and 'lpTotalNumberOfClusters', because
+    //          on larger disks they may contain invalid values (DWORD may not be sufficient for the total number of clusters);
+    //          use the previous GetDiskFreeSpace method instead, which returns 64-bit numbers
     //
     // can be called from any thread
     virtual BOOL WINAPI SalGetDiskFreeSpace(const char* path, LPDWORD lpSectorsPerCluster,
@@ -1027,12 +1027,12 @@ public:
     // limitation: main thread (otherwise salopen.exe would not work - it uses a single shared memory block)
     virtual void WINAPI ExecuteAssociation(HWND parent, const char* path, const char* name) = 0;
 
-    // opens a browse dialog where the user selects a path; 'parent' is the parent of the browse dialog;
-    // 'hCenterWindow' - the window the dialog will be centered to; 'title' is the title of the browse dialog;
-    // 'comment' is the comment in the browse dialog; 'path' is the buffer for the resulting path (minimum MAX_PATH
+    // opens a browse dialog in which the user selects a path; 'parent' is the parent of the browse dialog;
+    // 'hCenterWindow' is the window relative to which the dialog will be centered; 'title' is the browse dialog title;
+    // 'comment' is the text shown in the browse dialog; 'path' is the buffer for the resulting path (at least MAX_PATH
     // characters); if 'onlyNet' is TRUE, only network paths can be browsed (otherwise there is no restriction);
     // if 'initDir' is not NULL, it contains the path where the browse dialog should open; returns TRUE if
-    // a new path is placed in 'path'
+    // 'path' contains a newly selected path
     // WARNING: if called outside the main thread, COM must be initialized beforehand (preferably the entire
     //          OLE - see CoInitialize or OLEInitialize)
     // can be called from any thread
@@ -1237,10 +1237,10 @@ public:
     virtual int WINAPI RegSetStrICmp(const char* s1, const char* s2) = 0;
 
     // compares two strings 's1' and 's2' (with lengths 'l1' and 'l2') ignoring case; if SALCFG_SORTUSESLOCALE
-    // is TRUE, sorting by the Windows regional settings is used; otherwise it compares the same way as
-    // CSalamanderGeneral::StrICmp. If SALCFG_SORTDETECTNUMBERS is TRUE, it uses numerical sorting for numbers
+    // is TRUE, sorting according to the Windows regional settings is used; otherwise it compares the same way as
+    // CSalamanderGeneral::StrICmp. If SALCFG_SORTDETECTNUMBERS is TRUE, numerical sorting is used for numbers
     // contained in the strings; in 'numericalyEqual' (if not NULL) it returns TRUE if the strings are numerically
-    // identical (for example "a01" and "a1"), it is automatically TRUE if the strings are equal
+    // equal (for example "a01" and "a1"); it is automatically TRUE if the strings are equal
     // returns <0 ('s1' < 's2'), ==0 ('s1' == 's2'), >0 ('s1' > 's2')
     virtual int WINAPI RegSetStrICmpEx(const char* s1, int l1, const char* s2, int l2,
                                        BOOL* numericalyEqual) = 0;
@@ -1262,11 +1262,11 @@ public:
     virtual int WINAPI RegSetStrCmpEx(const char* s1, int l1, const char* s2, int l2,
                                       BOOL* numericalyEqual) = 0;
 
-    // returns the path in the panel; 'panel' is one of PANEL_XXX; 'buffer' is the buffer for the path (it can
+    // returns the path in the panel; 'panel' is one of PANEL_XXX; 'buffer' is the path buffer (it can
     // also be NULL); 'bufferSize' is the size of the 'buffer' (if 'buffer' is NULL, this must
     // be zero); if 'type' is not NULL, it points to a variable where the path type will be stored
     // (see PATH_TYPE_XXX); if this is an archive and 'archiveOrFS' is not NULL and 'buffer' is not NULL,
-    // returns 'archiveOrFS' set to 'buffer' at the position after the archive file name;
+    // returns 'archiveOrFS' set to the position in 'buffer' after the archive file name;
     // if this is a file system and 'archiveOrFS' is not NULL and 'buffer' is not NULL, returns
     // 'archiveOrFS' set to the ':' in 'buffer' after the file-system name (after ':' is the user part
     // of the file-system path); if 'convertFSPathToExternal' is TRUE and the panel contains an FS path,
@@ -1303,20 +1303,20 @@ public:
     // limitation: main thread
     virtual CPluginDataInterfaceAbstract* WINAPI GetPanelPluginData(int panel) = 0;
 
-    // returns the focused item of the panel (file/directory/updir("..")), 'panel' is one of PANEL_XXX,
-    // returns NULL (no item in the panel) or data of the focused item; if 'isDir' is not NULL,
-    // it returns FALSE there for a file (otherwise it is a directory or updir)
-    // WARNING: returned item data are read-only
+    // returns the focused item in the panel (file/directory/updir("..")); 'panel' is one of PANEL_XXX,
+    // returns NULL (no item in the panel) or the data for the focused item; if 'isDir' is not NULL,
+    // it is set to FALSE for a file (otherwise the item is a directory or updir)
+    // WARNING: the returned item data are read-only
     // limitation: main thread
     virtual const CFileData* WINAPI GetPanelFocusedItem(int panel, BOOL* isDir) = 0;
 
-    // iterates through panel items (directories first, then files), 'panel' is one of PANEL_XXX,
-    // 'index' is an input/output variable pointing to an int with value 0 on the first call;
-    // the function stores the value for the next call when it returns (usage: reset to zero at the start,
-    // then keep it unchanged); returns NULL (no more items) or data of the next (possibly first) item;
-    // if 'isDir' is not NULL, it returns FALSE there for a file (otherwise it is a directory or updir)
-    // WARNING: returned item data are read-only
-    // limitation: main thread
+    // returns panel items one by one (directories first, then files); 'panel' is one of PANEL_XXX,
+    // 'index' is an input/output variable pointing to an int whose value is 0 on the first call;
+    // the function stores the value for the next call on return (usage: reset it to zero at the start,
+    // then do not modify it); returns NULL (no more items) or the data of the next (possibly first) item;
+    // if 'isDir' is not NULL, it returns FALSE in it for a file (otherwise it is a directory or updir)
+    // WARNING: the returned item data are read-only
+    // limitation: main thread only
     virtual const CFileData* WINAPI GetPanelItem(int panel, int* index, BOOL* isDir) = 0;
 
     // iterates through selected panel items (directories first, then files), 'panel' is one of
@@ -1442,10 +1442,10 @@ public:
     // can be called from any thread
     virtual BOOL WINAPI IsTheSamePath(const char* path1, const char* path2) = 0;
 
-    // extracts the root path from the normal (c:\path) or UNC (\\server\share\path) path 'path';
+    // extracts the root path from the regular (c:\path) or UNC (\\server\share\path) path 'path';
     // returns the path in 'root' in the form 'c:\' or '\\server\share\' (minimum 'root' buffer size is MAX_PATH),
     // returns the number of characters in the root path (without the null terminator); if a UNC root path is longer
-    // than MAX_PATH it is truncated to MAX_PATH-2 characters and backslashes are appended (it is not a valid root anyway)
+    // than MAX_PATH, it is truncated to MAX_PATH-2 characters and a backslash is appended (it is not a valid root path anyway)
     // can be called from any thread
     virtual int WINAPI GetRootPath(char* root, const char* path) = 0;
 
@@ -1506,17 +1506,17 @@ public:
     // can be called from any thread
     virtual const char* WINAPI SalPathFindFileName(const char* path) = 0;
 
-    // adjusts a relative or absolute normal (c:\path) and UNC (\\server\share\path) path
-    // to an absolute path without '.', '..', and without a trailing backslash (except for "c:\"); if 'curDir' is NULL,
-    // relative paths of the form "\path" and "path" return an error (undetermined), otherwise 'curDir' is a valid
-    // normalized current path (UNC and normal); the current paths of other drives (except
-    // 'curDir' + normal only, not UNC) are stored in Salamander's DefaultDir array (before use it is good
+    // converts a relative or absolute standard (c:\path) or UNC (\\server\share\path) path
+    // to an absolute path without '.', '..', and a trailing backslash (except for "c:\"); if 'curDir' is NULL,
+    // relative paths of the form "\path" and "path" return an error (undetermined); otherwise 'curDir' is a valid
+    // normalized current path (UNC or standard); the current paths of other drives (except
+    // 'curDir' + standard only, not UNC) are stored in Salamander's DefaultDir array (before use, it is recommended
     // to call SalUpdateDefaultDir); 'name' - in/out path buffer of at least 'nameBufSize'
-    // characters; if 'nextFocus' is not NULL and the specified relative path does not contain a backslash, strcpy(nextFocus, name)
-    // is performed; returns TRUE if the name 'name' is ready for use, otherwise if 'errTextID' is not NULL it contains
-    // the error (constants GFN_XXX - the text can be obtained via GetGFNErrorText)
-    // WARNING: before using it is good to call SalUpdateDefaultDir
-    // limitation: main thread (otherwise DefaultDir may change in the main thread)
+    // characters; if 'nextFocus' is not NULL and the specified relative path does not contain a backslash,
+    // strcpy(nextFocus, name) is performed; returns TRUE if the name 'name' is ready for use; otherwise, if 'errTextID' is not NULL, it contains
+    // the error (GFN_XXX constants - the text can be obtained via GetGFNErrorText)
+    // WARNING: it is recommended to call SalUpdateDefaultDir before use
+    // limitation: main thread only (otherwise DefaultDir may change in the main thread)
     virtual BOOL WINAPI SalGetFullName(char* name, int* errTextID = NULL, const char* curDir = NULL,
                                        char* nextFocus = NULL, int nameBufSize = MAX_PATH) = 0;
 
@@ -1533,10 +1533,10 @@ public:
 
     // returns a textual representation of a system error (ERROR_XXX) in the buffer 'buf' of size 'bufSize';
     // returns 'buf' (so GetErrorText can be passed directly as a function parameter); 'buf' can be NULL or
-    // 'bufSize' 0; in that case the text is returned in an internal buffer (the text may change due to modifications
-    // of the internal buffer caused by subsequent GetErrorText calls from other plugins or Salamander itself;
-    // the buffer is sized for at least 10 texts, only then is overwriting a risk; if you need to use the text later,
-    // we recommend copying it into a local buffer of size MAX_PATH + 20)
+    // 'bufSize' can be 0; in that case the text is returned in an internal buffer (the text may change due to changes
+    // in the internal buffer caused by subsequent GetErrorText calls, even from other plugins or Salamander;
+    // the buffer is sized for at least 10 texts, so overwriting becomes a risk only after that; if you need to use the text
+    // later, we recommend copying it to a local buffer of size MAX_PATH + 20)
     // can be called from any thread
     virtual char* WINAPI GetErrorText(int err, char* buf = NULL, int bufSize = 0) = 0;
 
@@ -1549,66 +1549,66 @@ public:
     // of PANEL_XXX; 'path' can be any path (Windows/disk, FS, or archive);
     // 'name' can also be an empty string if nothing should be focused;
     // limitation: main thread + outside of CPluginFSInterfaceAbstract and CPluginDataInterfaceAbstract methods
-    // (for example an FS open in the panel could be closed - 'this' might cease to exist for the method)
+    // (for example, an FS open in the panel could be closed, so 'this' might no longer be valid for the method)
     virtual void WINAPI FocusNameInPanel(int panel, const char* path, const char* name) = 0;
 
-    // changes the panel path – the input can be an absolute or relative UNC (\\server\share\path)
-    // or a normal (c:\path) path, both Windows (disk) paths, archive paths, or FS paths
-    // (absolute/relative is handled by the plugin). If the input is a file path,
-    // that file becomes focused; if suggestedTopIndex is not -1, it sets the top index
-    // in the panel; if suggestedFocusName is not NULL, it tries to find (ignore-case) and focus
+    // changes the path in the panel - the input can be an absolute or relative UNC (\\server\share\path)
+    // path or a normal (c:\path) path, either a Windows (disk) path, an archive path, or an FS path
+    // (absolute/relative is handled directly by the plugin); if the input is a file path,
+    // that file is focused; if suggestedTopIndex is not -1, the top index
+    // in the panel is set; if suggestedFocusName is not NULL, it tries to find (ignore-case) and focus
     // the item with the same name; if 'failReason' is not NULL, it is set to one of the
-    // CHPPFR_XXX constants (informing about the result of the method). If 'convertFSPathToInternal' is TRUE and this is
-    // an FS path, the plugin whose path it is (according to fs-name) is located and its
+    // CHPPFR_XXX constants (indicating the result of the method); if 'convertFSPathToInternal' is TRUE and this is
+    // an FS path, the plugin to which the path belongs (according to fs-name) is found and its
     // CPluginInterfaceForFSAbstract::ConvertPathToInternal() is called; returns TRUE if the requested path
-    // was listed successfully.
-    // NOTE: when an FS path is specified, opening is attempted in this order: in the FS
-    // in the panel, in a detached FS, or in a new FS (for panel FS and detached FS it checks whether
-    // the plugin FS name matches and whether the FS method IsOurPath returns TRUE for the path);
-    // limitation: main thread + outside of CPluginFSInterfaceAbstract and CPluginDataInterfaceAbstract methods
-    // (for example an FS open in the panel could be closed - 'this' might cease to exist for the method)
+    // was listed successfully;
+    // NOTE: when an FS path is specified, an attempt is made to open the path in this order: in the FS
+    // in the panel, in a detached FS, or in a new FS (for panel FSs and detached FSs, it checks
+    // whether the plugin FS name matches and whether the FS method IsOurPath returns TRUE for the path);
+    // limitation: main thread + outside the methods of CPluginFSInterfaceAbstract and CPluginDataInterfaceAbstract
+    // (for example, an FS open in the panel could be closed, so 'this' might no longer be valid for the method)
     virtual BOOL WINAPI ChangePanelPath(int panel, const char* path, int* failReason = NULL,
                                         int suggestedTopIndex = -1,
                                         const char* suggestedFocusName = NULL,
                                         BOOL convertFSPathToInternal = TRUE) = 0;
 
     // changes the panel path to a relative or absolute UNC (\\server\share\path) or normal (c:\path)
-    // path; if the new path is not available, it tries to succeed with shortened paths. If the change
-    // stays within a single drive (including archives on that drive) and an accessible path cannot be found
-    // on the drive, the path is changed to the root of the first local fixed drive (a high chance of success,
-    // the panel will not remain empty). When translating a relative path to an absolute one, the path
-    // in the 'panel' panel is preferred (only if it is a disk path, including archives; otherwise it is not used). 'panel' is
-    // one of PANEL_XXX; 'path' is the new path; if 'suggestedTopIndex' is not -1, it is set as the top index
-    // in the panel (only for the new path, not set on shortened (changed) paths); if 'suggestedFocusName' is not NULL,
-    // it tries to find (ignore-case) and focus the item with the same name (only for the new path,
-    // not performed on shortened (changed) paths); if 'failReason' is not NULL,
-    // it is set to one of the CHPPFR_XXX constants (informing about the method result); returns TRUE if
-    // the requested path was listed successfully (not shortened/unchanged)
+    // path; if the new path is not available, it tries shortened paths. If the change
+    // is within a single drive (including archives on that drive) and an accessible path cannot be found
+    // on that drive, the path is changed to the root of the first local fixed drive (high probability of success,
+    // so the panel does not remain empty). When converting a relative path to an absolute path, the path
+    // in the 'panel' panel is preferred (only if it is a disk path, including an archive; otherwise it is not used); 'panel' is
+    // one of PANEL_XXX; 'path' is the new path; if 'suggestedTopIndex' is not -1, it is set as the
+    // top index in the panel (only for the new path; it is not set for shortened (changed) paths); if 'suggestedFocusName' is not NULL,
+    // it tries to find (ignore-case) and focus the item with the same name (only for the new path;
+    // this is not done for shortened (changed) paths); if 'failReason' is not NULL,
+    // it is set to one of the CHPPFR_XXX constants (informing about the result of the method); returns TRUE if
+    // the requested path was listed successfully (without shortening or other modification)
     // limitation: main thread + outside of CPluginFSInterfaceAbstract and CPluginDataInterfaceAbstract methods
-    // (for example an FS open in the panel could be closed - 'this' might cease to exist for the method)
+    // (for example, an FS open in the panel could be closed, so 'this' might no longer be valid for the method)
     virtual BOOL WINAPI ChangePanelPathToDisk(int panel, const char* path, int* failReason = NULL,
                                               int suggestedTopIndex = -1,
                                               const char* suggestedFocusName = NULL) = 0;
 
-    // changes the panel path into an archive; 'archive' is a relative or absolute UNC
+    // changes the path in the panel to an archive; 'archive' is a relative or absolute UNC
     // (\\server\share\path\file) or normal (c:\path\file) archive name, 'archivePath' is the path
-    // inside the archive. If the new path inside the archive is not available, it tries to succeed with shortened paths;
-    // when translating a relative path to an absolute one, the path in the 'panel' panel is preferred
-    // (only if it is a disk path, including an archive; otherwise it is not used). 'panel' is one of PANEL_XXX;
-    // if 'suggestedTopIndex' is not -1, it will be set as the top index in the panel (only for the new
-    // path, it is not set on shortened (changed) paths); if 'suggestedFocusName' is not NULL,
-    // it tries to find (ignore-case) and focus the item with the same name (only for the new path,
-    // not performed on shortened (changed) paths). If 'forceUpdate' is TRUE and the path change is performed
-    // inside the archive 'archive' (the archive is already open in the panel), the archive file is checked for changes
-    // (size & time) and, if it changed, the archive is closed (edited files might need updating)
-    // and listed again or, if the file no longer exists, the path is changed to the disk
+    // inside the archive; if the new path inside the archive is not accessible, it tries shortened paths;
+    // when translating a relative path to an absolute path, the path in panel 'panel' is preferred
+    // (only if it is a disk path, including an archive; otherwise it is not used); 'panel' is one of PANEL_XXX;
+    // if 'suggestedTopIndex' is not -1, it is set as the top index in the panel (only for the new
+    // path; it is not set on a shortened (modified) path); if 'suggestedFocusName' is not NULL,
+    // it tries to find (ignore-case) and focus an item with the same name (only for the new path;
+    // it is not done on a shortened (modified) path); if 'forceUpdate' is TRUE and a path change
+    // inside archive 'archive' is being performed (the archive is already open in the panel), the archive file is checked for changes
+    // (size & time) and, if it has changed, the archive is closed (edited files may need to be updated)
+    // and listed again, or if the file no longer exists, the path is changed to the disk
     // (the archive is closed; if the disk path is not accessible, the path is changed to the root of the first local
-    // fixed drive). If 'forceUpdate' is FALSE, path changes inside the archive 'archive' are performed without
-    // checking the archive file. If 'failReason' is not NULL, it is set to one of the CHPPFR_XXX constants
-    // (indicating the method result); returns TRUE if the requested path was listed successfully
-    // (not shortened/unchanged)
-    // limitation: main thread + outside of CPluginFSInterfaceAbstract and CPluginDataInterfaceAbstract methods
-    // (for example an FS open in the panel could be closed - 'this' might cease to exist for the method)
+    // fixed drive); if 'forceUpdate' is FALSE, path changes inside archive 'archive' are performed without
+    // checking the archive file; if 'failReason' is not NULL, it is set to one of the constants
+    // CHPPFR_XXX (indicating the result of the method); returns TRUE if the requested path
+    // was listed successfully (without shortening or other modification)
+    // limitation: main thread + outside methods of CPluginFSInterfaceAbstract and CPluginDataInterfaceAbstract
+    // (for example, an FS open in the panel may be closed, so 'this' might no longer be valid for the method)
     virtual BOOL WINAPI ChangePanelPathToArchive(int panel, const char* archive, const char* archivePath,
                                                  int* failReason = NULL, int suggestedTopIndex = -1,
                                                  const char* suggestedFocusName = NULL,
@@ -1616,26 +1616,26 @@ public:
 
     // changes the panel path to a plugin FS; 'fsName' is the FS name (see GetPluginFSName; it does not
     // have to belong to this plugin), 'fsUserPart' is the path within the FS. If the new path in the FS
-    // is not available, it tries to succeed with shortened paths (repeated ChangePath and ListCurrentPath calls,
+    // is not available, it tries shortened paths (repeated ChangePath and ListCurrentPath calls,
     // see CPluginFSInterfaceAbstract). If the change remains within the current FS (see
     // CPluginFSInterfaceAbstract::IsOurPath) and an accessible path cannot be found from the new path,
     // it tries to find an accessible path from the original (current) path, and if that also fails,
     // the path is changed to the root of the first local fixed drive (high chance of success, the panel will not remain empty);
     // 'panel' is one of PANEL_XXX; if 'suggestedTopIndex' is not -1, it is set as the top index
-    // in the panel (only for the new path, not set on shortened (changed) paths); if
+    // in the panel (only for the new path; it is not set on shortened (changed) paths); if
     // 'suggestedFocusName' is not NULL, it tries to find (ignore-case) and focus the item with the same name
-    // (only for the new path, not performed on shortened (changed) paths). If 'forceUpdate' is TRUE,
+    // (only for the new path; this is not performed on shortened (changed) paths). If 'forceUpdate' is TRUE,
     // the case of changing the path to the current panel path is not optimized (the path is listed normally)
     // (either the new path matches the current path directly or it was shortened to it by the first ChangePath).
-    // If 'convertPathToInternal' is TRUE, the plugin according to 'fsName' is located and its
+    // If 'convertPathToInternal' is TRUE, the plugin identified by 'fsName' is found and its
     // method CPluginInterfaceForFSAbstract::ConvertPathToInternal() is called for 'fsUserPart';
-    // if 'failReason' is not NULL, it is set to one of the CHPPFR_XXX constants (informing
-    // about the method result); returns TRUE if the requested path was listed successfully
-    // (not shortened/unchanged)
+    // if 'failReason' is not NULL, it is set to one of the CHPPFR_XXX constants (indicating
+    // the method result); returns TRUE if the requested path was listed successfully
+    // (without being shortened or changed)
     // NOTE: if you need the FS path to be attempted even in detached FSs, use ChangePanelPath (ChangePanelPathToPluginFS
     // ignores detached FSs - it only works with an FS open in the panel or opens a new FS);
     // limitation: main thread + outside of CPluginFSInterfaceAbstract and CPluginDataInterfaceAbstract methods
-    // (for example an FS open in the panel could be closed - 'this' might cease to exist for the method)
+    // (for example, an FS open in the panel could be closed, so 'this' might no longer be valid for the method)
     virtual BOOL WINAPI ChangePanelPathToPluginFS(int panel, const char* fsName, const char* fsUserPart,
                                                   int* failReason = NULL, int suggestedTopIndex = -1,
                                                   const char* suggestedFocusName = NULL,
@@ -1644,15 +1644,15 @@ public:
 
     // changes the panel path to a detached plugin FS (see FSE_DETACHED/FSE_ATTACHED),
     // 'detachedFS' is the detached plugin FS; if the current path in the detached FS is not available,
-    // it tries to succeed with shortened paths (repeated ChangePath and ListCurrentPath calls, see
-    // CPluginFSInterfaceAbstract). 'panel' is one of PANEL_XXX; if 'suggestedTopIndex' is not -1,
-    // it is set as the top index in the panel (only for the new path, not set on shortened (changed) paths);
-    // if 'suggestedFocusName' is not NULL, it tries to find (ignore-case) and focus the item with the same name
-    // (only for the new path, not performed on shortened (changed) paths);
-    // if 'failReason' is not NULL, it is set to one of the CHPPFR_XXX constants (informing about the method result);
-    // returns TRUE if the requested path was listed successfully (not shortened/unchanged)
-    // limitation: main thread + outside of CPluginFSInterfaceAbstract and CPluginDataInterfaceAbstract methods
-    // (for example an FS open in the panel could be closed - 'this' might cease to exist for the method)
+    // it tries shorter paths instead (repeated calls to ChangePath and ListCurrentPath, see
+    // CPluginFSInterfaceAbstract); 'panel' is one of PANEL_XXX; if 'suggestedTopIndex' is not -1,
+    // it is set as the top index in the panel (only for the new path; it is not set for shortened (changed) paths);
+    // if 'suggestedFocusName' is not NULL, it tries to find (ignore-case) and focus an item with the same name
+    // (only for the new path; this is not done for shortened (changed) paths);
+    // if 'failReason' is not NULL, it is set to one of the CHPPFR_XXX constants (indicating the result
+    // of the method); returns TRUE if the requested path was listed successfully (without shortening or other changes)
+    // limitation: main thread + outside the methods of CPluginFSInterfaceAbstract and CPluginDataInterfaceAbstract
+    // (for example, an FS open in the panel could be closed, so 'this' might no longer be valid for the method)
     virtual BOOL WINAPI ChangePanelPathToDetachedFS(int panel, CPluginFSInterfaceAbstract* detachedFS,
                                                     int* failReason = NULL, int suggestedTopIndex = -1,
                                                     const char* suggestedFocusName = NULL) = 0;
@@ -1662,7 +1662,7 @@ public:
     // it is set to one of the CHPPFR_XXX constants (informing about the method result); returns
     // TRUE if the root of the first local fixed drive was listed successfully
     // limitation: main thread + outside of CPluginFSInterfaceAbstract and CPluginDataInterfaceAbstract methods
-    // (for example an FS open in the panel could be closed - 'this' might cease to exist for the method)
+    // (for example, an FS open in the panel could be closed, so 'this' might no longer be valid for the method)
     virtual BOOL WINAPI ChangePanelPathToFixedDrive(int panel, int* failReason = NULL) = 0;
 
     // refreshes the path in the panel (reloads the listing and transfers the selection, icons, focus, etc.
@@ -1673,8 +1673,8 @@ public:
     // only a single item was added to the panel, that new item is focused (used, for example,
     // to focus a newly created file/directory)
     // limitation: main thread and only outside of CPluginFSInterfaceAbstract and
-    // CPluginDataInterfaceAbstract methods (for example an FS open in the panel could be closed - 'this'
-    // might cease to exist for the method)
+    // CPluginDataInterfaceAbstract methods (for example, an FS open in the panel could be closed, so 'this'
+    // might no longer be valid for the method)
     virtual void WINAPI RefreshPanelPath(int panel, BOOL forceRefresh = FALSE,
                                          BOOL focusFirstNewItem = FALSE) = 0;
 
@@ -1709,7 +1709,7 @@ public:
     // CPluginFSInterfaceAbstract::ReleaseObject can open them)
     // Note: a plugin FS opened in a panel is closed, for example, via ChangePanelPathToRescuePathOrFixedDrive
     // limitation: main thread + outside CPluginFSInterfaceAbstract methods (we are trying to close a
-    // detached FS - the method's 'this' could cease to exist)
+    // detached FS - the method's 'this' might no longer be valid)
     virtual BOOL WINAPI CloseDetachedFS(HWND parent, CPluginFSInterfaceAbstract* detachedFS) = 0;
 
     // doubles '&' - useful for paths displayed in a menu ('&&' is displayed as '&');
@@ -1724,18 +1724,19 @@ public:
     virtual void WINAPI RemoveAmpersands(char* text) = 0;
 
     // ValidateVarString and ExpandVarString:
-    // methods for validating and expanding strings with variables in the form "$(var_name)", "$(var_name:num)"
-    // (num is the variable width, a numeric value from 1 to 9999), "$(var_name:max)" ("max" is a
-    // symbol indicating that the variable width is determined by the value in the 'maxVarWidths' array; see
-    // ExpandVarString for details) and "$[env_var]" (expands the value of an environment variable); used when the
-    // user can specify a format string (for example, in the info line). Example of a string with variables:
+    // methods for validating and expanding strings with variables like "$(var_name)", "$(var_name:num)"
+    // (num is the variable width, a numeric value from 1 to 9999), "$(var_name:max)" ("max" means that
+    // the width follows the value in the 'maxVarWidths' array; see ExpandVarString for details) and
+    // "$[env_var]" for environment variables; used when the user can specify a format string (for example,
+    // in the info line). Example of a string with variables:
     // "$(files) files and $(dirs) directories" - variables 'files' and 'dirs';
     // source code for use in the info line (without variables in the form "$(varname:max)") is in DEMOPLUG
     //
     // checks the syntax of 'varText' (a string with variables), returns FALSE if it finds an error; the
-    // position is stored in 'errorPos1' (offset of the start of the erroneous part) and 'errorPos2' (offset of the end of the
-    // erroneous part); 'variables' is an array of CSalamanderVarStrEntry structures terminated by a structure with
-    // Name==NULL; 'msgParent' is the parent window for error message boxes; if it is NULL, errors are not displayed
+    // error position is stored in 'errorPos1' (offset of the start of the erroneous part) and 'errorPos2'
+    // (offset of the end of the erroneous part); 'variables' is an array of CSalamanderVarStrEntry structures
+    // terminated by a structure with Name==NULL; 'msgParent' is the parent of error message boxes; if it is
+    // NULL, errors are not displayed
     virtual BOOL WINAPI ValidateVarString(HWND msgParent, const char* varText, int& errorPos1, int& errorPos2,
                                           const CSalamanderVarStrEntry* variables) = 0;
     //
@@ -1776,14 +1777,14 @@ public:
     // limitation: main thread (otherwise the plugin configuration could change during the call)
     virtual BOOL WINAPI SetFlagLoadOnSalamanderStart(BOOL start) = 0;
 
-    // marks the calling plugin to be unloaded at the earliest opportunity
-    // (once all posted menu commands are executed (see PostMenuExtCommand), there are no messages
+    // sets a flag in the calling plugin indicating that it should be unloaded at the earliest possible opportunity
+    // (once all posted menu commands have been executed (see PostMenuExtCommand), there are no messages
     // in the main thread's message queue, and Salamander is not "busy");
-    // WARNING: when called from a thread other than the main thread, the unload request (processed
-    // in the main thread) may arrive even before PostUnloadThisPlugin finishes (see
-    // CPluginInterfaceAbstract::Release for more information about unloading)
-    // can be called from any thread (but only after the plugin entry point finishes; while the entry point
-    // is running, the method may be called from the main thread only)
+    // WARNING: if called from a thread other than the main thread, the unload request (processed
+    // in the main thread) may be issued even before PostUnloadThisPlugin finishes (for more information
+    // about unloading, see CPluginInterfaceAbstract::Release)
+    // can be called from any thread (but only after the plugin entry point has finished; while the entry point
+    // is running, the method may be called only from the main thread)
     virtual void WINAPI PostUnloadThisPlugin() = 0;
 
     // iterates over Salamander modules (the executable and .spl files of installed plugins, all with versions);
@@ -1851,8 +1852,8 @@ public:
     // 'email' is the new e-mail address (NULL means "use the default"; maximum e-mail length is 100 characters);
     // this method can be called repeatedly; the previous message and e-mail are overwritten; Salamander does not
     // remember either the message or the e-mail for the next run, so this method must always be called again when
-    // the plugin is loaded (preferably in the entry point)
-    // limitation: main thread (otherwise changes to the plugin configuration may occur during the call)
+    // loading the plugin (preferably in the entry point)
+    // limitation: main thread (otherwise the plugin configuration might change during the call)
     virtual void WINAPI SetPluginBugReportInfo(const char* message, const char* email) = 0;
 
     // checks whether a plugin is installed (however, it does not determine whether it can be loaded - for example, whether the
@@ -1887,16 +1888,18 @@ public:
                                                BOOL useCache, const char* rootTmpPath,
                                                const char* fileNameInCache, int& error) = 0;
 
-    // notifies Salamander, then all loaded plugins, and then all open FS instances (in panels and detached)
-    // about a change on the 'path' (disk or FS path) as soon as possible; this is important for paths where
-    // changes cannot be monitored automatically (see FindFirstChangeNotification) or where the user disabled
-    // such monitoring (auto-refresh); FS plugins handle change monitoring themselves; the notification happens as
-    // soon as possible (if the main thread is not executing code inside the plugin, the refresh takes place after the
-    // message is delivered to the main window and after refresh is re-enabled, e.g. when a dialog closes; otherwise
-    // the refresh waits at least until the main thread leaves the plugin); 'includingSubdirs' is TRUE if the change may also
-    // affect subdirectories of 'path';
-    // WARNING: when called from a thread other than the main thread, the change notification (processed in the main thread)
-    // may occur even before PostChangeOnPathNotification finishes
+    // informs Salamander, then all loaded plugins, and then all open FS instances
+    // (in panels and detached) about a change on the path 'path' (a disk or FS path) as soon as possible; this is important for
+    // paths on which changes cannot be monitored automatically (see FindFirstChangeNotification) or
+    // where the user has turned this monitoring (auto-refresh) off; for FS, change monitoring is handled by
+    // the plugin itself; change notification is performed as soon as possible (if the main thread is not executing code
+    // inside a plugin, the refresh occurs after the message is delivered to the main window and after refresh is re-enabled
+    // again (after a dialog is closed, etc.); otherwise the refresh waits at least until
+    // the main thread leaves the plugin); 'includingSubdirs' is TRUE if the change
+    // can also affect subdirectories of 'path';
+    // WARNING: if called from a thread other than the main thread, change notification
+    // (which runs in the main thread) may occur even before PostChangeOnPathNotification
+    // finishes
     // can be called from any thread
     virtual void WINAPI PostChangeOnPathNotification(const char* path, BOOL includingSubdirs) = 0;
 
@@ -1918,15 +1921,17 @@ public:
     // limitation: main thread only (repeated calls are not possible and the main thread uses this method)
     virtual BOOL WINAPI SalCheckAndRestorePath(HWND parent, const char* path, BOOL tryNet) = 0;
 
-    // a more complex variant of SalCheckAndRestorePath; checks whether the Windows path 'path' is accessible and,
-    // if necessary, shortens it; if 'tryNet' is TRUE, it also attempts to restore the network connection and sets
-    // 'tryNet' to FALSE (for a normal path, it tries to re-establish the remembered network connection; for a UNC
-    // path, it allows login with a new user name and password); if 'donotReconnect' is TRUE, it only detects the
-    // error and no longer attempts to restore the connection; returns 'err' (the Windows error code of the current
-    // path), 'lastErr' (the error code that led to the path being shortened), 'pathInvalid' (TRUE if an attempt
-    // to restore the network connection was made without success), 'cut' (TRUE if the resulting path is shortened);
-    // 'parent' is the parent message box; returns TRUE if the resulting 'path' is accessible
-    // limitation: main thread (repeated calls are not possible and the main thread uses this method)
+    // a more complex variant of SalCheckAndRestorePath; checks whether the Windows path 'path' is
+    // accessible and, if necessary, shortens it; if 'tryNet' is TRUE, it also attempts to restore
+    // the network connection and sets 'tryNet' to FALSE (for a normal path, it tries to revive the
+    // remembered network connection; for a UNC path, it allows login with a new user name and
+    // password); if 'donotReconnect' is TRUE, it only detects the error and no longer attempts to
+    // restore the connection; returns 'err' (the Windows error code of the current path), 'lastErr'
+    // (the error code that led to the path being shortened), 'pathInvalid' (TRUE if an attempt to
+    // restore the network connection was made without success), 'cut' (TRUE if the resulting path
+    // is shortened); 'parent' is the parent of the message box; returns TRUE if the resulting path
+    // 'path' is accessible
+    // limitation: main thread only (repeated calls are not possible and the main thread uses this method)
     virtual BOOL WINAPI SalCheckAndRestorePathWithCut(HWND parent, char* path, BOOL& tryNet, DWORD& err,
                                                       DWORD& lastErr, BOOL& pathInvalid, BOOL& cut,
                                                       BOOL donotReconnect) = 0;
@@ -1964,19 +1969,21 @@ public:
                                      const char* curPath, const char* curArchivePath, int* error,
                                      int pathBufSize) = 0;
 
-    // obtains the existing part and the operation mask from a Windows target path; allows creating any missing part;
-    // on success returns TRUE and stores the existing Windows target path in 'path' and the detected operation mask in 'mask'
-    // (points inside the 'path' buffer, but the path and mask are separated by a null character; if the path lacks a mask,
-    // a "*.*" mask is created automatically). 'parent' is the parent of any message boxes; 'title' and 'errorTitle' are the
-    // titles of informational and error message boxes; 'selCount' is the number of selected files and directories; 'path' is
-    // the target path to process on input and, on output (at least 2 * MAX_PATH characters), the existing target path;
-    // 'secondPart' points within 'path' behind the existing part (after '\\' or at the end – if the path contains a file, it
-    // points after that file's path); 'pathIsDir' is TRUE/FALSE depending on whether the existing part is a directory/file;
-    // 'backslashAtEnd' is TRUE if 'path' ended with a backslash before parsing (e.g. SalParsePath removes that backslash);
-    // 'dirName' and 'curDiskPath' are not NULL if at most one file/directory is selected (its name without the path is in
-    // 'dirName'; if nothing is selected, the focus is used) and the current path is a Windows path (stored in 'curDiskPath');
-    // 'mask' is the output pointer to the operation mask within the 'path' buffer; if an error occurs, the method returns
-    // FALSE because the problem has already been reported to the user
+    // obtains the existing part and the operation mask from a Windows target path; allows any missing part
+    // to be created; on success returns TRUE and stores the existing Windows target path in 'path' and the
+    // detected operation mask in 'mask' (it points into the 'path' buffer, but the path and mask are separated
+    // by a null character; if the path does not contain a mask, a "*.*" mask is created automatically).
+    // 'parent' is the parent of any message boxes; 'title' and 'errorTitle' are the titles of informational
+    // and error message boxes; 'selCount' is the number of selected files and directories; 'path' is the
+    // target path to process on input and, on output (at least 2 * MAX_PATH characters), the existing target
+    // path; 'secondPart' points into 'path' to the position after the existing part (after '\\' or at the
+    // end of the string; if the path contains a file, it points after the path to that file); 'pathIsDir' is
+    // TRUE/FALSE if the existing part of the path is a directory/file; 'backslashAtEnd' is TRUE if 'path'
+    // ended with a backslash before parsing (for example, SalParsePath removes such a backslash); 'dirName'
+    // and 'curDiskPath' are not NULL if at most one file/directory is selected (its name without the path is
+    // in 'dirName'; if nothing is selected, the focus is used) and the current path is a Windows path (the
+    // path is in 'curDiskPath'); 'mask' is the output pointer to the operation mask in the 'path' buffer; if
+    // the path contains an error, the method returns FALSE; the problem has already been reported to the user
     // can be called from any thread
     virtual BOOL WINAPI SalSplitWindowsPath(HWND parent, const char* title, const char* errorTitle,
                                             int selCount, char* path, char* secondPart, BOOL pathIsDir,
@@ -2018,14 +2025,16 @@ public:
     // can be called from any thread
     virtual BOOL WINAPI SalRemovePointsFromPath(char* afterRoot) = 0;
 
-    // returns a parameter from Salamander's configuration; 'paramID' identifies the parameter
-    // (see the SALCFG_XXX constants); 'buffer' points to the buffer where the parameter data will be copied;
-    // its size is 'bufferSize'; if 'type' is not NULL, it returns one of the SALCFGTYPE_XXX constants or
-    // SALCFGTYPE_NOTFOUND (if the parameter with 'paramID' was not found); returns TRUE if 'paramID' is valid
-    // and the configuration value fits into 'buffer'
-    // note: configuration changes are reported via the PLUGINEVENT_CONFIGURATIONCHANGED event
-    //       (see CPluginInterfaceAbstract::Event)
-    // limitation: main thread – configuration changes happen only in the main thread (no additional synchronization)
+    // returns a parameter from Salamander's configuration; 'paramID' identifies which parameter
+    // is requested (see the SALCFG_XXX constants); 'buffer' points to the buffer into which the
+    // parameter data are copied, and its size is 'bufferSize'; if 'type' is not NULL, it is set
+    // to one of the SALCFGTYPE_XXX constants or SALCFGTYPE_NOTFOUND (if the parameter with
+    // 'paramID' was not found); returns TRUE if 'paramID' is valid and the configuration
+    // parameter value fits into 'buffer'
+    // note: changes in Salamander's configuration are reported by the
+    //       PLUGINEVENT_CONFIGURATIONCHANGED event (see CPluginInterfaceAbstract::Event)
+    // limitation: main thread, configuration changes occur only in the main thread (it contains
+    //             no other synchronization)
     virtual BOOL WINAPI GetConfigParameter(int paramID, void* buffer, int bufferSize, int* type) = 0;
 
     // changes the character case in a file name (name without path); 'tgtName' is the output buffer
@@ -2056,37 +2065,37 @@ public:
                                              int delay, BOOL showCloseButton, HWND hForegroundWnd) = 0;
     // close the window
     virtual void WINAPI DestroySafeWaitWindow() = 0;
-    // hides/shows the window (if it is open); call in response to WM_ACTIVATE from the hForegroundWnd window:
+    // hides/shows the window (if it is open); call in response to WM_ACTIVATE from window hForegroundWnd:
     //    case WM_ACTIVATE:
     //    {
     //      ShowSafeWaitWindow(LOWORD(wParam) != WA_INACTIVE);
     //      break;
     //    }
-    // If the thread (from which the window was created) is busy, messages are not dispatched,
+    // If the thread in which the window was created is busy, messages are not dispatched,
     // so WM_ACTIVATE is not delivered when the user clicks another application.
     // The messages are delivered only when a message box is shown,
     // which is exactly what we need: temporarily hide the window and later (after the
-    // message box is closed and the hForegroundWnd window is activated) show it again.
+    // message box is closed and window hForegroundWnd is activated) show it again.
     virtual void WINAPI ShowSafeWaitWindow(BOOL show) = 0;
     // after calling CreateSafeWaitWindow or ShowSafeWaitWindow, the function returns FALSE until
     // the user clicks the Close button with the mouse (if it is shown); it then returns TRUE
     virtual BOOL WINAPI GetSafeWaitWindowClosePressed() = 0;
-    // used for subsequent changes to the text in the window
-    // WARNING: the window is not laid out again, and if the text becomes longer,
-    // it will be clipped; use for example for a countdown: 60s, 55s, 50s, ...
+    // used to change the text in the dialog box later
+    // WARNING: the dialog box is not laid out again, so if the text becomes longer,
+    // it will be clipped; use this, for example, for a countdown: 60s, 55s, 50s, ...
     virtual void WINAPI SetSafeWaitWindowText(const char* message) = 0;
 
-    // najde v disk-cache existujici kopii souboru a zamkne ji (zakaze jeji zruseni); 'uniqueFileName'
-    // je unikatni nazev originalniho souboru (podle tohoto nazvu se prohledava disk-cache; melo by
-    // stacit plne jmeno souboru v salamanderovske forme - "fs-name:fs-user-part"; POZOR: nazev se
-    // porovnava "case-sensitive", pokud plugin vyzaduje "case-insensitive", musi vsechny nazvy
-    // prevadet napr. na mala pismena - viz CSalamanderGeneralAbstract::ToLowerCase); v 'tmpName'
-    // se vraci ukazatel (platny az do zruseni kopie souboru v disk-cache) na plne jmeno kopie souboru,
-    // ktera je umistena v docasnem adresari; 'fileLock' je zamek kopie souboru, jde o systemovy event
-    // ve stavu nonsignaled, ktery po zpracovani kopie souboru prejde do stavu signaled (je nutne
-    // pouzit metodu UnlockFileInCache; plugin dava signal, ze kopii v disk-cache jiz lze zrusit);
-    // pokud nebyla kopie nalezena vraci FALSE a 'tmpName' NULL (jinak vraci TRUE)
-    // mozne volat z libovolneho threadu
+    // Finds an existing copy of the file in the disk cache and locks it (prevents its deletion); 'uniqueFileName'
+    // is the unique name of the original file (the disk cache is searched by this name; it should be
+    // enough to use the full file name in Salamander format - "fs-name:fs-user-part"; WARNING: the name is
+    // compared case-sensitively, if the plugin requires case-insensitive comparison, it must convert all names
+    // for example to lowercase - see CSalamanderGeneralAbstract::ToLowerCase); in 'tmpName'
+    // a pointer is returned (valid until the file copy in the disk cache is deleted) to the full name of the file copy,
+    // which is located in the temporary directory; 'fileLock' is the lock for the file copy, it is a system event
+    // in the nonsignaled state that changes to the signaled state after the file copy has been processed (it is necessary
+    // to use the UnlockFileInCache method; the plugin signals that the copy in the disk cache can already be deleted);
+    // if the copy was not found, FALSE is returned and 'tmpName' is NULL (otherwise TRUE is returned)
+    // can be called from any thread
     virtual BOOL WINAPI GetFileFromCache(const char* uniqueFileName, const char*& tmpName, HANDLE fileLock) = 0;
 
     // unlocks the lock for a file copy in the disk-cache (sets 'fileLock' to the signaled state, prompts
@@ -2098,31 +2107,31 @@ public:
     // can be called from any thread
     virtual void WINAPI UnlockFileInCache(HANDLE fileLock) = 0;
 
-    // vlozi (presune) kopii souboru do disk-cache (vkladana kopie neni zamcena, takze kdykoliv muze dojit
-    // k jejimu zruseni); 'uniqueFileName' je unikatni nazev originalniho souboru (podle tohoto
-    // nazvu se prohledava disk-cache; melo by stacit plne jmeno souboru v salamanderovske
-    // forme - "fs-name:fs-user-part"; POZOR: nazev se porovnava "case-sensitive", pokud plugin
-    // vyzaduje "case-insensitive", musi vsechny nazvy prevadet napr. na mala pismena - viz
-    // CSalamanderGeneralAbstract::ToLowerCase); 'nameInCache' je jmeno kopie souboru, ktera bude umistena
-    // v docasnem adresari (ocekava se zde posledni cast jmena originalniho souboru, aby pozdeji
-    // uzivateli pripominala originalni soubor); 'newFileName' je plne jmeno ukladane kopie souboru,
-    // ktera bude presunuta do disk-cache pod jmenem 'nameInCache', musi byt umistena na stejnem disku
-    // jako diskova cache (je-li 'rootTmpPath' NULL, je diskova cache ve Windows TEMP adresari, jinak
-    // je cesta do disk-cache v 'rootTmpPath'; pro prejmenovani do disk cache pres Win32 API funkci
-    // MoveFile); 'newFileName' je idealni ziskat volanim SalGetTempFileName s parametrem 'path' rovnym
-    // 'rootTmpPath'); v 'newFileSize' je velikost ukladane kopie souboru; vraci TRUE pri uspechu
-    // (soubor byl presunut do disk-cache - zmizel z puvodniho mista na disku), vraci FALSE pri
-    // interni chybe nebo pokud soubor jiz je v disk-cache (neni-li 'alreadyExists' NULL, vraci
-    // se v nem TRUE pokud soubor jiz je v disk-cache)
-    // POZN.: pokud plugin vyuziva disk-cache, mel by alespon pri unloadu pluginu zavolat
-    //        CSalamanderGeneralAbstract::RemoveFilesFromCache("fs-name:"), jinak budou
-    //        jeho kopie souboru zbytecne prekazet v disk-cache
-    // mozne volat z libovolneho threadu
+    // inserts (moves) a copy of the file into the disk cache (the inserted copy is not locked, so it may be
+    // removed at any time); 'uniqueFileName' is the unique name of the original file (the disk cache is searched
+    // by this name; the full file name in Salamander format should be sufficient - "fs-name:fs-user-part";
+    // WARNING: the name is compared case-sensitively; if the plugin requires case-insensitive comparison, it must
+    // convert all names, for example, to lowercase - see CSalamanderGeneralAbstract::ToLowerCase);
+    // 'nameInCache' is the name of the file copy that will be placed in the temporary directory (the last part
+    // of the original file name is expected here so that it later reminds the user of the original file);
+    // 'newFileName' is the full name of the stored file copy, which will be moved to the disk cache under the
+    // name 'nameInCache'; it must be located on the same disk as the disk cache (if 'rootTmpPath' is NULL, the
+    // disk cache is in the Windows TEMP directory; otherwise, the path to the disk cache is in 'rootTmpPath';
+    // this is required for renaming into the disk cache using the Win32 API function MoveFile); ideally,
+    // 'newFileName' should be obtained by calling SalGetTempFileName with the 'path' parameter set to
+    // 'rootTmpPath'; 'newFileSize' contains the size of the stored file copy; returns TRUE on success
+    // (the file was moved to the disk cache and disappeared from its original location on disk), returns FALSE
+    // on an internal error or if the file is already in the disk cache (if 'alreadyExists' is not NULL, TRUE
+    // is returned in it if the file is already in the disk cache)
+    // NOTE: if a plugin uses the disk cache, it should at least call
+    //       CSalamanderGeneralAbstract::RemoveFilesFromCache("fs-name:") when the plugin is unloaded,
+    //       otherwise its file copies will unnecessarily remain in the disk cache
+    // can be called from any thread
     virtual BOOL WINAPI MoveFileToCache(const char* uniqueFileName, const char* nameInCache,
                                         const char* rootTmpPath, const char* newFileName,
                                         const CQuadWord& newFileSize, BOOL* alreadyExists) = 0;
 
-    // removes from disk-cache the copy of the file whose unique name is 'uniqueFileName' (NOTE: the name
+    // removes from disk-cache the copy of the file whose unique name is 'uniqueFileName' (WARNING: the name
     // is compared "case-sensitive"; if the plugin requires "case-insensitive", it must convert all names
     // for example to lowercase - see CSalamanderGeneralAbstract::ToLowerCase); if the file copy
     // is still being used, it is removed as soon as possible (when the viewers are closed), but in any case it
@@ -2140,28 +2149,28 @@ public:
     // can be called from any thread
     virtual void WINAPI RemoveFilesFromCache(const char* fileNamesRoot) = 0;
 
-    // vraci postupne konverzni tabulky (nactene ze souboru convert\XXX\convert.cfg
-    // v instalaci Salamandera - XXX je prave pouzivany adresar konverznich tabulek);
-    // 'parent' je parent messageboxu (je-li NULL, je parent hlavni okno);
-    // 'index' je vstupne/vystupni promenna, ukazuje na int, ve kterem je pri prvnim volani 0,
-    // hodnotu pro dalsi volani si funkce ulozi pri navratu (pouziti: na zacatku vynulovat, pak
-    // nemenit); vraci FALSE, pokud jiz neexistuje zadna dalsi tabulka; pokud vraci TRUE, obsahuje
-    // 'name' (neni-li NULL) odkaz na jmeno konverze (muze obsahovat '&' - podtrzeny znak v menu) nebo NULL
-    // jde-li o separator a 'table' (neni-li NULL) odkaz na 256-bytovou konverzni tabulku nebo NULL
-    // jde-li o separator; odkazy 'name' a 'table' jsou platne po celou dobu behu Salamandera (neni
-    // nutne kopirovat obsah)
-    // POZOR: ukazatel 'table' pouzivat timto zpusobem (nutne pretypovani na "unsigned"):
+    // returns conversion tables one by one (loaded from the file convert\XXX\convert.cfg
+    // in the Salamander installation - XXX is the currently used conversion table directory);
+    // 'parent' is the parent of the message box (if it is NULL, the main window is the parent);
+    // 'index' is an input/output variable, it points to an int whose value is 0 on the first call,
+    // the function stores the value for the next call before returning (usage: initialize it to zero,
+    // then do not modify it); returns FALSE if there is no next table; if it returns TRUE, then
+    // 'name' (if it is not NULL) contains a pointer to the conversion name (it may contain '&' - the underlined
+    // character in the menu) or NULL if this is a separator, and 'table' (if it is not NULL) contains a pointer
+    // to a 256-byte conversion table or NULL if this is a separator; the 'name' and 'table' pointers remain valid
+    // for the entire Salamander runtime (it is not necessary to copy the contents)
+    // WARNING: use the 'table' pointer in this way (the cast to "unsigned" is required):
     //        *s = table[(unsigned char)*s]
-    // mozne volat z libovolneho threadu
+    // can be called from any thread
     virtual BOOL WINAPI EnumConversionTables(HWND parent, int* index, const char** name, const char** table) = 0;
 
-    // vraci konverzni tabulku 'table' (buffer min. 256 znaku) pro konverzi 'conversion' (jmeno
-    // konverze viz soubor convert\XXX\convert.cfg v instalaci Salamandera, napr. "ISO-8859-2 - CP1250";
-    // znaky <= ' ' a '-' a '&' ve jmene pri hledani nehraji roli; hleda se bez ohledu na velka a mala
-    // pismena); 'parent' je parent messageboxu (je-li NULL, je parent hlavni okno); vraci TRUE
-    // pokud byla konverze nalezena (jinak neni obsah 'table' platny);
-    // POZOR: pouzivat timto zpusobem (nutne pretypovani na "unsigned"): *s = table[(unsigned char)*s]
-    // mozne volat z libovolneho threadu
+    // Returns the conversion table 'table' (buffer at least 256 characters) for conversion 'conversion' (for
+    // the conversion name, see the file convert\XXX\convert.cfg in the Salamander installation, e.g. "ISO-8859-2 - CP1250";
+    // characters <= ' ', as well as '-' and '&' in the name, are ignored during the search; the search is case-
+    // insensitive); 'parent' is the parent of the message box (if it is NULL, the main window is used as the parent); returns TRUE
+    // if the conversion was found (otherwise the contents of 'table' are not valid);
+    // WARNING: use it this way (cast to "unsigned" is required): *s = table[(unsigned char)*s]
+    // can be called from any thread
     virtual BOOL WINAPI GetConversionTable(HWND parent, char* table, const char* conversion) = 0;
 
     // returns the name of the code page used by Windows in this region (read from convert\XXX\convert.cfg
@@ -2224,31 +2233,32 @@ public:
     // can be called from any thread
     virtual void WINAPI FreeSalamanderREGEXPSearchData(CSalamanderREGEXPSearchData* data) = 0;
 
-    // vraci postupne prikazy Salamandera (postupuje v poradi definice konstant SALCMD_XXX);
-    // 'index' je vstupne/vystupni promenna, ukazuje na int, ve kterem je pri prvnim volani 0,
-    // hodnotu pro dalsi volani si funkce ulozi pri navratu (pouziti: na zacatku vynulovat, pak
-    // nemenit); vraci FALSE, pokud jiz neexistuje zadny dalsi prikaz; pokud vraci TRUE, obsahuje
-    // 'salCmd' (neni-li NULL) cislo prikazu Salamandera (viz konstanty SALCMD_XXX; cisla maji
-    // rezervovany interval 0 az 499, pokud tedy maji v menu byt prikazy Salamandera spolecne s
-    // jinymi prikazy, neni problem vytvorit vzajemne se neprekryvajici mnoziny hodnot prikazu
-    // napr. posunutim vsech hodnot o zvolene cislo - priklad viz DEMOPLUGin -
-    // CPluginFSInterface::ContextMenu), 'nameBuf' (buffer o velikosti 'nameBufSize' bytu)
-    // obsahuje jmeno prikazu (jmeno je pripraveno pro pouziti v menu - ma zdvojene ampersandy,
-    // podtrzene znaky oznacene ampersandy a za '\t' ma popisy klavesovych zkratek), 'enabled'
-    // (neni-li NULL) obsahuje stav prikazu (TRUE/FALSE pokud je enabled/disabled), 'type'
-    // (neni-li NULL) obsahuje typ prikazu (viz popis konstant sctyXXX)
-    // mozne volat z libovolneho threadu
+    // Returns Salamander commands one by one (in the order of the SALCMD_XXX constant definitions);
+    // 'index' is an input/output variable, it points to an int that is 0 on the first call,
+    // the function stores the value for the next call there before returning (usage: initialize it
+    // to zero at the beginning, then do not modify it); returns FALSE if there is no next command;
+    // if it returns TRUE, 'salCmd' (if not NULL) contains the Salamander command number (see
+    // SALCMD_XXX constants; the numbers have the reserved range 0 to 499, so if Salamander
+    // commands are to appear in a menu together with other commands, it is easy to create
+    // mutually non-overlapping sets of command values, for example by shifting all values by a
+    // selected number - for an example see DEMOPLUGin - CPluginFSInterface::ContextMenu),
+    // 'nameBuf' (a buffer of size 'nameBufSize' bytes) contains the command name (the name is
+    // prepared for use in a menu - it has doubled ampersands, underlined characters marked by
+    // ampersands, and descriptions of keyboard shortcuts after '\t'), 'enabled' (if not NULL)
+    // contains the command state (TRUE/FALSE if enabled/disabled), and 'type' (if not NULL)
+    // contains the command type (see the description of the sctyXXX constants)
+    // Can be called from any thread
     virtual BOOL WINAPI EnumSalamanderCommands(int* index, int* salCmd, char* nameBuf, int nameBufSize,
                                                BOOL* enabled, int* type) = 0;
 
-    // vraci prikaz Salamandera s cislem 'salCmd' (viz konstanty SALCMD_XXX);
-    // vraci FALSE, pokud takovy prikaz neexistuje; pokud vraci TRUE, obsahuje
-    // 'nameBuf' (buffer o velikosti 'nameBufSize' bytu) jmeno prikazu (jmeno je pripraveno pro
-    // pouziti v menu - ma zdvojene ampersandy, podtrzene znaky oznacene ampersandy a za '\t' ma
-    // popisy klavesovych zkratek), 'enabled' (neni-li NULL) obsahuje stav prikazu (TRUE/FALSE
-    // pokud je enabled/disabled), 'type' (neni-li NULL) obsahuje typ prikazu (viz popis konstant
-    // sctyXXX)
-    // mozne volat z libovolneho threadu
+    // returns the Salamander command with number 'salCmd' (see SALCMD_XXX constants);
+    // returns FALSE if no such command exists; if it returns TRUE,
+    // 'nameBuf' (a buffer of size 'nameBufSize' bytes) contains the command name (the name is prepared for
+    // use in menus: it has doubled ampersands, underlined characters marked by ampersands, and after '\t' it has
+    // descriptions of keyboard shortcuts), 'enabled' (if not NULL) contains the command state (TRUE/FALSE
+    // depending on whether it is enabled/disabled), and 'type' (if not NULL) contains the command type (see the description
+    // of the sctyXXX constants)
+    // can be called from any thread
     virtual BOOL WINAPI GetSalamanderCommand(int salCmd, char* nameBuf, int nameBufSize, BOOL* enabled,
                                              int* type) = 0;
 
@@ -2304,10 +2314,10 @@ public:
     // can be called from any thread
     virtual void WINAPI FreeSalamanderMD5(CSalamanderMD5* md5) = 0;
 
-    // Finds '<' '>' pairs in the text, removes them from the buffer, and records
-    // their positions in 'varPlacements'. 'varPlacements' is an array of DWORDs with '*varPlacementsCount'
-    // items; each DWORD always consists of the position of the variable in the output buffer (low WORD)
-    // and the number of characters in the variable (high WORD). The strings "\\<", "\\>", "\\\\" are treated
+    // Finds '<' '>' pairs in the text, removes them from the buffer, and adds references to
+    // their contents to 'varPlacements'. 'varPlacements' is an array of DWORDs with '*varPlacementsCount'
+    // items; each DWORD always consists of the position of the reference in the output buffer (low WORD)
+    // and the number of characters in the reference (high WORD). The strings "\\<", "\\>", "\\\\" are treated
     // as escape sequences and are replaced with the characters '<', '>' and '\\'.
     // Returns TRUE on success, otherwise FALSE; always sets 'varPlacementsCount' to
     // the number of processed variables.
@@ -2475,7 +2485,7 @@ public:
     //
     //   'partialOK'
     //      [in] Value specifying whether the rectangle must be entirely visible.
-    //      If this parameter is TRUE, no moving occurs if the item is at least
+    //      If this parameter is TRUE, no moving occurs if the rectangle is at least
     //      partially visible.
     //
     // Return Values
@@ -2739,8 +2749,8 @@ public:
     // returns a pointer to the shared history (last used values) of the selected combo box;
     // it is an array of allocated strings; the array has a fixed number of strings, which is returned
     // in 'historyItemsCount' (must not be NULL); a pointer to the array is returned in 'historyArr'
-    // (must not be NULL); 'historyID' (one of SALHIST_XXX) specifies which shared history a
-    // pointer should be returned to
+    // (must not be NULL); 'historyID' (one of SALHIST_XXX) specifies which shared history the
+    // pointer should refer to
     // restriction: main thread (shared histories cannot be used from another thread, access
     // to them is not synchronized in any way)
     virtual BOOL WINAPI GetStdHistoryValues(int historyID, char*** historyArr, int* historyItemsCount) = 0;
@@ -2819,17 +2829,16 @@ public:
     virtual HANDLE WINAPI SalCreateFileEx(const char* fileName, DWORD desiredAccess, DWORD shareMode,
                                           DWORD flagsAndAttributes, DWORD* err) = 0;
 
-    // vytvoreni adresare se jmenem 'name' pres klasicke volani Win32 API
-    // CreateDirectory(lpSecurityAttributes==NULL); tato metoda resi kolizi 'name'
-    // s dosovym nazvem jiz existujiciho souboru/adresare (jen pokud nejde i o
-    // kolizi s dlouhym jmenem souboru/adresare) - zajisti zmenu dosoveho jmena
-    // tak, aby se adresar se jmenem 'name' mohl vytvorit (zpusob: docasne prejmenuje
-    // konfliktni soubor/adresar na jine jmeno a po vytvoreni 'name' ho
-    // prejmenuje zpet); dale resi jmena koncici na mezery (umi je vytvorit, narozdil
-    // od CreateDirectory, ktera mezery bez varovani orizne a vytvori tak vlastne
-    // jiny adresar); vraci TRUE pri uspechu, pri chybe FALSE (vraci v 'err'
-    // (neni-li NULL) kod Windows chyby)
-    // mozne volat z libovolneho threadu
+    // creates a directory named 'name' using the standard Win32 API call
+    // CreateDirectory(lpSecurityAttributes==NULL); this method resolves collisions of 'name'
+    // with the DOS name of an existing file/directory (only if there is no collision with
+    // the long file/directory name as well) by changing the DOS name so that the directory
+    // named 'name' can be created (it temporarily renames the conflicting file/directory
+    // to a different name and renames it back after creating 'name'); it also handles names
+    // ending with spaces (it can create them, unlike CreateDirectory, which silently trims
+    // the spaces and thus actually creates a different directory); returns TRUE on success,
+    // FALSE on failure (returns the Windows error code in 'err' if it is not NULL)
+    // can be called from any thread
     virtual BOOL WINAPI SalCreateDirectoryEx(const char* name, DWORD* err) = 0;
 
     // allows disconnecting/reconnecting change monitoring (only for Windows paths and archive paths)
@@ -2959,7 +2968,7 @@ public:
     // used when closing a file system in a panel (disconnect); 'parent' is the parent of any
     // message boxes; 'panel' is one of PANEL_XXX
     // limitation: main thread only + outside the methods of CPluginFSInterfaceAbstract and CPluginDataInterfaceAbstract
-    // (for example, an FS open in the panel could be closed - the method could stop having a valid 'this')
+    // (for example, an FS open in the panel could be closed, so 'this' might no longer be valid for the method)
     virtual void WINAPI DisconnectFSFromPanel(HWND parent, int panel) = 0;
 
     // returns TRUE if the file name 'name' is associated with the calling plugin in
@@ -3011,26 +3020,26 @@ public:
     virtual BOOL WINAPI OpenHtmlHelp(HWND parent, CHtmlHelpCommand command, DWORD_PTR dwData,
                                      BOOL quiet) = 0;
 
-    // vraci TRUE, pokud jsou cesty 'path1' a 'path2' ze stejneho svazku; v 'resIsOnlyEstimation'
-    // (neni-li NULL) vraci TRUE, pokud neni vysledek jisty (jisty je jen v pripade shody cest nebo
-    // pokud se podari ziskat "volume name" (GUID svazku) u obou cest, coz pripada v uvahu jen pro
-    // lokalni cesty pod W2K nebo novejsimi z rady NT)
-    // mozne volat z libovolneho threadu
+    // returns TRUE if paths 'path1' and 'path2' are on the same volume; in 'resIsOnlyEstimation'
+    // (if not NULL) returns TRUE if the result is uncertain (it is certain only if the paths match or
+    // if the "volume name" (volume GUID) can be obtained for both paths, which is possible only for
+    // local paths on W2K or newer NT-based systems)
+    // can be called from any thread
     virtual BOOL WINAPI PathsAreOnTheSameVolume(const char* path1, const char* path2,
                                                 BOOL* resIsOnlyEstimation) = 0;
 
-    // realokace pameti na heapu Salamandera (pri pouziti salrtl9.dll zbytecne - staci klasicky realloc);
-    // pri nedostatku pameti zobrazi uzivateli hlaseni s tlacitky Retry a Cancel (po dalsim dotazu
-    // terminuje aplikaci)
-    // mozne volat z libovolneho threadu
+    // reallocates memory on Salamander's heap (unnecessary when using salrtl9.dll - regular realloc is enough);
+    // if there is not enough memory, shows the user a dialog with Retry and Cancel buttons (after another prompt,
+    // terminates the application)
+    // can be called from any thread
     virtual void* WINAPI Realloc(void* ptr, int size) = 0;
 
-    // vraci v 'enumFilesSourceUID' (nesmi byt NULL) unikatni identifikator zdroje pro panel
-    // 'panel' (jeden z PANEL_XXX), pouziva se ve viewerech pri enumeraci souboru
-    // z panelu (viz parametr 'srcUID' napr. v metode GetNextFileNameForViewer), tento
-    // identifikator se meni napr. pri zmene cesty v panelu; neni-li 'enumFilesCurrentIndex'
-    // NULL, vraci se v nem index fokusleho souboru (pokud neni fokusly soubor, vraci se -1);
-    // omezeni: hlavni thread (jinak se muze obsah panelu menit)
+    // returns in 'enumFilesSourceUID' (must not be NULL) a unique source identifier for panel
+    // 'panel' (one of PANEL_XXX), used in viewers when enumerating files
+    // from the panel (see parameter 'srcUID', for example in the method GetNextFileNameForViewer); this
+    // identifier changes, for example, when the path in the panel changes; if 'enumFilesCurrentIndex' is not
+    // NULL, it returns in it the index of the focused file (if there is no focused file, -1 is returned);
+    // limitation: main thread (otherwise the panel contents may change)
     virtual void WINAPI GetPanelEnumFilesParams(int panel, int* enumFilesSourceUID,
                                                 int* enumFilesCurrentIndex) = 0;
 
@@ -3048,31 +3057,31 @@ public:
     virtual BOOL WINAPI PostRefreshPanelFS2(CPluginFSInterfaceAbstract* modifiedFS,
                                             BOOL focusFirstNewItem = FALSE) = 0;
 
-    // loads from module 'module' the text with ID 'resID'; returns the text in an internal buffer (the text may
-    // change due to changes in the internal buffer caused by subsequent calls to LoadStr, even from other
-    // plugins or Salamander; the buffer is 10000 characters long, overwriting does not occur until it
+    // loads the text with ID 'resID' from module 'module'; returns the text in an internal buffer (the text may
+    // change when the internal buffer is modified by subsequent calls to LoadStr, even from other
+    // plugins or Salamander; the buffer is 10000 characters long, and overwriting does not occur until it
     // becomes full (it is used cyclically); if you need to use the text later, we recommend
     // copying it to a local buffer); if 'module' is NULL or 'resID' is not in the module,
     // the text "ERROR LOADING STRING" is returned (and the debug/SDK version outputs TRACE_E)
     // can be called from any thread
     virtual char* WINAPI LoadStr(HINSTANCE module, int resID) = 0;
 
-    // nacte z resourcu modulu 'module' text s ID 'resID'; vraci text v internim bufferu (hrozi
-    // zmena textu diky zmene interniho bufferu zpusobene dalsimi volanimi LoadStrW i z jinych
-    // pluginu nebo Salamandera; buffer je velky 10000 znaku, prepis hrozi teprve po jeho
-    // zaplneni (pouziva se cyklicky); pokud potrebujete text pouzit az pozdeji, doporucujeme
-    // jej zkopirovat do lokalniho bufferu); je-li 'module' NULL nebo 'resID' neni v modulu,
-    // vraci se text L"ERROR LOADING WIDE STRING" (a debug/SDK verze vypise TRACE_E)
-    // mozne volat z libovolneho threadu
+    // loads the text with ID 'resID' from the resources of module 'module'; returns the text in an internal buffer (the text may
+    // change due to changes in the internal buffer caused by subsequent calls to LoadStrW, even from other
+    // plugins or Salamander; the buffer is 10000 characters long, and overwriting does not occur until it
+    // becomes full (it is used cyclically); if you need to use the text later, we recommend
+    // copying it to a local buffer); if 'module' is NULL or 'resID' is not in the module,
+    // the text L"ERROR LOADING WIDE STRING" is returned (and the debug/SDK version outputs TRACE_E)
+    // can be called from any thread
     virtual WCHAR* WINAPI LoadStrW(HINSTANCE module, int resID) = 0;
 
     // changes the panel path to the user-selected "rescue" path (see
     // SALCFG_IFPATHISINACCESSIBLEGOTO) and if even that fails, then to the root of the first local fixed
-    // drive; this is an almost certain way to change the current panel path; 'panel' is one of PANEL_XXX;
+    // drive; this almost certainly changes the current panel path; 'panel' is one of PANEL_XXX;
     // if 'failReason' is not NULL, it is set to one of the CHPPFR_XXX constants (indicating the result
     // of the method); returns TRUE if the path change succeeded (to the "rescue" path or fixed drive)
     // limitation: main thread only + outside methods of CPluginFSInterfaceAbstract and CPluginDataInterfaceAbstract
-    // (for example, the FS opened in the panel may be closed - the method could stop having a valid 'this')
+    // (for example, the FS opened in the panel may be closed, so 'this' might no longer be valid for the method)
     virtual BOOL WINAPI ChangePanelPathToRescuePathOrFixedDrive(int panel, int* failReason = NULL) = 0;
 
     // registers the plugin as a replacement for the Network item in the Change Drive menu and in the drive bars,
@@ -3303,11 +3312,13 @@ public:
     // there is currently no Win32 API for SSD detection, so it is done heuristically
     // based on queries for support for TRIM, StorageDeviceSeekPenaltyProperty, etc.
     // the function returns TRUE if the disk at 'path' appears to be an SSD; FALSE otherwise
-    // the result is not 100%; people report the algorithm does not work, for example, on SSD PCIe cards:
+    // the result is not 100%; people report that the algorithm does not work, for example, on
+    // SSD PCIe cards:
     // http://stackoverflow.com/questions/23363115/detecting-ssd-in-windows/33359142#33359142
-    // it can determine correct information even for paths containing SUBST drives and reparse points under Windows
-    // 2000/XP/Vista (Salamander 2.5 works only with junction points); 'path' is the path for which
-    // we determine the information; if the path goes through a network path, it silently returns FALSE
+    // it can determine correct information even for paths containing SUBST drives and reparse
+    // points under Windows 2000/XP/Vista (Salamander 2.5 works only with junction points);
+    // 'path' is the path for which the information is determined; if the path leads through a
+    // network path, it silently returns FALSE
     // can be called from any thread
     virtual BOOL WINAPI IsPathOnSSD(const char* path) = 0;
 
@@ -3317,14 +3328,14 @@ public:
 
     // replaces SUBSTs in the path 'resPath' with their target paths (converts it to a path without SUBST drive letters);
     // 'resPath' must point to a buffer of at least 'MAX_PATH' characters
-    // returns TRUE on success, FALSE on error
+    // returns TRUE on success, FALSE on failure
     // can be called from any thread
     virtual BOOL WINAPI ResolveSubsts(char* resPath) = 0;
 
     // call only for 'path' paths whose root (after resolving substs) is DRIVE_FIXED (elsewhere there is no point in looking
     // for reparse points); we look for a path without reparse points that leads to the same volume as 'path'; for a path
     // containing a symlink leading to a network path (UNC or mapped), we return only the root of that network path
-    // (even Vista cannot handle reparse points on network paths, so it is probably pointless to push it);
+    // (even Vista cannot handle reparse points on network paths, so it is better not to provoke it);
     // if no such path exists because the current (last) local reparse point is a volume mount point
     // (or an unknown type of reparse point), we return the path to this volume mount point (or reparse
     // point of an unknown type); if the path contains more than 50 reparse points (most likely an infinite loop),
@@ -3332,14 +3343,14 @@ public:
     //
     // 'resPath' is an output buffer of size MAX_PATH; 'path' is the original path; in 'cutResPathIsPossible'
     // (must not be NULL) we return FALSE if the resulting path in 'resPath' ends with a reparse point (volume
-    // mount point or an unknown reparse point type) and therefore must not be shortened (we would most likely end up
+    // mount point or an unknown type of reparse point) and therefore must not be shortened (we would most likely end up
     // on a different volume); if 'rootOrCurReparsePointSet' is non-NULL and contains FALSE, and the original path
     // has at least one local reparse point (reparse points in the network part of the path are ignored), we return
     // TRUE in this variable and return the full path to the current (last local) reparse point in
     // 'rootOrCurReparsePoint' (if it is not NULL) (note: not where it leads); the target path of the current reparse
     // point (only if it is a junction or symlink) is returned in 'junctionOrSymlinkTgt' (if not NULL), and the type
     // is returned in 'linkType': 2 (JUNCTION POINT), 3 (SYMBOLIC LINK); in 'netPath' (if not NULL) we return the
-    // network path to which the current (last) local symlink in the path leads - in this case the root of the
+    // network path to which the current (last) local symlink in the path leads; in this case, the root of the
     // network path is returned in 'resPath'
     // can be called from any thread
     virtual void WINAPI ResolveLocalPathWithReparsePoints(char* resPath, const char* path,
@@ -3378,20 +3389,20 @@ public:
     // omezeni: hlavni thread
     virtual void WINAPI SetPluginIconOverlays(int iconOverlaysCount, HICON* iconOverlays) = 0;
 
-    // popis viz SalGetFileSize(), prvni rozdil je, ze se soubor zadava plnou cestou;
-    // druhy je, ze 'err' muze byt NULL, pokud nestojime o kod chyby;
+    // for a description, see SalGetFileSize(); the first difference is that the file is specified by its full path;
+    // the second is that 'err' may be NULL if the error code is not needed;
     virtual BOOL WINAPI SalGetFileSize2(const char* fileName, CQuadWord& size, DWORD* err) = 0;
 
-    // zjisti velikost souboru, na ktery vede symlink 'fileName'; velikost vraci v 'size';
-    // 'ignoreAll' je in + out, je-li TRUE vsechny chyby se ignoruji (pred akci je treba
-    // priradit FALSE, jinak se okno s chybou vubec nezobrazi, pak uz nemenit);
-    // pri chybe zobrazi standardni okno s dotazem Retry / Ignore / Ignore All / Cancel
-    // s parentem 'parent'; pokud velikost uspesne zjisti, vraci TRUE; pri chybe a stisku
-    // tlacitka Ignore / Igore All v okne s chybou, vraci FALSE a v 'cancel' vraci FALSE;
-    // je-li 'ignoreAll' TRUE, okno se neukaze, na tlacitko se neceka, chova se jako by
-    // uzivatel stiskl Ignore; pri chybe a stisku Cancel v okne s chybou vraci FALSE a
-    // v 'cancel' vraci TRUE;
-    // mozne volat z libovolneho threadu
+    // determines the size of the file pointed to by the symlink 'fileName'; returns the size in 'size';
+    // 'ignoreAll' is an input/output parameter; if it is TRUE, all errors are ignored (it must be
+    // set to FALSE before the operation, otherwise the error dialog is not shown at all, and then left unchanged);
+    // on failure, displays the standard Retry / Ignore / Ignore All / Cancel dialog
+    // with parent 'parent'; if the size is determined successfully, returns TRUE; on failure and when
+    // the Ignore / Ignore All button is pressed in the error dialog, returns FALSE and returns FALSE in 'cancel';
+    // if 'ignoreAll' is TRUE, the dialog is not shown, no button is waited for, and it behaves as if
+    // the user had pressed Ignore; on failure and when Cancel is pressed in the error dialog, it returns FALSE and
+    // returns TRUE in 'cancel';
+    // can be called from any thread
     virtual BOOL WINAPI GetLinkTgtFileSize(HWND parent, const char* fileName, CQuadWord* size,
                                            BOOL* cancel, BOOL* ignoreAll) = 0;
 
