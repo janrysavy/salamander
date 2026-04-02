@@ -267,12 +267,12 @@ public:
     C__Messages();
     ~C__Messages();
 
-    int MessageBoxT(LPCTSTR lpText,    // address of text in message box
-                    LPCTSTR lpCaption, // address of title of message box
+    int MessageBoxT(LPCTSTR lpText,    // pointer to the message box text
+                    LPCTSTR lpCaption, // pointer to the message box title
                     UINT uType);       // style of message box
 
     int MessageBox(HWND hWnd,         // handle of the owner window
-                   LPCTSTR lpText,    // address of text in message box
+                   LPCTSTR lpText,    // pointer to the message box text
                    LPCTSTR lpCaption, // address of title of message box
                    UINT uType);       // style of message box
 };
