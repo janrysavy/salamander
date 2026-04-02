@@ -271,7 +271,7 @@ extern C__MessagesW __MessagesW;
 #define DMESSAGE_TQ(str, buttons) MESSAGE_TQ(str, (buttons))
 #define DMESSAGE_TQW(str, buttons) MESSAGE_TQW(str, (buttons))
 
-/// MESSAGE_TE depends on the existence of the MESSAGES_DEBUG macro
+/// MESSAGE_E depends on the existence of the MESSAGES_DEBUG macro
 #define DMESSAGE_TE(str, buttons) MESSAGE_TE(str, (buttons))
 #define DMESSAGE_TEW(str, buttons) MESSAGE_TEW(str, (buttons))
 
