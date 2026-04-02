@@ -12,7 +12,7 @@
 #pragma once
 
 // definitions of the TRACE_I, TRACE_IW, TRACE_E, TRACE_EW, TRACE_C, TRACE_CW, and CALL_STACK_MESSAGEXXX macros for plugins;
-// in the plugin, it is necessary to define the SalamanderDebug variable (type see below) and
+// the plugin must define the SalamanderDebug variable (for its type, see below) and
 // initialize this variable in SalamanderPluginEntry:
 // SalamanderDebug = salamander->GetSalamanderDebug();
 //
@@ -391,9 +391,9 @@ inline void __TraceEmptyFunction() {}
 #define TRACE_E(str) __TraceEmptyFunction()
 #define TRACE_EW(str) __TraceEmptyFunction()
 // when the program crashes via DebugBreak(), it is not possible to trace where the
-// TRACE_C/TRACE_MC call is, because the exception address ends up somewhere in ntdll.dll
-// and the Stack Back Trace section of the bug report may contain nonsense if the
-// function calling TRACE_C/TRACE_MC does not use the old simple model of saving
+// TRACE_C/TRACE_MC call originated, because the exception address ends up somewhere in ntdll.dll,
+// and the Stack Back Trace section of the bug report may be misleading if the
+// function calling TRACE_C/TRACE_MC does not use the old simple model for saving
 // and working with EBP/ESP; even in that case, however, only the address from
 // which that function was called is shown (not the direct address of TRACE_C/TRACE_MC),
 // so at least for now we use the old primitive way of crashing
@@ -450,14 +450,14 @@ inline void __TraceEmptyFunction() {}
 #define TRACE_E(str) TRACE_ME(__FILE__, __LINE__, str)
 #define TRACE_EW(str) TRACE_MEW(__WFILE__, __LINE__, str)
 
-// fatal-error-trace (CRASHING TRACE), manually specified file location;
+// fatal-error trace (CRASHING TRACE), manually specified file location;
 // stop the program in the debugger for easier debugging of the problem that has just occurred;
-// the release build crashes, and the problem should hopefully be clear from the call stack in the bug report;
+// the release build crashes, and the problem should be clear from the call stack in the bug report;
 // we do not use DebugBreak(), because when the program crashes we cannot determine where
 // the DebugBreak() call is located, since the exception address is somewhere in ntdll.dll,
-// and the Stack Back Trace section of the bug report may contain nonsense if the
-// function from which we call TRACE_C/MC does not use the old simple EBP/ESP-based stack-frame model
-// (that depends on the compiler and enabled optimizations), so
+// and the Stack Back Trace section of the bug report may be misleading if the
+// function from which we call TRACE_C/MC does not use the old simple model for saving
+// and working with EBP/ESP (that depends on the compiler and enabled optimizations), so
 // at least for now we use the old primitive method of crashing by writing to NULL
 #define TRACE_MC(file, line, str) \
     ((::EnterCriticalSection(&__Trace.CriticalSection), __Trace.OStream() << str, \
