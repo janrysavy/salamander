@@ -103,16 +103,16 @@ public:
 #endif // INSIDE_SALAMANDER
 
     // loads a thumbnail for the file given by 'filename'; 'thumbWidth' and 'thumbHeight' are the requested
-    // thumbnail dimensions; 'thumbMaker' is the interface of the algorithm that creates thumbnails (it can
+    // thumbnail dimensions; 'thumbMaker' is the interface to the thumbnail creation algorithm (it can
     // accept a finished thumbnail or build one by resizing the image); returns TRUE if the format of 'filename'
     // is known; if it returns FALSE, Salamander attempts to load the thumbnail using another plugin; any error
-    // while obtaining the thumbnail (for example, a file read error) is reported through 'thumbMaker'—see
+    // while obtaining the thumbnail (for example, a file read error) is reported through 'thumbMaker' - see
     // SetError; 'fastThumbnail' is TRUE during the first pass, where the goal is to return a thumbnail as
     // quickly as possible (even if it is lower quality or smaller than requested); during the second pass
-    // (only if SSTHUMB_ONLY_PREVIEW was set in the first pass) 'fastThumbnail' is FALSE so the goal is to
-    // return a quality thumbnail;
+    // (only if SSTHUMB_ONLY_PREVIEW was set in the first pass), 'fastThumbnail' is FALSE and the goal is to
+    // return a high-quality thumbnail
     // limitation: because the method is called from the icon-loading thread (not the main thread), only
-    // CSalamanderGeneralAbstract methods that may be called from any thread can be used
+    // methods of CSalamanderGeneralAbstract that may be called from any thread can be used
     //
     // Recommended implementation outline:
     //   - try to open the image
