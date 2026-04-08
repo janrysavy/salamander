@@ -25,7 +25,7 @@ extern "C"
 // define the "Lock Volume" event GUID (e.g., "chkdsk /f E:" where E: is a USB stick): {50708874-C9AF-11D1-8FEF-00A0C9A06D32}
 GUID GUID_IO_LockVolume = {0x50708874, 0xC9AF, 0x11D1, 0x8F, 0xEF, 0x00, 0xA0, 0xC9, 0xA0, 0x6D, 0x32};
 //
-// in Ioevent.h from the DDK the definition of this constant (and many others) is available:
+// in Ioevent.h from the DDK, this constant (and many others) is defined:
 //
 //  Volume lock event.  This event is signalled when an attempt is made to
 //  lock a volume.  There is no additional data.
@@ -143,7 +143,7 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             //          TRACE_I("WM_DEVICECHANGE: DBT_CUSTOMEVENT");
 
             if (IsCustomEventGUID(lParam, GUID_IO_LockVolume))
-            { // occurs on XP when "chkdsk /f e:" ("e:" is a removable USB stick) runs and also when opening .ifo or .vob files (DVD) and when starting Ashampoo Burning Studio 6 -- request "lock volume"
+            { // occurs on XP when "chkdsk /f e:" ("e:" is a removable USB stick) is run, and unfortunately also when opening .ifo and .vob files (DVD) and when starting Ashampoo Burning Studio 6 -- "lock volume" request
                 if (UseSystemIcons || UseThumbnails)
                     SleepIconCacheThread();                 // pause reading icons/thumbnails
                 DetachDirectory((CFilesWindow*)this, TRUE); // close change notifications and DeviceNotification
@@ -223,7 +223,7 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         {
             int count = GetSelCount();
             if (count > 0 || GetCaretIndex() != 0 ||
-                Dirs->Count == 0 || strcmp(Dirs->At(0).Name, "..") != 0) // test whether we are working only with ".."
+                Dirs->Count == 0 || strcmp(Dirs->At(0).Name, "..") != 0) // check whether we are working only with ".."
             {
                 BeginSuspendMode(); // snooper takes a break
                 BeginStopRefresh(); // just to avoid distributing notifications about path changes
@@ -262,7 +262,7 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 }
                 targetPath[strlen(targetPath) + 1] = 0; // ensure two nulls at the end of the string
 
-                // lower thread priority to "normal" so the operation doesn't overload the machine
+                // lower thread priority to "normal" so the operation does not put too much load on the system
                 SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
 
                 BOOL ret = GetPluginFS()->CopyOrMoveFromFS(copy, 5, GetPluginFS()->GetPluginFSName(),
@@ -277,7 +277,7 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
                 if (ret && !cancelOrHandlePath)
                 {
-                    if (targetPath[0] != 0) // change focus to 'targetPath'
+                    if (targetPath[0] != 0) // change the focus to 'targetPath'
                     {
                         lstrcpyn(NextFocusName, targetPath, MAX_PATH);
                         // RefreshDirectory may not run; the source may be unchanged, so post a message just in case
@@ -435,7 +435,7 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         if (SnooperSuspended || StopRefresh)
             return 0;                        // wait for the next WM_USER_SM_END_NOTIFY_DELAYED
-        if (PluginFSNeedRefreshAfterEndOfSM) // should the plug-in FS be refreshed?
+        if (PluginFSNeedRefreshAfterEndOfSM) // should the plugin FS be refreshed?
         {
             PluginFSNeedRefreshAfterEndOfSM = FALSE;
             PostMessage(HWindow, WM_USER_REFRESH_PLUGINFS, 0, 0); // attempt it now
@@ -534,7 +534,7 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         {
             if (GetTickCount() - EndOfIconReadingTime < 1000)
             {
-                probablyUselessRefresh = TRUE; // for one second after icon reading finishes we expect a useless refresh caused by icon reading
+                probablyUselessRefresh = TRUE; // for one second after icon reading finishes, we still expect a redundant refresh caused by reading icons
                                                //          TRACE_I("less than second after reading of icons was finished: probablyUselessRefresh=TRUE");
             }
             else
@@ -544,7 +544,7 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             }
         }
         if ((uMsg == WM_USER_REFRESH_DIR && wParam || // content change reported by the snooper
-             uMsg == WM_USER_ICONREADING_END ||       // or a notification that icon reading finished (may arrive later, icons may already be readable again)
+             uMsg == WM_USER_ICONREADING_END ||       // or a notification that icon reading finished (it may arrive later, and icon reading may already have restarted)
              uMsg == WM_USER_INACTREFRESH_DIR) &&     // or deferred refresh in an inactive window (refresh requested by the snooper or when ending suspend mode)
             !IconCacheValid &&
             UseSystemIcons && Is(ptDisk) && GetNetworkDrive())
@@ -640,7 +640,7 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                         if (isInactiveRefresh)
                         {
                             if (typeBackup != GetPanelType() || StrICmp(pathBackup, GetPath()) != 0)
-                            { // if the path changed (someone likely deleted the directory shown in the panel), perform another refresh immediately (the newly shown directory might be deleted as well so we can quickly "back out")
+                            { // if the path changed (someone likely deleted the directory shown in the panel), perform any further refresh immediately (the newly shown directory might be deleted as well, so we can quickly "back out" from it)
                                 LastInactiveRefreshEnd = LastInactiveRefreshStart;
                             }
                             else
@@ -671,11 +671,11 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         if (SnooperSuspended || StopRefresh)
         { // suspend mode is already on (working with internal data -> cannot refresh)
-            // moreover we might be inside a plug-in -> multiple calls to plug-in methods are not supported
+            // moreover we might be inside a plugin -> multiple calls to plugin methods are not supported
             PluginFSNeedRefreshAfterEndOfSM = TRUE;
         }
         else
-        { // we are not inside a plug-in
+        { // we are not inside a plugin
             if (Is(ptPluginFS))
             {
                 if (GetPluginFS()->NotEmpty())
@@ -695,8 +695,8 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         {
             // if a "static" association icon was loaded, store it in Associations
             // counts with thumbnails too - the condition Flag==1 or 2 does not succeed
-            if (file != NULL && !isDir &&                                   // this is a file
-                (!Is(ptPluginFS) || GetPluginIconsType() != pitFromPlugin)) // not an icon from a plug-in
+            if (file != NULL && !isDir &&                                   // this is not a directory
+                (!Is(ptPluginFS) || GetPluginIconsType() != pitFromPlugin)) // not an icon from a plugin
             {
                 char buf[MAX_PATH + 4]; // extension in lowercase
                 char *s1 = buf, *s2 = file->Ext;
@@ -865,7 +865,7 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_USER_DONEXTFOCUS: // if RefreshDirectory did not manage it already, do it here
     {
         DontClearNextFocusName = FALSE;
-        if (NextFocusName[0] != 0) // if there is something to focus
+        if (NextFocusName[0] != 0) // if there is anything to focus
         {
             int total = Files->Count + Dirs->Count;
             int found = -1;
@@ -875,14 +875,14 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 CFileData* f = (i < Dirs->Count) ? &Dirs->At(i) : &Files->At(i - Dirs->Count);
                 if (StrICmp(f->Name, NextFocusName) == 0)
                 {
-                    if (strcmp(f->Name, NextFocusName) == 0) // file found exactly
+                    if (strcmp(f->Name, NextFocusName) == 0) // file found with exact case match
                     {
                         NextFocusName[0] = 0;
                         SetCaretIndex(i, FALSE);
                         break;
                     }
                     if (found == -1)
-                        found = i; // file found (ignore case)
+                        found = i; // file found (case-insensitive)
                 }
             }
             if (i == total && found != -1)
@@ -1112,15 +1112,15 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 int index = FileNamesEnumData.LastFileIndex;
                 int count = Files->Count;
                 BOOL indexNotFound = TRUE;
-                if (index == -1) // searching from the first or the last item
+                if (index == -1) // search from the first or the last item
                 {
                     if (FileNamesEnumData.RequestType == fnertFindPrevious)
-                        index = count; // searching previous + start at the last item
-                                       // else  // searching next + start at the first item
+                        index = count; // searching for the previous item + start at the last item
+                                       // else  // searching for the next item + start at the first item
                 }
                 else
                 {
-                    if (FileNamesEnumData.LastFileName[0] != 0) // we know the full file name at "index", verify if the array was shifted and possibly find a new index
+                    if (FileNamesEnumData.LastFileName[0] != 0) // we know the full file name at 'index', so check whether the array shifted and, if needed, find the new index
                     {
                         int pathLen = (int)strlen(GetPath());
                         if (StrNICmp(GetPath(), FileNamesEnumData.LastFileName, pathLen) == 0)
@@ -1163,7 +1163,7 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 BOOL onlyAssociatedExtensions = FALSE;
                 if (FileNamesEnumData.OnlyAssociatedExtensions) // does the viewer request filtering by associated extensions?
                 {
-                    if (FileNamesEnumData.Plugin != NULL) // viewer from plug-in
+                    if (FileNamesEnumData.Plugin != NULL) // viewer from plugin
                     {
                         int pluginIndex = Plugins.GetIndex(FileNamesEnumData.Plugin);
                         if (pluginIndex != -1) // "always true"
@@ -1448,8 +1448,8 @@ MENU_TEMPLATE_ITEM SortByMenu[] =
 };
 */
 
-    // temporary solution for 1.6 beta 6: always load (regardless of ValidFileData)
-    // the items Name, Ext, Date, Size
+    // temporary solution for 1.6 beta 6: always populate (regardless of ValidFileData)
+    // the Name, Ext, Date, and Size items
     // the order must correspond to the CSortType enum
     int textResID[5] = {IDS_COLUMN_MENU_NAME, IDS_COLUMN_MENU_EXT, IDS_COLUMN_MENU_TIME, IDS_COLUMN_MENU_SIZE, IDS_COLUMN_MENU_ATTR};
     int leftCmdID[5] = {CM_LEFTNAME, CM_LEFTEXT, CM_LEFTTIME, CM_LEFTSIZE, CM_LEFTATTR};
@@ -1529,7 +1529,7 @@ void CFilesWindow::SetFont()
 {
     if (DirectoryLine != NULL)
         DirectoryLine->SetFont();
-    //if (ListBox != NULL)  // this is set from the SetFont() call
+    //if (ListBox != NULL)  // this is set by the SetFont() call
     //  ListBox->SetFont();
     if (StatusLine != NULL)
         StatusLine->SetFont();
