@@ -18,7 +18,7 @@
 struct CButtonData
 {
     unsigned int ImageIndex : 16;   // zero-based index
-    unsigned int Shell32ResID : 8;  // 0: icon from the image list; 1..254: icon resource ID from shell32.dll; 255: reserve an empty slot
+    unsigned int Shell32ResID : 8;  // 0: icon from the image list; 1..254: icon resID from shell32.dll; 255: reserve an empty slot
     unsigned int ToolTipResID : 16; // resID with the string for the tooltip
     unsigned int ID : 16;           // universal command
     unsigned int LeftID : 16;       // command for the left panel
@@ -750,7 +750,7 @@ BOOL CreateToolbarBitmaps(HINSTANCE hInstance, int resID, COLORREF transparent, 
 
     // Load the source bitmap.
     HBITMAP hSource;
-    if (resID == IDB_TOOLBAR_256) // dirty hack, this should really detect the resource type (RCDATA) or the PNG signature
+    if (resID == IDB_TOOLBAR_256) // temporary hack; this should really detect the resource type (RCDATA) or the PNG signature
         hSource = LoadPNGBitmap(hInstance, MAKEINTRESOURCE(resID), 0);
     else
         hSource = HANDLES(LoadBitmap(hInstance, MAKEINTRESOURCE(resID)));
@@ -881,9 +881,9 @@ BOOL CreateToolbarBitmaps(HINSTANCE hInstance, int resID, COLORREF transparent, 
             else
             {
                 /*
-        // --- crazy patch BEGIN
-        // John: under W2K DrawIconEx with DI_NORMAL did not work for icon 21 (Documents)
-        // for an unknown reason it saturated the transparent area and changed the 'transparent' color
+        // --- workaround BEGIN
+        // John: under W2K, DrawIconEx with DI_NORMAL did not work with icon 21 (Documents)
+        // for an unknown reason, it filled the transparent area and thus changed the 'transparent' color
         SetBkColor(hTgtMemDC, RGB(0, 0, 0));
         SetTextColor(hTgtMemDC, RGB(255, 255, 255));
         BitBlt(hTgtMemDC, ICON16_CX * ToolBarButtons[i].ImageIndex, 0, ICON16_CX, ICON16_CX,
@@ -894,7 +894,7 @@ BOOL CreateToolbarBitmaps(HINSTANCE hInstance, int resID, COLORREF transparent, 
         BitBlt(hTgtMemDC, ICON16_CX * ToolBarButtons[i].ImageIndex, 0, ICON16_CX, ICON16_CX,
                hTmpMemDC, 0, 0,
                SRCPAINT);
-        // --- crazy patch END
+        // --- workaround END
         */
                 HANDLES(DestroyIcon(hIcon));
             }
@@ -1327,7 +1327,7 @@ CBottomToolBar::CBottomToolBar(HWND hNotifyWindow, CObjectOrigin origin)
 }
 
 // fills the 'Text' field in the BottomTBData array with strings read from resources
-// 'state' specifies the row in the BottomTBData array and 'BottomTBData' names the string with the texts
+// 'state' specifies the row in the BottomTBData array and 'textResID' identifies the string containing the texts
 // the texts for individual keys are separated by the ';' character
 BOOL CBottomToolBar::InitDataResRow(CBottomTBStateEnum state, int textResID)
 {
