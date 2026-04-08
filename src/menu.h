@@ -112,10 +112,10 @@ public:
     // other
     HWND HParent;          // window from which the menu was invoked
     int TextItemHeight;    // item height based on text
-    BOOL BitmapsZoom;      // bitmap scaling factor relative to the original size
+    BOOL BitmapsZoom;      // bitmap scaling relative to the original size
     DWORD ChangeTickCount; // GetTickCount value from the time the selected item changed
     POINT LastMouseMove;
-    CMenuBar* MenuBar; // window activated from MenuBar; otherwise NULL
+    CMenuBar* MenuBar; // MenuBar from which the window was activated; otherwise NULL
     DWORD SkillLevel;  // value determining which items will be displayed
     BOOL HideAccel;    // should accelerators be hidden
 
@@ -337,7 +337,7 @@ public:
 
     virtual BOOL WINAPI FillMenuHandle(HMENU hMenu);
     virtual BOOL WINAPI GetStatesFromHWindowsMenu(HMENU hMenu);
-    virtual void WINAPI SetImageList(HIMAGELIST hImageList, BOOL subMenu = FALSE); // if subMenu==TRUE, the handle is also set to submenus
+    virtual void WINAPI SetImageList(HIMAGELIST hImageList, BOOL subMenu = FALSE); // if subMenu==TRUE, the image list handle is also set for submenus
     virtual HIMAGELIST WINAPI GetImageList();
     virtual void WINAPI SetHotImageList(HIMAGELIST hHotImageList, BOOL subMenu = FALSE);
     virtual HIMAGELIST WINAPI GetHotImageList();
@@ -404,14 +404,14 @@ protected:
 
     BOOL FindNextItemIndex(int fromIndex, BOOL topToDown, int* index);
     inline CMenuPopup* FindActivePopup();       // finds the last opened popup; returns a pointer to the object
-    inline CMenuPopup* FindPopup(HWND hWindow); // searches from us to the last child; returns a pointer to the object or NULL
+    inline CMenuPopup* FindPopup(HWND hWindow); // searches from this popup down to the last child; returns a pointer to the object or NULL
     inline void DoDispatchMessage(MSG* msg, BOOL* leaveMenu, DWORD* retValue, BOOL* dispatchLater);
     void OnTimerTimeout();
     void CheckSelectedPath(CMenuPopup* terminator); // traverses the whole branch and sets SelectedItems so they lead to the last popup
 
-    // Track adds [in] menuBar
-    //            [in] delayedMsg
-    //            [in] dispatchDelayedMsg: should delayedMsg be delivered after this method returns?
+    // Compared to Track, adds [in] menuBar
+    //                    [in] delayedMsg
+    //                    [in] dispatchDelayedMsg: should delayedMsg be delivered after this method returns?
     //
     DWORD TrackInternal(DWORD trackFlags, int x, int y, HWND hwnd, const RECT* exclude,
                         CMenuBar* menuBar, MSG& delayedMsg, BOOL& dispatchDelayedMsg);
@@ -520,7 +520,7 @@ public:
     virtual int WINAPI GetNeededWidth();                 // returns the width needed for the window
     virtual int WINAPI GetNeededHeight();                // returns the height needed for the window
     virtual void WINAPI SetFont();                       // obtains the menu bar font from the system
-    virtual BOOL WINAPI GetItemRect(int index, RECT& r); // returns the item position in screen coordinates
+    virtual BOOL WINAPI GetItemRect(int index, RECT& r); // Returns the item's rectangle in screen coordinates.
     virtual void WINAPI EnterMenu();                     // user pressed VK_MENU
     virtual BOOL WINAPI IsInMenuLoop() { return MenuLoop; }
     virtual void WINAPI SetHelpMode(BOOL helpMode) { HelpMode = helpMode; }
