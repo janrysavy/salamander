@@ -404,7 +404,7 @@ void CToolBar::DrawItem(int index)
         return;
     }
     if (Refresh())
-        return; // If everything was redrawn, nothing more to do.
+        return; // If everything has already been redrawn, there is nothing more to do.
 
     HDC hDC = HANDLES(GetDC(HWindow));
     DrawItem(hDC, index);
@@ -421,7 +421,7 @@ void CToolBar::DrawItem(HDC hDC, int index)
     }
     if (index < 0 || index >= Items.Count)
     {
-        // We previously saw a few crashes in CToolBar::DrawItem.
+        // We have had several crashes in CToolBar::DrawItem.
         TRACE_E("index=" << index << " Items.Count=" << Items.Count);
         return;
     }
