@@ -22,8 +22,8 @@ CTaskList TaskList;
 BOOL FirstInstance_3_or_later = FALSE;
 
 // the process list is shared by all Salamanders in the local session
-// starting with AS 3.0 we change how the "Break" event works—it raises an exception in the target, giving us a fully detailed bug report, but it also terminates the target
-// therefore I am changing the following constants "AltapSalamander*" -> "AltapSalamander3*" so we stay separate from older versions
+// starting with AS 3.0, the "Break" event behavior changes: it raises an exception in the target, giving us a full bug report, but it also terminates the target
+// therefore the following constants are changed from "AltapSalamander*" to "AltapSalamander3*" so that they remain separate from older versions
 
 // WARNING: if you change this, adjust salbreak.exe as well; just send me the info ... thanks, Petr
 
@@ -42,7 +42,7 @@ CRITICAL_SECTION CommandLineParamsCS;
 CCommandLineParams CommandLineParams;
 HANDLE CommandLineParamsProcessed;
 
-// handle of the main window (the control thread should not touch MainWindow because it can turn NULL underneath us)
+// handle of the main window (the control thread should not access MainWindow because it may become NULL while we are using it)
 HWND HSafeMainWindow = NULL;
 
 void RaiseBreakException()
@@ -61,8 +61,8 @@ void RaiseBreakException()
 
 DWORD WINAPI FControlThread(void* param)
 {
-    // this thread is not invoked with our CCallStack—when I ran into a leaked handle, Salamander crashed while trying
-    // to dump it during shutdown
+    // this thread does not run with our CCallStack; when I investigated
+    // a leaked handle, Salamander crashed while trying to dump it during shutdown
 
     CTaskList* tasklist = (CTaskList*)param;
 
@@ -183,12 +183,12 @@ DWORD WINAPI FControlThread(void* param)
                 ResetEvent(CommandLineParamsProcessed);
                 NOHANDLES(LeaveCriticalSection(&CommandLineParamsCS));
 
-                // if the main thread is IDLE we poke it and force it to check CommandLineParams::RequestUID
-                // if it is not IDLE, it is handling something and will process the message when it enters IDLE (assuming we live to see it)
+                // if the main thread is IDLE, we poke it and force it to check CommandLineParams::RequestUID
+                // if it is not IDLE, it is already handling something and will process the message when it next enters IDLE
                 if (HSafeMainWindow != NULL)
                     PostMessage(HSafeMainWindow, WM_USER_WAKEUP_FROM_IDLE, 0, 0);
 
-                // wait 5 seconds to see whether the main thread responds (we do not enter the critical section yet so it can)
+                // wait 5 seconds to see whether the main thread responds (we do not enter the critical section yet so it can do so)
                 WaitForSingleObject(CommandLineParamsProcessed, TASKLIST_TODO_TIMEOUT);
 
                 // now we can enter the critical section
@@ -315,22 +315,22 @@ BOOL CTaskList::Init()
         //---  claim the FMO
         DWORD waitRet = WaitForSingleObject(FMOMutex, TASKLIST_TODO_TIMEOUT);
         if (waitRet == WAIT_TIMEOUT)
-            return FALSE; // fail
+            return FALSE; // failed
 
         //---  attach to the other system objects for communication
         FMO = NOHANDLES(OpenFileMapping(FILE_MAP_WRITE, FALSE, AS_PROCESSLIST_NAME));
         if (FMO == NULL)
-            return FALSE; // fail
+            return FALSE; // failed
         ProcessList = (CProcessList*)NOHANDLES(MapViewOfFile(FMO, FILE_MAP_WRITE, 0, 0, 0));
         if (ProcessList == NULL)
-            return FALSE; // fail
+            return FALSE; // failed
         // to be able to call SetEvent() on the event, it must have EVENT_MODIFY_STATE set, Wait* requires SYNCHRONIZE
         Event = NOHANDLES(OpenEvent(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE, AS_PROCESSLIST_EVENT_NAME));
         if (Event == NULL)
-            return FALSE; // fail
+            return FALSE; // failed
         EventProcessed = NOHANDLES(OpenEvent(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE, AS_PROCESSLIST_EVENT_PROCESSED_NAME));
         if (EventProcessed == NULL)
-            return FALSE; // fail
+            return FALSE; // failed
 
         //---  add a record to shared memory
         BOOL attempt = 0;
@@ -393,7 +393,7 @@ BOOL CTaskList::Init()
 
     TerminateEvent = NOHANDLES(CreateEvent(NULL, TRUE, FALSE, NULL));
     if (TerminateEvent == NULL)
-        return FALSE; // fail
+        return FALSE; // failed
 
     // internal synchronization between the control thread and the main thread
     CommandLineParamsProcessed = CreateEvent(NULL, TRUE, FALSE, NULL); // manual, nonsignaled
@@ -404,7 +404,7 @@ BOOL CTaskList::Init()
     DWORD id;
     ControlThread = NOHANDLES(CreateThread(NULL, 0, FControlThread, this, 0, &id));
     if (ControlThread == NULL)
-        return FALSE; // fail
+        return FALSE; // failed
     // this thread must still receive CPU time even if resources are scarce ...
     SetThreadPriority(ControlThread, THREAD_PRIORITY_TIME_CRITICAL);
 
@@ -579,7 +579,7 @@ BOOL CTaskList::FireEvent(DWORD todo, DWORD pid, BOOL* timeouted)
                 if (ProcessList->Items[i].PID == pid)
                 {
                     AllowSetForegroundWindow(ProcessList->Items[i].PID);       // better allow our own Salamander too, even if it is probably unnecessary...
-                    AllowSetForegroundWindow(ProcessList->Items[i].SalmonPID); // we definitely must let its Salmon rise above us
+                    AllowSetForegroundWindow(ProcessList->Items[i].SalmonPID); // we definitely must allow its Salmon to come to the foreground before us
                     break;
                 }
             }
@@ -655,14 +655,14 @@ BOOL CTaskList::ActivateRunningInstance(const CCommandLineParams* cmdLineParams,
             {
                 ReleaseMutex(FMOMutex); // so release the memory to others
                 if (firstStarting == -1)
-                    return FALSE; // no starting candidate found, bail out
+                    return FALSE; // no starting candidate found
                 else
                     Sleep(200); // found a starting candidate, pause for 200 ms to give it a chance to call SetProcessState()
             }
         }
     } while (firstRunnig == -1 && (GetTickCount() - timeStamp < TASKLIST_TODO_TIMEOUT)); // wait for a running instance for at most 5 s
 
-    // if we did not find any instance from our class with a main window, or waiting took 5 s, wrap it up
+    // if we did not find any instance of our class with a main window, or if waiting took 5 s, stop waiting
     if (firstRunnig == -1)
         return FALSE;
 
@@ -699,7 +699,7 @@ BOOL CTaskList::ActivateRunningInstance(const CCommandLineParams* cmdLineParams,
     ResetEvent(Event);
 
     // reset todo
-    // ProcessList->Todo = 0; // we should lock FMOMutex first, but in this case there is nothing to spoil and we can zero the values
+    // ProcessList->Todo = 0; // we should lock FMOMutex first, but in this case there is nothing to corrupt and we can zero the values
     // ProcessList->PID = 0;
 
     return ret;
@@ -722,7 +722,7 @@ BOOL CTaskList::RemoveKilledItems(BOOL* changed)
         if (h != NULL)
         {
             // on older Windows we obtain a handle even for a terminated process
-            // therefore it is still necessary to query the exit code; probably redundant since W2K
+            // therefore it is still necessary to query the exit code; probably unnecessary since W2K
             BOOL cont = FALSE;
             DWORD exitcode;
             if (!GetExitCodeProcess(h, &exitcode) || exitcode == STILL_ACTIVE)
@@ -749,7 +749,7 @@ BOOL CTaskList::RemoveKilledItems(BOOL* changed)
 
     /*
 // does not work on XP if processes within one session run under different users
-// we do not have permission to open another process's handle
+// we do not have permission to open a handle to another process
 //---  remove killed processes
 int i;
     for (i = 0; i < c; i++)
