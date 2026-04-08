@@ -48,7 +48,7 @@ protected:
     DWORD IconReaderThreadUID; // generator of unique thread IDs for reading icons
     BOOL CurIRThreadIDIsValid; // TRUE = the thread is running and CurIRThreadID is valid
     DWORD CurIRThreadID;       // unique thread ID (see IconReaderThreadUID) that loads icons for the current user menu version
-    BOOL AlreadyStopped;       // TRUE = no more icon reading, the main window has closed/is closing
+    BOOL AlreadyStopped;       // TRUE = no more icon reading; the main window has closed/is closing
 
     int UserMenuIconsInUse;                            // > 0: user menu icons are currently in an open menu, so we cannot update them immediately; at most 2 (Salamander cfg + Find: user menu)
     CUserMenuIconDataArr* UserMenuIIU_BkgndReaderData; // storage for new icons when UserMenuIconsInUse > 0
@@ -99,8 +99,8 @@ extern CUserMenuIconBkgndReader UserMenuIconBkgndReader;
 enum CUserMenuItemType
 {
     umitItem,         // standard item
-    umitSubmenuBegin, // marks the start of a popup
-    umitSubmenuEnd,   // marks the end of a popup
+    umitSubmenuBegin, // marks the start of a submenu
+    umitSubmenuEnd,   // marks the end of a submenu
     umitSeparator     // marks the end of a popup
 };
 
@@ -134,14 +134,14 @@ struct CUserMenuItem
     // Tries to retrieve the icon handle in this order
     // a) the Icon variable
     // b) SHGetFileInfo
-    // c) take the system default
+    // c) takes the system default
     // Reading icons in the background: if 'bkgndReaderData' is NULL, we read immediately; otherwise the icons
     // are read in the background. If 'getIconsFromReader' is FALSE, we collect what to load into 'bkgndReaderData'.
     // If it is TRUE, the icons are already loaded and we simply take over the handles of the loaded icons
-    // stored in 'bkgndReaderData'.
+    // from 'bkgndReaderData'.
     BOOL GetIconHandle(CUserMenuIconDataArr* bkgndReaderData, BOOL getIconsFromReader);
 
-    // Searches ItemName for '&' and returns the hotkey; returns TRUE if one is found.
+    // Searches ItemName for '&' and returns HotKey; returns TRUE if one is found.
     BOOL GetHotKey(char* key);
 
     BOOL Set(char* name, char* umCommand, char* arguments, char* initDir, char* icon);
