@@ -101,7 +101,7 @@ enum CUserMenuItemType
     umitItem,         // standard item
     umitSubmenuBegin, // marks the start of a submenu
     umitSubmenuEnd,   // marks the end of a submenu
-    umitSeparator     // marks the end of a popup
+    umitSeparator     // separator item
 };
 
 struct CUserMenuItem
