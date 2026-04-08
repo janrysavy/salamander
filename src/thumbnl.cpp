@@ -326,7 +326,7 @@ void CShrinkImage::ProcessRows(DWORD* inBuff, DWORD rowCount)
                 // and the new right coefficient
                 xCoeff = NormCoeffY * *ptrXCoeff++;
             }
-            // for the last pixel we must skip computing the left part
+            // for the last pixel we must skip computing the left-side contribution
             for (; x2 < xBndr; x2++)
             {
                 // fetch the pixel
@@ -576,7 +576,7 @@ BOOL CSalamanderThumbnailMaker::RenderToThumbnailData(CThumbnailData* data)
     // discard the bitmap
     HANDLES(DeleteObject(hBmp));
 
-    // if we already hold some data, free it for the new one
+    // if we already hold some data, free it before storing the new data
     if (data->Bits != NULL)
         free(data->Bits);
 
@@ -648,7 +648,7 @@ BOOL CSalamanderThumbnailMaker::SetParameters(int picWidth, int picHeight, DWORD
 
     if (OriginalWidth <= maxWidth && OriginalHeight <= maxHeight)
     {
-        // copy the data as-is
+        // copy the data
         ThumbnailRealWidth = OriginalWidth;
         ThumbnailRealHeight = OriginalHeight;
         ShrinkImage = FALSE;
