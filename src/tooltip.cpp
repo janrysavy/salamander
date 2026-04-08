@@ -14,9 +14,9 @@
 //
 
 // Replaced by the GetTime() method.
-//#define TOOLTIP_SHOWDELAY 1000  // [ms] delay before opening the tooltip when the cursor is over a single ID from one window
-//#define TOOLTIP_HIDEDELAY   80  // [ms] (times 100) delay before the tooltip fades if nothing else dismisses it
-#define TOOLTIP_KILLDELAY 300 // [ms] how long we endure before switching to the Killed state (for crossing separators)
+//#define TOOLTIP_SHOWDELAY 1000  // [ms] delay before opening the tooltip when the cursor is over a single ID in one window
+//#define TOOLTIP_HIDEDELAY   80  // [ms] (times 100) delay before hiding the tooltip if nothing else dismisses it
+#define TOOLTIP_KILLDELAY 300 // [ms] how long we wait before switching to the Killed state (when crossing separators)
 
 CToolTip* ToolTip = NULL;
 
@@ -303,7 +303,7 @@ BOOL CToolTip::GetText()
     }
     if (TextLen == 0)
     {
-        // we did not receive text - hide the previous tooltip and bail out
+        // we did not receive text - hide the previous tooltip and exit
         if (HWindow != NULL)
             Hide();
         return FALSE;
@@ -534,7 +534,7 @@ void CToolTip::OnTimer()
         HWND hWnd = WindowFromPoint(p);
         if (hWnd == HNotifyWindow) // we must still be on the notify window
         {
-            if (HasActiveParent(hWnd)) // and its root must be active
+            if (HasActiveParent(hWnd)) // the root window must also be active
             {
                 if (Show(p.x, p.y, TRUE, FALSE, HNotifyWindow))
                 {
