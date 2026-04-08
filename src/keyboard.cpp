@@ -986,12 +986,12 @@ BOOL IsSalHotKey(WORD hotKey)
         break;
     }
 
-    case 0xDC: // '\'
+    case 0xDC: // '\\'
     {
         switch (mods)
         {
         case NONE:    // quick search/type in command line
-        case CONTROL: // root dir
+        case CONTROL: // go to the root directory
             found = TRUE;
         }
         break;
