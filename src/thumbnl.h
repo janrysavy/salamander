@@ -55,7 +55,7 @@ class CSalamanderThumbnailMaker : public CSalamanderThumbnailMakerAbstract
 protected:
     CFilesWindow* Window; // Panel window whose icon reader we operate within.
 
-    DWORD* Buffer;  // Dedicated buffer for image rows supplied by the plug-in.
+    DWORD* Buffer;  // Dedicated buffer for image rows supplied by the plugin.
     int BufferSize; // Size of the 'Buffer' buffer.
     BOOL Error;     // If TRUE, an error occurred while processing the thumbnail, so the result is unusable.
     int NextLine;   // Index of the next row to process.
@@ -88,7 +88,7 @@ public:
     void Clear(int thumbnailMaxSize = -1);
 
     // Returns TRUE if the complete thumbnail is already available in this object
-    // (successfully obtained from the plug-in).
+    // (successfully obtained from the plugin).
     BOOL ThumbnailReady();
 
     // Performs thumbnail transformations according to PictureFlags.
