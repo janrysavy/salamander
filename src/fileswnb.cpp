@@ -307,7 +307,8 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_USER_UPDATEPANEL:
     {
-        // someone distributed messages (a message box opened) and the panel content must be updated
+        // someone dispatched messages (a message box opened) and the panel
+        // content must be updated
         RefreshListBox(0, -1, -1, FALSE, FALSE);
         return 0;
     }
@@ -694,8 +695,8 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         if (uMsg == WM_USER_REFRESHINDEX)
         {
             // if a "static" association icon was loaded, store it in Associations
-            // counts with thumbnails too - the condition Flag==1 or 2 does not succeed
-            if (file != NULL && !isDir &&                                   // this is not a directory
+            // also covers thumbnails - the Flag==1 or 2 condition does not apply
+            if (file != NULL && !isDir &&                                   // this is a file
                 (!Is(ptPluginFS) || GetPluginIconsType() != pitFromPlugin)) // not an icon from a plugin
             {
                 char buf[MAX_PATH + 4]; // extension in lowercase
@@ -1072,7 +1073,7 @@ CFilesWindow::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         DirectoryLine->DestroyWindow();
         delete DirectoryLine;
         DirectoryLine = NULL; // fix for crash
-                              //
+                              //---
         return 0;
     }
 
