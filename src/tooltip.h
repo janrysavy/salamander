@@ -86,9 +86,9 @@ public:
     // so there will not be unintended tooltip displays.
     void SuppressToolTipOnCurrentMousePos();
 
-    // Returns TRUE if the text can be shown; returns FALSE if no new text was supplied.
-    // If considerCursor==TRUE, it checks the cursor and moves the tooltip under it.
-    // If modal==TRUE, it starts a message loop that watches for tooltip-closing messages and returns only after it fades out.
+    // Returns TRUE if the text is shown; returns FALSE if no new text was supplied.
+    // If considerCursor==TRUE, it checks the cursor and moves the tooltip below it.
+    // If modal==TRUE, it starts a message loop that watches for messages to close the tooltip and returns only after it is hidden.
     BOOL Show(int x, int y, BOOL considerCursor, BOOL modal, HWND hParent);
 
     // extinguishes the tooltip
