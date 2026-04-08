@@ -786,6 +786,7 @@ BOOL IsFilePlaceholder(WIN32_FIND_DATA const* findData);
 //BOOL MakeFileAvailOfflineIfOneDriveOnWin81(HWND parent, const char *name);
 
 // sets the thread priority to normal and calls menu->InvokeCommand() in a try-except block;
+// before exiting it restores the thread priority to its original value
 BOOL SafeInvokeCommand(IContextMenu2* menu, CMINVOKECOMMANDINFO& ici);
 
 // if 'hInstance' is NULL strings are loaded from HLanguage; otherwise from 'hInstance'
