@@ -257,7 +257,7 @@ public:
             ImageDragMove(pt.x, pt.y);
         if (DataObject != NULL)
         {
-            // Perform a hit test to locate the drop position.
+            // Perform a hit test.
             int insertIndex = -1;
             BOOL after;
             int pasteIndex = -1;
@@ -342,7 +342,7 @@ public:
             ImageDragLeave();
         if (DataObject != NULL)
         {
-            // Perform a hit test to resolve the drop target.
+            // Perform a hit test.
             int insertIndex = -1;
             BOOL after;
             int pasteIndex = -1;
@@ -372,7 +372,7 @@ public:
                     char tmp[MAX_PATH];
                     BOOL shell = FALSE;
 
-                    // I changed CMainWindow::UserMenu so that if it does not launch through the Shell,
+                    // CMainWindow::UserMenu was changed so that if it does not launch through the Shell,
                     // it calls ShellExecuteEx instead of CreateProcess; therefore quotes are no longer needed
                     /*
             // if it is not an executable file (.exe, .com, .bat, .pif),
@@ -599,7 +599,7 @@ int CUserMenuBar::GetNeededHeight()
 void CUserMenuBar::Customize()
 {
     CALL_STACK_MESSAGE_NONE
-    // open the UserMenu page and let it edit the item at the given index
+    // open the UserMenu page and start editing the item at the given index
     PostMessage(MainWindow->HWindow, WM_USER_CONFIGURATION, 2, 0);
 }
 
