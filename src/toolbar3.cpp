@@ -81,7 +81,7 @@ BOOL CTBCustomizeDialog::EnumButtons()
         }
         if (sent)
         {
-            // Allocate persistent copies of the text and name strings.
+            // Allocate copies of the text and name strings.
             tii.TextLen = lstrlen(tii.Text);
             tii.NameLen = lstrlen(tii.Name);
             char* text = (char*)malloc(tii.TextLen + 1);
@@ -140,7 +140,7 @@ void CTBCustomizeDialog::FillLists()
     SendMessage(HCurrentLB, LB_RESETCONTENT, 0, 0);
     int i;
     for (i = 0; i < AllItems.Count; i++)
-        if (i == 0 || !PresentInToolBar(AllItems[i].ID)) // include the virtual separator plus every button that is not currently on the toolbar
+        if (i == 0 || !PresentInToolBar(AllItems[i].ID)) // Include the virtual separator and every button that is not currently on the toolbar.
         {
             int ret = (int)SendMessage(HAvailableLB, LB_ADDSTRING, 0, 1); // 1 is a dummy value used to work around a WinXP bug
             if (ret != LB_ERR)
@@ -163,7 +163,7 @@ void CTBCustomizeDialog::FillLists()
         if (ret != LB_ERR)
             SendMessage(HCurrentLB, LB_SETITEMDATA, ret, (LPARAM)index);
     }
-    // Append the virtual separator placeholder.
+    // Virtual separator.
     SendMessage(HCurrentLB, LB_ADDSTRING, 0, (LPARAM)-1);
 
     // Select the default entries.
