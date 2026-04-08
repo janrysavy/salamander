@@ -139,7 +139,7 @@ void CDriveBar::Execute(DWORD id)
                 panel = MainWindow->GetActivePanel();
 
             if (DriveType != drvtPluginCmd)
-                panel->TopIndexMem.Clear(); // treat this as a long jump
+                panel->TopIndexMem.Clear(); // long jump
 
             char path[MAX_PATH];
             switch (DriveType)
@@ -195,7 +195,7 @@ void CDriveBar::Execute(DWORD id)
                 // code taken from fileswn3.cpp, CFilesWindow::ChangeDrive()
                 const char* dllName = (const char*)DriveTypeParam;
                 CPluginData* data = Plugins.GetPluginData(dllName);
-                if (data != NULL) // the plug-in exists, go run the command
+                if (data != NULL) // the plugin exists, so run the command
                     data->ExecuteChangeDriveMenuItem(panel == MainWindow->LeftPanel ? PANEL_LEFT : PANEL_RIGHT);
                 return;
             }
@@ -294,12 +294,12 @@ BOOL CDriveBar::OnContextMenu()
             FromContextMenu = FALSE;
             const char* dllName = NULL;
             List->OnContextMenu(TRUE, indexInList, panel == MainWindow->LeftPanel ? PANEL_LEFT : PANEL_RIGHT, &dllName);
-            if (PostCmd != 0) // set only on drvtPluginFS and drvtPluginCmd, and drvtPluginFS cannot be on the Drive bar
+            if (PostCmd != 0) // set only for drvtPluginFS and drvtPluginCmd, and drvtPluginFS cannot be on the Drive bar
             {
                 UpdateWindow(MainWindow->HWindow);
 
                 CPluginData* data = Plugins.GetPluginData(dllName);
-                if (data != NULL) // the plug-in exists, go run the command
+                if (data != NULL) // the plugin exists, so run the command
                 {                 // post-command from the context menu of an FS item
                     data->GetPluginInterfaceForFS()->ExecuteChangeDrivePostCommand(panel == MainWindow->LeftPanel ? PANEL_LEFT : PANEL_RIGHT,
                                                                                    PostCmd, PostCmdParam);
