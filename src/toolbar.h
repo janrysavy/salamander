@@ -156,7 +156,7 @@ public:
 
     // Returns TRUE if the point lies on an item boundary; in that case it sets 'index'
     // to that item and the 'after' flag to indicate whether it is the left or right side.
-    // Returns FALSE when the point is over an item. If the point is not above any item,
+    // Returns FALSE if the point lies over an item. If the point does not lie over any item,
     // it returns TRUE and sets 'index' to -1.
     virtual BOOL WINAPI InsertMarkHitTest(int xPos, int yPos, int& index, BOOL& after);
 
@@ -184,9 +184,9 @@ protected:
 
     void DrawInsertMark(HDC hDC);
 
-    // Returns TRUE if an item is at the position and sets 'index'.
-    // Otherwise returns FALSE.
-    // If the user clicked the drop-down, sets 'dropDown' to TRUE.
+    // Returns TRUE if an item is at the position; in that case it also sets 'index'.
+    // Otherwise it returns FALSE.
+    // If the user clicked the drop-down, it sets 'dropDown' to TRUE.
     BOOL HitTest(int xPos, int yPos, int& index, BOOL& dropDown);
 
     // Iterates through every item and calculates 'MinWidth' and 'XOffset'.
@@ -412,7 +412,7 @@ protected:
     char CheckedDrive[3];
 
 public:
-    // Plug-in icons are kept in image lists so we can display them in grayscale.
+    // Plugin icons are kept in image lists so we can display them in grayscale.
     HIMAGELIST HDrivesIcons;
     HIMAGELIST HDrivesIconsGray;
 
@@ -469,7 +469,7 @@ protected:
 class CPluginsBar : public CToolBar
 {
 protected:
-    // Icons representing plug-ins, created by CPlugins::CreateIconsList.
+    // Icons representing plugins, created by CPlugins::CreateIconsList.
     HIMAGELIST HPluginsIcons;
     HIMAGELIST HPluginsIconsGray;
 
