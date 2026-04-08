@@ -27,7 +27,7 @@ void MD5::update(uint1* input, uint4 input_length)
     uint4 buffer_space; // how much space is left in buffer
 
     if (finalized)
-    { // so we can't update!
+    { // cannot update after finalization
         TRACE_E("MD5::update:  Can't update a finalized digest!");
         return;
     }
@@ -45,7 +45,7 @@ void MD5::update(uint1* input, uint4 input_length)
 
     // Transform as many times as possible.
     if (input_length >= buffer_space)
-    { // ie. we have enough to fill the buffer
+    { // i.e. we have enough data to fill the buffer
         // fill the rest of the buffer and transform
         memcpy(buffer + buffer_index, input, buffer_space);
         transform(buffer);
@@ -118,9 +118,9 @@ void MD5::init()
     state[3] = 0x10325476;
 }
 
-// Constants for MD5Transform routine.
-// Although we could use C++ style constants, defines are actually better,
-// since they let us easily evade scope clashes.
+// Constants for the MD5Transform routine.
+// Although we could use C++-style constants, `#define`s are actually better,
+// since they let us easily avoid scope clashes.
 
 #define S11 7
 #define S12 12
