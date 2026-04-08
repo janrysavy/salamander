@@ -6,9 +6,9 @@
 //
 // ****************************************************************************
 
-// TRUE = first running instance of version 3.0 or newer
-// Determined using a mutex in the global namespace, so it is visible to mutexes
-// from other sessions (remote desktop, fast user switching)
+// TRUE = first running instance of version 3.0 or later
+// Determined using a mutex in the global namespace, so it is visible across sessions
+// (remote desktop, fast user switching)
 extern BOOL FirstInstance_3_or_later;
 
 // Shared memory contains:
@@ -19,7 +19,7 @@ extern BOOL FirstInstance_3_or_later;
 #define MAX_TL_ITEMS 500 // maximum number of items in shared memory, cannot be changed!
 
 #define TASKLIST_TODO_HIGHLIGHT 1 // window of the process in 'PID' is to be highlighted
-#define TASKLIST_TODO_BREAK 2     // process given in 'PID' is to be broken into
+#define TASKLIST_TODO_BREAK 2     // the process specified by 'PID' is to be broken into
 #define TASKLIST_TODO_TERMINATE 3 // process given in 'PID' is to be terminated
 #define TASKLIST_TODO_ACTIVATE 4  // process given in 'PID' is to be activated
 
@@ -131,18 +131,18 @@ public:
 
     BOOL Init();
 
-    // Populates task-list items; 'items' is an array with at least MAX_TL_ITEMS CTLItem structures; returns the number of items
-    // 'items' can be NULL if we only care about 'itemsStateUID'
-    // returns the "version" of the process list; the version increases with every change in the list (when an item is added or removed)
-    // used by the dialog as information that it should refresh the list; 'itemsStateUID' can be NULL
-    // if 'timeouted' is not NULL, it sets whether the failure was caused by a timeout when waiting for shared memory
+    // Fills the task-list items; 'items' is an array of at least MAX_TL_ITEMS CProcessListItem structures; returns the number of items
+    // 'items' can be NULL if only 'itemsStateUID' is needed
+    // Returns the "version" of the process list; the version increases with every change to the list (when an item is added or removed)
+    // Used by the dialog to know when to refresh the list; 'itemsStateUID' can be NULL
+    // If 'timeouted' is not NULL, it is set to indicate whether the failure was caused by a timeout while waiting for shared memory
     int GetItems(CProcessListItem* items, DWORD* itemsStateUID, BOOL* timeouted = NULL);
 
     // Requests process 'pid' to perform the action defined by 'todo' (except TASKLIST_TODO_ACTIVATE)
     // if 'timeouted' is not NULL, it sets whether the failure was caused by a timeout when waiting for shared memory
     BOOL FireEvent(DWORD todo, DWORD pid, BOOL* timeouted = NULL);
 
-    // if 'timeouted' is not NULL, it sets whether the failure was caused by a timeout when waiting for shared memory
+    // If 'timeouted' is not NULL, it is set to indicate whether the failure was caused by a timeout while waiting for shared memory
     BOOL ActivateRunningInstance(const CCommandLineParams* cmdLineParams, BOOL* timeouted = NULL);
 
     // Searches the process list for our entry and sets 'ProcessState' and 'HMainWindow'; returns TRUE on success, otherwise FALSE
