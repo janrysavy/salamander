@@ -115,7 +115,7 @@ CToolBar::CToolBar(HWND hNotifyWindow, CObjectOrigin origin)
 CToolBar::~CToolBar()
 {
     CALL_STACK_MESSAGE1("CToolBar::~CToolBar()");
-    // Cleanup also runs from WM_DESTROY.
+    // Destruction also runs in WM_DESTROY.
     if (CacheBitmap != NULL)
     {
         delete CacheBitmap;
@@ -459,7 +459,7 @@ BOOL CToolBar::SetItemInfo2(DWORD position, BOOL byPosition, const TLBI_ITEM_INF
         }
         else if (hadIcon)
         {
-            HasIconDirty = TRUE; // We do not know whether any icon remains—it has to be checked.
+            HasIconDirty = TRUE; // We do not know whether any icon remains; it must be checked.
         }
     }
 
@@ -1001,7 +1001,7 @@ CToolBar::WindowProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
         int index;
         BOOL dropDown;
         // If a Windows pop-up menu is open and we click the toolbar, WM_LBUTTONDOWN
-        // arrives immediately with HotIndex == -1, so ignore the condition index == HotIndex.
+        // arrives immediately, so HotIndex == -1 and we ignore the index == HotIndex condition.
         if (HitTest(xPos, yPos, index, dropDown) /*&& index == HotIndex*/)
         {
             CToolBarItem* item = Items[index];
