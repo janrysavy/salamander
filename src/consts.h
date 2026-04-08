@@ -24,9 +24,9 @@ extern SYSTEMTIME BETA_EXPIRATION_DATE;
 //#define ENABLE_BUGREPORT_DEBUGGING   1
 
 // used to detect whether a wheel message came through the hook or directly
-extern BOOL MouseWheelMSGThroughHook; // TRUE: the message went through the hook at MouseWheelMSGTime; FALSE: it went through the panel at MouseWheelMSGTime
+extern BOOL MouseWheelMSGThroughHook; // TRUE: the message went through the hook at the time stored in MouseWheelMSGTime; FALSE: the message went through the panel at the time stored in MouseWheelMSGTime
 extern DWORD MouseWheelMSGTime;       // timestamp of the last wheel message
-#define MOUSEWHEELMSG_VALID 100       // [ms] number of milliseconds one channel (hook vs. window) is valid
+#define MOUSEWHEELMSG_VALID 100       // [ms] number of milliseconds for which one channel (hook vs. window) remains valid
 
 enum
 {
@@ -106,7 +106,7 @@ BOOL SalMoveFile(const char* srcName, const char* destName);
 // handle for GetFileSize(); the result is stored in 'size'. Returns success, otherwise
 // 'err' receives the Windows error code and 'size' is zero
 BOOL SalGetFileSize(HANDLE file, CQuadWord& size, DWORD& err);
-BOOL SalGetFileSize2(const char* fileName, CQuadWord& size, DWORD* err); // 'err' may be NULL if we don't care
+BOOL SalGetFileSize2(const char* fileName, CQuadWord& size, DWORD* err); // 'err' may be NULL if the error code is not needed
 
 struct COperation;
 
@@ -184,8 +184,8 @@ HANDLE SalCreateFileEx(const char* fileName, DWORD desiredAccess,
 // space or ends with a dot the function returns TRUE; otherwise FALSE
 BOOL FileNameInvalidForManualCreate(const char* path);
 
-// Removes spaces from the beginning and end of the name using CutWS / StripWS /
-// CutWhiteSpace / StripWhiteSpace. Returns TRUE if trimming occurred
+// Trims spaces from the beginning and end of the name (CutWS or StripWS or CutWhiteSpace or StripWhiteSpace)
+// Returns TRUE if trimming occurred
 BOOL CutSpacesFromBothSides(char* path);
 
 // Trims leading spaces and trailing spaces or dots in the same way Explorer does
@@ -203,7 +203,7 @@ void MakeCopyWithBackslashIfNeeded(const char*& name, char (&nameCopy)[3 * MAX_P
 BOOL NameEndsWithBackslash(const char* name);
 
 // Returns TRUE if 'name' ends with a space/dot or contains ':' (ADS conflict), otherwise FALSE.
-// When 'ignInvalidName' is TRUE it only checks for ':' conflicts
+// When 'ignInvalidName' is TRUE, returns TRUE only if 'name' contains ':' (ADS conflict)
 BOOL FileNameIsInvalid(const char* name, BOOL isFullName, BOOL ignInvalidName = FALSE);
 
 // Returns FALSE if any component of the path ends with a space or dot. When
@@ -245,9 +245,9 @@ BOOL PathsAreOnTheSameVolume(const char* path1, const char* path2, BOOL* resIsOn
 // compares two paths: case-insensitive and ignoring a single backslash at the start and end
 BOOL IsTheSamePath(const char* path1, const char* path2);
 
-// determines whether the path points to a plugin FS. 'path' is the path to check,
-// 'fsName' is a MAX_PATH buffer for the FS name (or NULL). Returns 'userPart' (if not NULL)
-// pointing into 'path' at the first character of the plugin-defined path (after the first ':')
+// determines whether 'path' is a plugin FS path; 'path' is the path to check,
+// 'fsName' is a MAX_PATH buffer for the FS name (or NULL); stores in 'userPart'
+// (if not NULL) a pointer into 'path' to the first character of the plugin-defined path (after the first ':')
 BOOL IsPluginFSPath(const char* path, char* fsName = NULL, const char** userPart = NULL);
 BOOL IsPluginFSPath(char* path, char* fsName = NULL, char** userPart = NULL);
 
@@ -280,9 +280,8 @@ BOOL CutDirectory(char* path, char** cutDir = NULL);
 // either parameter is empty no separator is added (e.g. "c:\" + "" -> "c:")
 BOOL SalPathAppend(char* path, const char* name, int pathSize);
 
-// if 'path' does not end with a backslash one is appended. 'path' must have at
-// least 'pathSize' characters. Returns TRUE if the backslash was added. When
-// 'path' is empty nothing is appended
+// if 'path' does not already end with a backslash, appends one to the end of 'path'; 'path' is a buffer of at least 'pathSize'
+// characters; returns TRUE if the backslash fits after 'path'; if 'path' is empty, no backslash is added
 BOOL SalPathAddBackslash(char* path, int pathSize);
 
 // removes a trailing backslash from 'path' if present
@@ -320,37 +319,37 @@ const char* SalPathFindFileName(const char* path);
 // "C:\AA\BB"+"C:\AA\CC"->5
 int CommonPrefixLength(const char* path1, const char* path2);
 
-// Returns TRUE when 'prefix' is a base of the path 'path'. Otherwise FALSE.
-// Examples:
+// Returns TRUE if the path 'prefix' is a prefix of the path 'path'. Otherwise returns FALSE.
 // "C:\aa","C:\Aa\BB"->TRUE
 // "C:\aa","C:\aaa"->FALSE
 // "C:\aa\","C:\Aa"->TRUE
 // "\\server\share","\\server\share\aaa"->TRUE
-// Works with both standard and UNC paths.
+// Works with both regular and UNC paths.
 BOOL SalPathIsPrefix(const char* prefix, const char* path);
 
-// removes ".." (skipping it together with one directory to the left) and "." from
-// a path. Backslashes must delimit directories. 'afterRoot' points after the
-// root of the path being processed. Returns TRUE on success or FALSE when ".."
-// cannot be removed because the root has been reached
+// Removes ".." (together with one directory to the left) and "." (only the "." itself)
+// from a path; backslashes must be used as directory separators; 'afterRoot' points past the
+// root of the processed path (the path is modified only after 'afterRoot'); returns TRUE if the
+// adjustments succeed, or FALSE if ".." cannot be removed because the root has already been reached
 BOOL SalRemovePointsFromPath(char* afterRoot);
 BOOL SalRemovePointsFromPath(WCHAR* afterRoot);
 
-// adjusts a relative or absolute path to an absolute one without '.' '..' or the final
-// backslash (except "X:\"); if 'curDir' is NULL, relative paths like "\path" and "path" are
-// considered errors. Otherwise 'curDir' receives the valid adjusted current path (UNC or
-// regular). Current paths of other drives (non-UNC) are stored in DefaultDir (call
-// CMainWindow::UpdateDefaultDir before use). 'name' is an in/out buffer at least MAX_PATH
-// characters long (its size is in 'nameBufSize'). If 'nextFocus' is not NULL and the relative
-// path contains no backslash, strcpy(nextFocus, name) is used. Returns TRUE if 'name' is ready
-// to use; otherwise, if 'errTextID' is not NULL it contains the error (constants for LoadStr -
-// IDS_SERVERNAMEMISSING, IDS_SHARENAMEMISSING, IDS_TOOLONGPATH,
-// IDS_INVALIDDRIVE, IDS_INCOMLETEFILENAME, IDS_EMPTYNAMENOTALLOWED and IDS_PATHISINVALID);
-// 'callNethood' (if not NULL) is set to TRUE when the Nethood plugin should be called on errors
-// For IDS_SERVERNAMEMISSING and IDS_SHARENAMEMISSING, if 'allowRelPathWithSpaces' is TRUE, spaces at the start of the relative path are not trimmed
-// spaces at the beginning of a relative path are normally trimmed to prevent users from accidentally creating names with leading spaces
-// Windows still trims trailing spaces and dots
-// returns TRUE if the path is valid, otherwise FALSE (e.g. "\" or "\server\")
+// Converts a relative or absolute path to an absolute one without '.', '..', or a trailing
+// backslash (except "X:\"); if 'curDir' is NULL, relative paths such as "\\path" and "path"
+// are reported as errors (they are indeterminate); otherwise 'curDir' must be a valid adjusted
+// current path (UNC or regular); current paths of other drives (except 'curDir'; regular only,
+// not UNC) are in DefaultDir (it is advisable to call CMainWindow::UpdateDefaultDir before use);
+// 'name' is an in/out buffer of at least MAX_PATH characters (its size is in 'nameBufSize');
+// if 'nextFocus' is not NULL and the specified relative path contains no backslash,
+// strcpy(nextFocus, name) is called
+// Returns TRUE - the name in 'name' is ready for use; otherwise, if 'errTextID' is not NULL it
+// contains the error (constants for LoadStr - IDS_SERVERNAMEMISSING, IDS_SHARENAMEMISSING,
+// IDS_TOOLONGPATH, IDS_INVALIDDRIVE, IDS_INCOMLETEFILENAME, IDS_EMPTYNAMENOTALLOWED, and
+// IDS_PATHISINVALID); TRUE is returned in 'callNethood' (if not NULL) if the Nethood plugin should
+// be called for IDS_SERVERNAMEMISSING and IDS_SHARENAMEMISSING; if 'allowRelPathWithSpaces' is
+// TRUE, leading spaces are not trimmed from a relative path (normally they are, to prevent users
+// from accidentally creating names with leading spaces; Windows trims trailing spaces and dots)
+// Returns TRUE if the path contains no error, otherwise FALSE (e.g. "\\\" or "\\server\\")
 BOOL SalGetFullName(char* name, int* errTextID = NULL, const char* curDir = NULL,
                     char* nextFocus = NULL, BOOL* callNethood = NULL, int nameBufSize = MAX_PATH,
                     BOOL allowRelPathWithSpaces = FALSE);
@@ -416,21 +415,21 @@ BOOL SalParsePath(HWND parent, char* path, int& type, BOOL& isDir, char*& second
                   const char* curPath, const char* curArchivePath, int* error,
                   int pathBufSize);
 
-// obtains the existing part and operation mask from a Windows target path; any non-existent part
-// Attempts to create the path and returns TRUE on success together with the existing
-// Windows target path in 'path' and the operation mask in 'mask' (points inside 'path';
-// path and mask are separated by a zero. If the path contains no mask, "*.*" is generated).
-// 'parent' is the parent of message boxes; 'title' + 'errorTitle' are their captions;
-// 'selCount' is the number of selected files and directories. 'path' is the input target path
-// and on output (at least 2 * MAX_PATH characters) holds the existing target path.
-// 'secondPart' points inside 'path' just past the existing portion (after '\\' or end of string;
-// if the path contains a file it points after that file). 'pathIsDir' is TRUE/FALSE depending on
-// whether the existing portion is a directory or a file. 'backslashAtEnd' is TRUE if a backslash
-// was present at the end of 'path' before parsing (SalParsePath removes it). 'dirName' and
-// 'curDiskPath' are non-NULL when exactly one file/directory is selected-its name without path is
-// stored in 'dirName'; if nothing is selected, the focused item is used-and the current path is a
-// Windows path stored in 'curDiskPath'. 'mask' receives a pointer to the operation mask inside
-// 'path'. The method returns FALSE if an error occurs and the user was already notified.
+// obtains the existing part and operation mask from a Windows target path; allows any non-existent part
+// to be created; on success returns TRUE, the existing Windows target path (in 'path')
+// and the found operation mask (in 'mask' - it points into the 'path' buffer, but the path and mask are separated
+// by a null character; if the path contains no mask, it automatically creates the mask "*.*"); 'parent' is the parent of any
+// message boxes; 'title' + 'errorTitle' are the captions of the information + error message boxes; 'selCount' is
+// the number of selected files and directories; 'path' is the input target path to process, on output
+// (at least 2 * MAX_PATH characters) the existing target path; 'secondPart' points into 'path' to the position
+// after the existing path (after '\\' or at the end of the string; if the path contains a file, it points after the path
+// to that file); 'pathIsDir' is TRUE/FALSE if the existing part of the path is a directory/file;
+// 'backslashAtEnd' is TRUE if there was a backslash at the end of 'path' before "parse" was performed (for example,
+// SalParsePath removes such a backslash); 'dirName' + 'curDiskPath' are not NULL if at most one file/directory is selected
+// (its name without the path is in 'dirName'; if nothing is selected, the focused item is used)
+// and the current path is a Windows path (the path is in 'curDiskPath'); 'mask' is on output
+// a pointer to the operation mask in the 'path' buffer; if the path contains an error, the method returns FALSE,
+// the problem has already been reported to the user
 BOOL SalSplitWindowsPath(HWND parent, const char* title, const char* errorTitle, int selCount,
                          char* path, char* secondPart, BOOL pathIsDir, BOOL backslashAtEnd,
                          const char* dirName, const char* curDiskPath, char*& mask);
@@ -467,18 +466,18 @@ BOOL SalSplitGeneralPath(HWND parent, const char* title, const char* errorTitle,
                          const char* dirName, const char* curPath, char*& mask, char* newDirs,
                          SGP_IsTheSamePathF isTheSamePathF);
 
-// tests whether 'fileNameComponent' can be used as a component
-// of a Windows file name (handles strings longer than MAX_PATH-4 ("C:" + null terminator),
-// empty strings, '.' strings, white-space strings, the characters "*?\\/<>|:",
-// and simple reserved names like "prn" or "prn  .txt")
+// tests whether the string 'fileNameComponent' can be used as a name component
+// on a Windows filesystem (handles strings longer than MAX_PATH-4 (4 = "C:\\"
+// + null terminator), an empty string, strings of '.' characters, strings of white-space,
+// the characters "*?\\/<>|\":" and simple names such as "prn" and "prn  .txt")
 BOOL SalIsValidFileNameComponent(const char* fileNameComponent);
 
 // transforms 'fileNameComponent' so it can be used as a Windows file name
-// component (handles strings longer than MAX_PATH-4 ("C:" + null terminator),
-// empty strings, '.' strings, white spaces; characters "*?\\/<>|:" are replaced
-// with '_'; simple names like "prn" and "prn  .txt" get an '_' appended). The
-// buffer must allow at least one extra character (up to MAX_PATH bytes of the
-// original string are used)
+// component (handles strings longer than MAX_PATH-4 (4 = "C:\" + null terminator),
+// empty strings, strings of '.', whitespace-only strings; characters "*?\\/<>|:"
+// are replaced with '_'; simple names like "prn" and "prn  .txt" get an '_'
+// appended at the end of the name); 'fileNameComponent' must be extendable by at
+// least one character (but at most MAX_PATH bytes of 'fileNameComponent' are used)
 void SalMakeValidFileNameComponent(char* fileNameComponent);
 
 // prints disk space size; mode==0 "1.23 MB", mode==1 "1 230 000 bytes, 1.23 MB",
@@ -507,10 +506,10 @@ void RemoveAmpersands(char* text);
 // was large enough).
 BOOL DuplicateBackslashes(char* buffer, int bufferSize);
 
-// Duplicates '$'. This is used when importing old paths (HotPaths) that may
+// Duplicates '$'. Used when importing old paths (HotPaths), which may
 // contain $(SalDir) and now support Sal/Env variables such as $(SalDir) or
-// $(WinDir). During loading we found that version 2.5RC1 did not expand these
-// variables for editors, viewers, or archivers; we now convert only HotPaths.
+// $(WinDir). In 2.5RC1 this expansion was not done for editors, viewers, or
+// archivers; this conversion is added only for HotPaths.
 // 'buffer' is the input/output string, 'bufferSize' is the size of 'buffer' in
 // bytes. Returns TRUE if doubling did not truncate the string (the buffer was
 // large enough).
@@ -546,18 +545,19 @@ void CloseAllOwnedEnabledDialogs(HWND parent, DWORD tid = 0);
 // buffer of at least 10 characters; 'attrs' are the attributes to format
 void GetAttrsString(char* text, DWORD attrs);
 
-// Appends 'srcStr' after the terminating zero of 'dstStr'.
+// Copies 'srcStr' after the terminating zero of 'dstStr'.
 // 'dstStr' is a buffer of size 'dstBufSize' (must be at least 2).
 // If both strings do not fit, they are truncated so that as many characters as
-// possible from each string are kept.
+// possible from both strings are kept.
 void AddStrToStr(char* dstStr, int dstBufSize, const char* srcStr);
 
-// Creates a fully qualified file name (allocated). If 'dosName' is not NULL and
-// 'path'+'name' is too long, 'path'+'dosName' is tried. When 'skip', 'skipAll'
-// and 'sourcePath' are not NULL and the name is too long, the user can skip it
-// (function then returns NULL and sets 'skip' to TRUE). Selecting "Skip All"
-// sets 'skipAll' to TRUE. 'sourcePath' is used for the Focus button so the panel
-// shows the offending component from the source path.
+// Creates an allocated full file name. If 'dosName' is not NULL and
+// 'path'+'name' is too long, it tries 'path'+'dosName'. If 'skip', 'skipAll',
+// and 'sourcePath' are not NULL and a "name too long" error occurs, the user
+// can skip this name (the function then returns NULL and sets 'skip' to TRUE).
+// If the user selects "Skip All", 'skipAll' is set to TRUE. 'sourcePath' is
+// used for the Focus button (the panel shows the too-long component in the
+// source path that would cause the problem in the target path).
 char* BuildName(char* path, char* name, char* dosName = NULL, BOOL* skip = NULL, BOOL* skipAll = NULL,
                 const char* sourcePath = NULL);
 
@@ -589,18 +589,18 @@ void InitDefaultDir();        // initializes the DefaultDir array (last visited 
 void CreateSafeWaitWindow(const char* message, const char* caption, int delay,
                           BOOL showCloseButton, HWND hForegroundWnd);
 void DestroySafeWaitWindow(BOOL killThread = FALSE);
-// hides the window when 'show'==FALSE and shows it when 'show'==TRUE.
-// Call as a reaction to WM_ACTIVATE from the hForegroundWnd window:
+// hides the created window when 'show'==FALSE and shows it when 'show'==TRUE.
+// Call in response to WM_ACTIVATE from the hForegroundWnd window:
 //    case WM_ACTIVATE:
 //    {
 //      ShowSafeWaitWindow(LOWORD(wParam) != WA_INACTIVE);
 //      break;
 //    }
-// If the thread that created the window is busy, messages are not distributed
+// If the thread that created the window is busy, messages are not dispatched,
 // so WM_ACTIVATE is not delivered when the user clicks another application. The
-// messages arrive when the message box is shown, which is exactly what we need:
-// temporarily hide and later (after closing the message box and activating
-// hForegroundWnd) show again.
+// messages are delivered only when the message box is shown, which is what we
+// need: hide temporarily and show again later (after the message box is closed
+// and the hForegroundWnd window is activated).
 void ShowSafeWaitWindow(BOOL show);
 // after calling CreateSafeWaitWindow or ShowSafeWaitWindow the function returns
 // FALSE until the user clicks the Close button (if shown); then it returns TRUE
@@ -621,16 +621,16 @@ void RemoveTemporaryDir(const char* dir);
 // helper for adding a name to a space-separated list; returns success
 BOOL AddToListOfNames(char** list, char* listEnd, const char* name, int nameLen);
 
-// if the directory does not exist the user may create it;
-// returns TRUE when the directory exists or was created successfully.
-// 'parent' is the parent of error message boxes, NULL means the main window.
-// quiet = TRUE skips the creation question, but errors are shown if errBuf == NULL.
-// if errBuf != NULL, errBufSize specifies the size of the error description buffer.
-// when newDir != NULL the first created subdirectory (full path) is returned in 'newDir',
-// if the entire path already exists, newDir==""; newDir points to a MAX_PATH buffer
-// noRetryButton = TRUE means error dialogs have only the OK button (no Retry/Cancel)
-// manualCrDir = TRUE forbids creating a directory with a leading space (when created
-// manually-Windows otherwise allows spaces at the start)
+// if the directory does not exist, the user can create it;
+// returns TRUE if the directory exists or is created successfully
+// 'parent' is the parent window for error message boxes; NULL = Salamander's main window
+// quiet = TRUE - do not ask whether to create it, but note that errors are shown if errBuf == NULL
+// if errBuf != NULL, errBufSize is the size of the error-description buffer
+// if newDir != NULL, the first created subdirectory (full path) is returned in 'newDir'
+// if the full path already exists, newDir==""; newDir points to a buffer of size MAX_PATH
+// noRetryButton = TRUE - error dialogs contain only an OK button, not Retry/Cancel
+// manualCrDir = TRUE - do not allow creating a directory with a leading space (during manual
+// directory creation; otherwise Windows allows leading spaces)
 BOOL CheckAndCreateDirectory(const char* dir, HWND parent = NULL, BOOL quiet = FALSE, char* errBuf = NULL,
                              int errBufSize = 0, char* newDir = NULL, BOOL noRetryButton = FALSE,
                              BOOL manualCrDir = FALSE);
@@ -651,10 +651,10 @@ BOOL ViewFileInt(HWND parent, const char* name, BOOL altView, DWORD handlerID, B
 // a number
 unsigned __int64 StrToUInt64(const char* str, int len, BOOL* isNum = NULL);
 
-// triggers handler exceptions "in-page-error" and "access violation - read/write on XXX"
-// (checks whether the exception relates to the file-'fileMem' is the starting address,
-// 'fileMemSize' is the size of the currently mapped view). Used when mapping a file into
-// memory (read/write errors cause this exception)
+// handles the "in-page-error" and "access violation - read/write on XXX" exceptions
+// (checks whether the exception is related to the file: 'fileMem' is the base address,
+// 'fileMemSize' is the size of the current mapped file view); used when mapping files
+// into memory (a read/write error raises one of these exceptions)
 int HandleFileException(EXCEPTION_POINTERS* e, char* fileMem, DWORD fileMemSize);
 
 struct CSalamanderVarStrEntry;
@@ -715,12 +715,12 @@ BOOL CopyTextToClipboard(const char* text, int textLen = -1, BOOL showEcho = FAL
 BOOL CopyTextToClipboardW(const wchar_t* text, int textLen = -1, BOOL showEcho = FALSE, HWND hEchoParent = NULL);
 BOOL CopyHTextToClipboard(HGLOBAL hGlobalText, int textLen = -1, BOOL showEcho = FALSE, HWND hEchoParent = NULL);
 
-// examines buffer 'pattern' of length 'patternLen' to see if it is text (there is a
-// code page where it contains only allowed characters-displayable and control). If it
-// is text the most probable code page is returned. 'parent' is the parent of the message box.
-// When 'forceText' is TRUE, forbidden characters are not checked (used when 'pattern' is
-// known to contain text). If 'isText' is not NULL it receives TRUE when text is detected.
-// If 'codePage' is not NULL, it is a buffer (at least 101 chars) for the code page name
+// examines buffer 'pattern' of length 'patternLen' to determine whether it is text (that is,
+// whether there is a code page in which it contains only allowed characters - printable and control).
+// If it is text, it also determines its most probable code page. 'parent' is the parent of the
+// message box. When 'forceText' is TRUE, forbidden characters are not checked (used when 'pattern'
+// contains text). If 'isText' is not NULL it receives TRUE if the buffer is text. If 'codePage'
+// is not NULL, it is a buffer (at least 101 chars) for the code page name
 void RecognizeFileType(HWND parent, const char* pattern, int patternLen, BOOL forceText,
                        BOOL* isText, char* codePage);
 
@@ -786,42 +786,52 @@ BOOL IsFilePlaceholder(WIN32_FIND_DATA const* findData);
 //BOOL MakeFileAvailOfflineIfOneDriveOnWin81(HWND parent, const char *name);
 
 // sets the thread priority to normal and calls menu->InvokeCommand() in a try-except block;
-// before returning the original thread priority is restored
 BOOL SafeInvokeCommand(IContextMenu2* menu, CMINVOKECOMMANDINFO& ici);
 
 // if 'hInstance' is NULL strings are loaded from HLanguage; otherwise from 'hInstance'
 char* LoadStr(int resID, HINSTANCE hInstance = NULL);   // loads string from resources
 WCHAR* LoadStrW(int resID, HINSTANCE hInstance = NULL); // loads wide-string from resources
 
-// support for generating pluralized texts; 'lpFmt' is the format string for the
-// result-its format is described below. The result is returned in 'lpOut'
-// (buffer size 'nOutMax' bytes). 'lpParArray' is an array of parameters and
-// 'nParCount' is their count. Returns the length of the resulting text
+// support for creating parameterized texts (handling singular and plural forms
+// in text); 'lpFmt' is the format string for the resulting text - its format
+// is described below; the resulting text is returned in the 'lpOut' buffer of
+// size 'nOutMax' bytes; 'lpParArray' is the array of text parameters and
+// 'nParCount' is the number of these parameters; returns the length of the
+// resulting text
 //
-// description of the formatting string:
-//   - every formatting string starts with the signature "{!}"
-//   - the following escape sequences suppress special meaning of characters
-//     in the formatting string (backslash is not doubled in this description)
-//     "\\" = "\", "\{" = "{", "\}" = "}", "\:" = ":" and "\|" = "|"
-//   - text outside braces is copied to the output unchanged (except escape sequences)
-//   - parameterized text is enclosed in braces
-//   - each parameterized text uses one parameter from 'lpParArray' (a 64-bit unsigned int)
-//   - parameterized text contains different outputs for different value intervals
-//   - individual outputs and interval limits are separated by '|'
-//   - parameterized text "{}" skips one parameter from 'lpParArray' (no output)
-//   - if a number followed by ':' appears at the start it specifies the parameter index
-//     (from 1 to the number of parameters). Without an index they are assigned sequentially
-//   - specifying an index does not change the sequential assignment order; for example
-//     in "{!}%d file{2:s|0||1|s} and %d director{y|1|ies}" the first parameterized text
-//     uses parameter 2 and the second uses parameter 1
-//   - you can use any number of indexed parameterized texts
+// description of the format string:
+//   - every format string starts with the signature "{!}"
+//   - the following escape sequences are recognized to suppress the special
+//     meaning of characters in the format string (the backslash character in
+//     this description is not doubled): "\\" = "\", "\{" = "{", "\}" = "}", "\:" = ":" and "\|" = "|"
+//   - text outside curly braces is copied to the resulting string unchanged
+//     (except for escape sequences)
+//   - parameterized text is enclosed in curly braces
+//   - each parameterized text uses one parameter from 'lpParArray' - it is a
+//     64-bit unsigned int
+//   - parameterized text contains different resulting texts for different
+//     parameter value ranges
+//   - individual resulting texts and range boundaries are separated by "|"
+//   - parameterized text "{}" is used to skip one parameter from 'lpParArray'
+//     (it produces no output text)
+//   - if a parameterized text starts with a number followed by a colon, it is
+//     the index of the parameter to use (from one up to the number of
+//     parameters); if no index is specified, it is assigned automatically
+//     (sequentially from one up to the number of parameters)
+//   - specifying a parameter index does not change the sequentially assigned
+//     index; for example, in "{!}%d file{2:s|0||1|s} and %d director{y|1|ies}"
+//     the first parameterized text uses parameter 2 and the second uses
+//     parameter 1
+//   - any number of parameterized texts with an explicitly specified index may
+//     be used
 //
 // examples of format strings:
-//   - "{!}director{y|1|ies}" returns "directory" when the parameter value is
-//     between 0 and 1 inclusive and "directories" from 2 up to 2^64-1
-//   - "{!}soubo{rů|0|r|1|ry|4|rů}" demonstrates Czech plural forms of "soubor" (file):
-//     parameter 0 -> "souborů" (0 files), parameter 1 -> "soubor" (1 file),
-//     parameters 2..4 -> "soubory" (2-4 files), and from 5 onward -> "souborů" (5 or more files)
+//   - "{!}director{y|1|ies}" for parameter values from 0 to 1 (inclusive) will
+//     be "directory", and for values from 2 to "infinity" (2^64-1) will be
+//     "directories"
+//   - "{!}soubo{rů|0|r|1|ry|4|rů}" for parameter value 0 will be "souborů", for
+//     1 will be "soubor", for 2 to 4 (inclusive) will be "soubory", and from 5
+//     to "infinity" will be "souborů"
 int ExpandPluralString(char* lpOut, int nOutMax, const char* lpFmt, int nParCount,
                        const CQuadWord* lpParArray);
 
@@ -845,11 +855,12 @@ int ExpandPluralFilesDirs(char* lpOut, int nOutMax, int files, int dirs,
 int ExpandPluralBytesFilesDirs(char* lpOut, int nOutMax, const CQuadWord& selectedBytes,
                                int files, int dirs, BOOL useSubTexts);
 
-// Searches the text for pairs '<' '>' , removes them from the buffer and stores
+// Searches the text for '<' '>' pairs, removes them from the buffer, and stores
 // references to their contents in 'varPlacements'. 'varPlacements' is an array of
-// DWORDs of '*varPlacementsCount' items; each DWORD stores the position of the
-// reference in the output buffer (low WORD) and the number of characters (high WORD).
-// Strings "\<", "\>", "\\" are treated as escape sequences and replaced by '<', '>' and '\\'.
+// DWORDs with '*varPlacementsCount' items; each DWORD is composed of the position
+// of the reference in the output buffer (low WORD) and the number of characters
+// in the reference (high WORD). The strings "\<", "\>", "\\" are treated as
+// escape sequences and are replaced with '<', '>' and '\\'.
 // Returns TRUE on success, otherwise FALSE; always sets 'varPlacementsCount' to
 // the number of processed variables.
 BOOL LookForSubTexts(char* text, DWORD* varPlacements, int* varPlacementsCount);
@@ -890,8 +901,8 @@ BOOL MyGetDiskFreeSpace(const char* path, LPDWORD lpSectorsPerCluster,
 
 // enhanced GetVolumeInformation: works with the path (walks reparse points and SUBST drives)
 // 'rootOrCurReparsePoint' (if not NULL and at least MAX_PATH chars) receives the
-// root or the current (last) local reparse point on 'path' (this does not fail when
-// no media is present unlike GetCurrentLocalReparsePoint()).
+// root or the path to the current (last) local reparse point on 'path'
+// (WARNING: this does not work if no medium is present in the drive; GetCurrentLocalReparsePoint() is not affected by this)
 // 'junctionOrSymlinkTgt' (if not NULL and at least MAX_PATH chars) receives the
 // target of the current reparse point or an empty string when none exists or it
 // is of unknown type or a volume mount point. 'linkType' (if not NULL) receives
@@ -904,8 +915,8 @@ BOOL MyGetVolumeInformation(const char* path, char* rootOrCurReparsePoint, char*
 
 // returns the target path of the reparse point 'repPointDir' in 'repPointDstBuf'
 // (if not NULL) of size 'repPointDstBufSize'. 'repPointDir' and 'repPointDstBuf'
-// may point into the same buffer (IN/OUT). If 'makeRelPathAbs' is TRUE and the
-// link is relative, the target is converted to an absolute path.
+// may point into the same buffer (IN/OUT). If 'makeRelPathAbs' is TRUE and it is a
+// relative symbolic link, the target path is converted to an absolute path.
 // Returns TRUE on success and when 'repPointType' is not NULL it receives the
 // reparse point type: 1 (MOUNT POINT), 2 (JUNCTION POINT), 3 (SYMBOLIC LINK)
 BOOL GetReparsePointDestination(const char* repPointDir, char* repPointDstBuf, DWORD repPointDstBufSize,
@@ -917,29 +928,31 @@ BOOL GetReparsePointDestination(const char* repPointDir, char* repPointDstBuf, D
 BOOL GetCurrentLocalReparsePoint(const char* path, char* currentReparsePoint, BOOL* error = NULL);
 
 // call only for paths whose root (after removing SUBSTs) is DRIVE_FIXED (there is
-// no point searching elsewhere for reparse points). We look for a path without
-// reparse points leading to the same volume as 'path'; if the path contains a
-// symlink pointing to a network path (UNC or mapped) we return only the root of
-// that network path (even Vista cannot work with reparse points on network paths
-// so it is better not to provoke it). If such a path cannot be found because the
-// current (last) local reparse point is a volume mount point (or unknown type),
-// we return the path to this volume mount point (or reparse point of unknown
-// type). When the path contains more than 50 reparse points (most likely an
-// endless loop) the original path is returned.
+// no point searching for reparse points elsewhere); we look for a path without
+// reparse points that leads to the same volume as 'path'; for a path containing
+// a symlink that leads to a network path (UNC or mapped), we return only the
+// root of that network path (even Vista cannot work with reparse points on
+// network paths, so this is probably unnecessary); if no such path exists
+// because the current (last) local reparse point is a volume mount point (or an
+// unknown type of reparse point), we return the path to this volume mount point
+// (or reparse point of an unknown type); if the path contains more than 50
+// reparse points (most likely an infinite loop), we return the original path;
 //
-// 'resPath' is a MAX_PATH buffer for the result; 'path' is the original path.
-// 'cutResPathIsPossible' (must not be NULL) receives FALSE when the resulting
-// path in 'resPath' ends with a reparse point (volume mount point or unknown
-// type) so it should not be shortened because that might switch volumes. If
-// 'rootOrCurReparsePointSet' is not NULL and contains FALSE and the original
-// path contains at least one local reparse point (network parts are ignored) the
-// variable is set to TRUE and 'rootOrCurReparsePoint' (if not NULL) receives the
-// full path to the current (last) local reparse point (not its target). The
-// target of the current reparse point (only for junctions or symlinks) is stored
-// in 'junctionOrSymlinkTgt' (if not NULL) and the type in 'linkType':
-// 2 (JUNCTION POINT), 3 (SYMBOLIC LINK). 'netPath' (if not NULL) receives the
-// network path to which the current local symlink points-in that case the root
-// of the network path is returned in 'resPath'.
+// 'resPath' is a MAX_PATH-sized output buffer; 'path' is the original path; in
+// 'cutResPathIsPossible' (must not be NULL) we return FALSE if the resulting
+// path in 'resPath' ends with a reparse point (volume mount point or an unknown
+// type of reparse point) and therefore must not be shortened (that would most
+// likely take us to a different volume); if 'rootOrCurReparsePointSet' is not
+// NULL and contains FALSE, and the original path contains at least one local
+// reparse point (reparse points on the network part of the path are ignored),
+// we return TRUE in this variable and in 'rootOrCurReparsePoint' (if not NULL)
+// we return the full path to the current (last local) reparse point (note: not
+// where it leads); the target path of the current reparse point (only if it is
+// a junction or symlink) is returned in 'junctionOrSymlinkTgt' (if not NULL)
+// and its type is returned in 'linkType': 2 (JUNCTION POINT), 3 (SYMBOLIC
+// LINK); in 'netPath' (if not NULL) we return the network path to which the
+// current (last) local symlink in the path leads - in this situation, the root
+// of the network path is returned in 'resPath'
 void ResolveLocalPathWithReparsePoints(char* resPath, const char* path, BOOL* cutResPathIsPossible,
                                        BOOL* rootOrCurReparsePointSet, char* rootOrCurReparsePoint,
                                        char* junctionOrSymlinkTgt, int* linkType, char* netPath);
@@ -982,10 +995,11 @@ HICON GetFileOrPathIconAux(const char* path, BOOL large, BOOL isDir);
 BOOL CheckAndConnectUNCNetworkPath(HWND parent, const char* UNCPath, BOOL& pathInvalid,
                                    BOOL donotReconnect);
 
-// Attempts to restore a network connection (if it previously existed) for
-// 'drive'. 'parent' is the parent dialog. Returns TRUE on success (the network
-// drive is mapped again). 'pathInvalid' becomes TRUE when the user cancelled
-// the credentials dialog or the reconnection failed (e.g. "credentials conflict")
+// Attempts to restore a network connection (if it previously existed) on
+// 'drive:'. 'parent' is the parent dialog. Returns TRUE if the connection was
+// restored successfully (the network drive is mapped again).
+// 'pathInvalid' returns TRUE if the user cancelled the username/password dialog
+// or an attempt to establish the connection failed (e.g. "credentials conflict")
 BOOL CheckAndRestoreNetworkConnection(HWND parent, const char drive, BOOL& pathInvalid);
 
 // thread management helpers-these threads should exit when the process ends; if
@@ -1041,7 +1055,7 @@ struct COpenViewerData
 #define WM_USER_EDIT WM_APP + 110          // [begin, end] select this interval
 #define WM_USER_SM_END_NOTIFY WM_APP + 111 // [0, 0] schedules WM_USER_SM_END_NOTIFY_DELAYED after 200ms
 #define WM_USER_DISPLAYPOPUP WM_APP + 112  // [0, commandID] a popup menu should be displayed
-//#define WM_USER_SETPATHS        WM_APP + 113    // do not use, legacy message that old applications might send
+//#define WM_USER_SETPATHS        WM_APP + 113    // do not use, legacy message that old applications may theoretically send us
 
 #define WM_USER_CHAR WM_APP + 114 // notification from list view
 // [command, index]
@@ -1079,7 +1093,7 @@ struct COpenViewerData
 #define WM_USER_PROGRDLGEND WM_APP + 141   // [cmd, 0] - CProgressDialog: workaround for bugs on W2K+ (closed dialogs remained in the taskbar) - delayed close of the dialog
 #define WM_USER_PROGRDLGSTART WM_APP + 142 // [0, 0] - CProgressDialog: workaround for bugs on W2K+ (garbage left on screen) - delayed start of the worker thread
 
-// moved to shexreg.h (constant must not change): #define WM_USER_SALSHEXT_TRYRELDATA WM_APP + 143 // [0, 0] - SalamExt reports paste-data unlocking (see CSalShExtSharedMem::BlockPasteDataRelease); if the data is no longer protected it is freed
+// moved to shexreg.h (constant must not change): #define WM_USER_SALSHEXT_TRYRELDATA WM_APP + 143 // [0, 0] - SalamExt reports release of the paste data lock (see CSalShExtSharedMem::BlockPasteDataRelease); if the data is no longer protected, let it be released
 
 #define WM_USER_DROPFROMFS WM_APP + 144    // [allocatedTgtPath, operation] - drag&drop from FS: target path and operation determined, perform copy/move from FS
 #define WM_USER_DROPTOARCORFS WM_APP + 145 // [CTmpDragDropOperData *, 0]
@@ -1239,12 +1253,12 @@ struct COpenViewerData
 
 #define HOT_PANEL 23    // color of the hot item in the panel
 #define HOT_ACTIVE 24   // in the active panel title
-#define HOT_INACTIVE 25 // in the inactive panel title, status bar, ...
+#define HOT_INACTIVE 25 //                   in the inactive panel caption, status bar, ...
 
 #define ACTIVE_CAPTION_FG 26   // text color in the active panel title
 #define ACTIVE_CAPTION_BK 27   // background color in the active panel title
 #define INACTIVE_CAPTION_FG 28 // text color in the inactive panel title
-#define INACTIVE_CAPTION_BK 29 // background color in the inactive panel title
+#define INACTIVE_CAPTION_BK 29 // background color in the inactive panel caption
 
 #define THUMBNAIL_FRAME_NORMAL 30 // pen colors for the frame around thumbnails
 #define THUMBNAIL_FRAME_FOCUSED 31
@@ -1331,11 +1345,11 @@ extern int SPACE_WIDTH; // spacing between columns in detailed view
 #define GET_Y_LPARAM(lp) ((int)(short)HIWORD(lp))
 
 // reasons why some files/directories are not shown in the panel
-#define HIDDEN_REASON_ATTRIBUTE 0x00000001 // have the hidden or system attribute and configuration suppresses such names
+#define HIDDEN_REASON_ATTRIBUTE 0x00000001 // have the hidden or system attribute and configuration suppresses such files/directories
 #define HIDDEN_REASON_FILTER 0x00000002    // file is filtered out based on the panel filter
 #define HIDDEN_REASON_HIDECMD 0x00000004   // name was hidden using Hide Selected/Unselected Names
 
-// bit field of drives 'a' .. 'z'
+// bit field of drive letters 'a' .. 'z'
 #define DRIVES_MASK 0x03FFFFFF
 
 //
@@ -1380,7 +1394,7 @@ extern HINSTANCE HLanguage;           // handle to language-specific resources (
 extern char CurrentHelpDir[MAX_PATH]; // after the first use of help this holds the path to the help directory (location of all .chm files)
 extern WORD LanguageID;               // language ID of the language-specific resources (.SLG file)
 
-extern BOOL UseCustomPanelFont; // if TRUE Font and FontUL come from LogFont; otherwise from the system font (default)
+extern BOOL UseCustomPanelFont; // if TRUE, Font and FontUL are based on LogFont; otherwise on the system font (default)
 extern HFONT Font;              // panel font
 extern HFONT FontUL;            // underlined version
 extern int FontCharHeight;      // font height
@@ -1404,7 +1418,7 @@ extern HBRUSH HSelectedBkBrush;      // background of the selected panel item
 extern HBRUSH HFocSelBkBrush;        // background of a focused and selected item
 extern HBRUSH HDialogBrush;          // dialog background fill
 extern HBRUSH HButtonTextBrush;      // button text
-extern HBRUSH HDitherBrush;          // 1-bit chessboard; color can be set via SetTextColor/SetBkColor
+extern HBRUSH HDitherBrush;          // 1-bit checkerboard; the color can be set via SetTextColor/SetBkColor
 extern HBRUSH HActiveCaptionBrush;   // background of the active panel title
 extern HBRUSH HInactiveCaptionBrush; // background of the inactive panel title
 
@@ -1423,7 +1437,7 @@ enum CIconSizeEnum
     ICONSIZE_16,   // 16x16 @ 100%DPI, 20x20 @ 125%DPI, 24x24 @ 150%DPI, ...
     ICONSIZE_32,   // 32x32 @ 100%DPI, ...
     ICONSIZE_48,   // 48x48 @ 100%DPI, ...
-    ICONSIZE_COUNT // items count
+    ICONSIZE_COUNT // item count
 };
 
 extern int IconSizes[ICONSIZE_COUNT]; // icon sizes: 16, 32, 48
@@ -1432,11 +1446,11 @@ extern int IconLRFlags;               // controls the color depth of loaded icon
 // NOTE: on Vista a 48x48 icon uses overlay ICONSIZE_32 and thumbnails use overlay ICONSIZE_48
 extern HICON HSharedOverlays[ICONSIZE_COUNT];   // shared (hand) overlay in all sizes
 extern HICON HShortcutOverlays[ICONSIZE_COUNT]; // shortcut (lower left corner) overlay in all sizes
-extern HICON HSlowFileOverlays[ICONSIZE_COUNT]; // slow files
+extern HICON HSlowFileOverlays[ICONSIZE_COUNT]; // slow file overlays
 
 extern CIconList* SimpleIconLists[ICONSIZE_COUNT]; // simple icons in all sizes
 
-#define THROBBER_WIDTH 12 // size of one frame
+#define THROBBER_WIDTH 12 // dimensions of one frame
 #define THROBBER_HEIGHT 12
 #define THROBBER_COUNT 36     // total number of frames
 #define IDT_THROBBER_DELAY 30 // delay [ms] for one frame of the animation
@@ -1453,7 +1467,7 @@ extern HICON HFavoritIcon; // hot path icon
 
 extern RGBQUAD ColorTable[256]; // palette used for all toolbars (including plugins)
 
-// individual positions of the SymbolsImageList and LargeSymbolsImageList image lists
+// individual indices in the SymbolsImageList and LargeSymbolsImageList image lists
 enum CSymbolsImageListIndexes
 {
     symbolsExecutable,    // 0: exe/bat/pif/com
@@ -1461,7 +1475,7 @@ enum CSymbolsImageListIndexes
     symbolsNonAssociated, // 2: unassociated file
     symbolsAssociated,    // 3: associated file
     symbolsUpDir,         // 4: up-dir ".."
-    symbolsArchive,       // 5: archiv
+    symbolsArchive,       // 5: archive
     symbolsCount          // TERMINATOR
 };
 
@@ -1496,20 +1510,20 @@ extern HBITMAP HHeaderSort; // arrows for HeaderLine
 extern CBitmap ItemBitmap; // helper for various things: drawing items in the panel, header line, etc.
 
 extern HBITMAP HUpDownBitmap; // arrows for scrolling inside short popup menus
-extern HBITMAP HZoomBitmap;   // panel zoom icon
+extern HBITMAP HZoomBitmap;   // panel zoom bitmap
 
 //extern HBITMAP HWorkerBitmap;
 
 extern HCURSOR HHelpCursor; // context help cursor - loaded only when needed
 
-#define THUMBNAIL_SIZE_DEFAULT 94 // according to XP
+#define THUMBNAIL_SIZE_DEFAULT 94 // according to Windows XP
 #define THUMBNAIL_SIZE_MIN 48     // to support less than 48 we would need to show smaller icons
 #define THUMBNAIL_SIZE_MAX 1000
 
 extern BOOL DragFullWindows; // if TRUE the panel is resized in real time, otherwise only after release (optimization for remote desktop)
 
 // CConfiguration::SizeFormat (the Size column format in panels)
-// ATTENTION! Do not change these constants, they are exported to plugins via SALCFG_SIZEFORMAT
+// WARNING! Do not change the constants; they are exported to plugins via SALCFG_SIZEFORMAT
 #define SIZE_FORMAT_BYTES 0 // in bytes (Open Salamander)
 #define SIZE_FORMAT_KB 1    // in KB (Windows Explorer)
 #define SIZE_FORMAT_MIXED 2 // bytes, KB, MB, GB, ...
@@ -1617,15 +1631,13 @@ void BeginStopRefresh(BOOL debugSkipOneCaller = FALSE, BOOL debugDoNotTestCaller
 // so missed refreshes are processed
 void EndStopRefresh(BOOL postRefresh = TRUE, BOOL debugSkipOneCaller = FALSE, BOOL debugDoNotTestCaller = FALSE);
 
-// variable checked in the main message loop during the "idle" portion; when TRUE
-// it unloads plugins with ShouldUnload==TRUE, rebuilds menus for plugins with
-// ShouldRebuildMenu==TRUE and runs commands posted from plugins together with
-// requested Salamander commands
+// variable checked in the main message loop during the "idle" part; if TRUE, it unloads
+// plugins with ShouldUnload==TRUE, rebuilds menus for plugins with ShouldRebuildMenu==TRUE,
+// and runs commands posted from plugins plus requested Salamander commands
 extern BOOL ExecCmdsOrUnloadMarkedPlugins;
 
-// variable checked in the main message loop during the "idle" portion; when TRUE
-// it opens the Pack/Unpack dialog for plugins with OpenPackDlg==TRUE or
-// OpenUnpackDlg==TRUE
+// variable checked in the main message loop during the "idle" part; if TRUE, it opens the Pack/Unpack
+// dialog for plugins with OpenPackDlg==TRUE or OpenUnpackDlg==TRUE
 extern BOOL OpenPackOrUnpackDlgForMarkedPlugins;
 
 // variable for BeginStopIconRepaint() and EndStopIconRepaint()
@@ -1642,10 +1654,10 @@ extern int StopStatusbarRepaint;
 extern BOOL PostStatusbarRepaint;
 // after calling the throbber stops repainting
 void BeginStopStatusbarRepaint();
-// releases repainting
+// resumes repainting
 void EndStopStatusbarRepaint();
 
-// in module msgbox.cpp - center message box with respect to its parent window
+// in module msgbox.cpp - center the message box according to the parent specified by hParent
 int SalMessageBox(HWND hParent, LPCTSTR lpText, LPCTSTR lpCaption, UINT uType);
 int SalMessageBoxEx(const MSGBOXEX_PARAMS* params);
 
@@ -1722,20 +1734,20 @@ extern char WindowsDirectory[MAX_PATH]; // cached result of GetWindowsDirectory
 extern char RTCErrorDescription[RTC_ERROR_DESCRIPTION_SIZE];
 //#endif // MSVC_RUNTIME_CHECKS
 
-// path where we create the bug report and minidump: up to Vista next to
-// salamand.exe, on Vista and later in CSIDL_APPDATA + "\\Open Salamander"
+// path where we create the bug report and minidump: before Vista next to
+// salamand.exe, in Vista and later in CSIDL_APPDATA + "\\Open Salamander"
 extern char BugReportPath[MAX_PATH];
 
 // name of the file that will be imported into the registry if it exists
 extern char ConfigurationName[MAX_PATH];
 extern BOOL ConfigurationNameIgnoreIfNotExists;
 
-extern HWND PluginProgressDialog; // if a plug-in opens a progress dialog this is its HWND, otherwise NULL
-extern HWND PluginMsgBoxParent;   // parent for plug-in message boxes (main window, Plugins dialog, etc.)
+extern HWND PluginProgressDialog; // if a plugin opens a progress dialog this is its HWND, otherwise NULL
+extern HWND PluginMsgBoxParent;   // parent for plugin message boxes (main window, Plugins dialog, etc.)
 
 extern BOOL CriticalShutdown; // TRUE = "critical shutdown" in progress; no time to ask, exiting quickly, 5s until kill
 
-// "translate" POSIX names to MS
+// "translation" of POSIX names to MS
 #define itoa _itoa
 #define stricmp _stricmp
 #define strnicmp _strnicmp
@@ -1891,7 +1903,7 @@ DWORD UpdateCrc32(const void* buffer, DWORD count, DWORD crcVal);
 //
 
 extern BOOL IdleRefreshStates;  // when set, the next CMainWindow::OnEnterIdle will update command states (toolbar, menu)
-extern BOOL IdleForceRefresh;   // if IdleRefreshStates is set this variable bypasses Salamander's cache
+extern BOOL IdleForceRefresh;   // if IdleRefreshStates is set, setting IdleForceRefresh bypasses Salamander's cache
 extern BOOL IdleCheckClipboard; // when IdleRefreshStates is TRUE and this flag is set, the clipboard is checked as well (time consuming)
 
 // ".." is not counted among files/directories
@@ -1910,7 +1922,7 @@ extern DWORD EnablerFilesOnDiskOrArchive; // focus/selection is on files/directo
 extern DWORD EnablerOccupiedSpace;        // panel is disk or archive with VALID_DATA_SIZE and EnablerFilesOnDiskOrArchive holds
 extern DWORD EnablerFilesCopy;            // focus/selection is on files/directories and the panel is disk, archive or FS supporting "copy from fs"
 extern DWORD EnablerFilesMove;            // focus/selection is on files/directories and the panel is disk or FS supporting "move from fs"
-extern DWORD EnablerFilesDelete;          // focus/selection is on files/directories and the panel is disk, editable archive or FS supporting "delete"
+extern DWORD EnablerFilesDelete;          // focus/selection is on files/directories and the panel is a disk, an editable archive, or an FS supporting "delete"
 extern DWORD EnablerFileDir;              // focus is on a file/directory
 extern DWORD EnablerFileDirANDSelected;   // focus is on a file/directory and some files/directories are selected
 extern DWORD EnablerQuickRename;          // focus is on a file/directory and the panel is disk or FS (with quick-rename support)
@@ -1949,7 +1961,7 @@ extern DWORD EnablerViewFile;             // focus is on a file and the panel is
 extern DWORD EnablerChangeAttrs;          // focus/selection is on files/directories and the panel is disk or FS (supports change-attributes)
 extern DWORD EnablerShowProperties;       // focus/selection is on files/directories and the panel is disk or FS (supports show-properties)
 extern DWORD EnablerItemsContextMenu;     // focus/selection is on files/directories and the panel is disk or FS (supports context menu)
-extern DWORD EnablerOpenActiveFolder;     // panel is disk or FS (supports open-active-folder)
+extern DWORD EnablerOpenActiveFolder;     // panel is a disk or an FS (with open-active-folder support)
 extern DWORD EnablerPermissions;          // focus/selection is on files/directories and the panel is a disk; running at least on W2K with NTFS supporting ACLs
 
 //******************************************************************************
@@ -2080,8 +2092,8 @@ extern void* SalOpenSharedMem;
 // release the service
 void ReleaseSalOpen();
 
-// start salopen.exe and pass 'fileName' via shared memory
-// returns TRUE on success, otherwise FALSE (the association should be started differently)
+// launch salopen.exe and pass 'fileName' via shared memory
+// returns TRUE on success, otherwise FALSE (the association should be launched another way)
 BOOL SalOpenExecute(HWND hWindow, const char* fileName);
 
 //******************************************************************************
@@ -2098,8 +2110,8 @@ int GetWMCommandFromSalCmd(int salCmd);
 // ID of the main thread (valid only after entering WinMain())
 extern DWORD MainThreadID;
 
-extern BOOL IsNotAlphaNorNum[256]; // array TRUE/FALSE for characters (TRUE = not a letter nor a digit)
-extern BOOL IsAlpha[256];          // array TRUE/FALSE for characters (TRUE = letter)
+extern BOOL IsNotAlphaNorNum[256]; // TRUE/FALSE array for characters (TRUE = not a letter or digit)
+extern BOOL IsAlpha[256];          // TRUE/FALSE array for characters (TRUE = letter)
 
 extern int UserCharset; // user's default charset for fonts
 
@@ -2126,7 +2138,7 @@ extern char IsSLGIncomplete[ISSLGINCOMPLETE_SIZE];
 //******************************************************************************
 // enumeration of file names from panels/Find for viewers
 
-// init+release of data associated with enumeration
+// initialization and release of data associated with enumeration
 void InitFileNamesEnumForViewers();
 void ReleaseFileNamesEnumForViewers();
 
@@ -2141,7 +2153,7 @@ enum CFileNamesEnumRequestType
 struct CFileNamesEnumData
 {
     // request:
-    int RequestUID;                        // request number
+    int RequestUID;                        // request ID
     CFileNamesEnumRequestType RequestType; // type of request
     int SrcUID;
     int LastFileIndex;
@@ -2268,10 +2280,10 @@ BOOL ContainsString(TIndirectArray<char>* usedNames, const char* name, int* inde
 
 //******************************************************************************
 
-// on success returns TRUE and the path to "Documents" or "Desktop"; on failure
-// returns FALSE
+// returns TRUE on success and stores the path to "Documents" or "Desktop"
+// returns FALSE on failure
 // 'pathLen' specifies the size of the 'path' buffer; the function ensures the
-// string is null terminated even when shortened
+// string is null-terminated even if truncated
 BOOL GetMyDocumentsOrDesktopPath(char* path, int pathLen);
 
 // To optimize performance, it is good practice for applications to detect whether they
@@ -2285,16 +2297,16 @@ BOOL GetMyDocumentsOrDesktopPath(char* path, int pathLen);
 // application is running on the console.
 BOOL IsRemoteSession(void);
 
-// returns TRUE if the user belongs to Administrators
+// returns TRUE if the user is a member of the Administrators group
 // returns FALSE on error
 BOOL IsUserAdmin();
 
 //******************************************************************************
 
 // ensures we escape from removed drives to a fixed drive (after ejecting a device such as a USB flash disk)
-extern BOOL ChangeLeftPanelToFixedWhenIdleInProgress; // TRUE when the path is being changed; setting ChangeLeftPanelToFixedWhenIdle to TRUE would be pointless
+extern BOOL ChangeLeftPanelToFixedWhenIdleInProgress; // TRUE when the path is currently being changed; setting ChangeLeftPanelToFixedWhenIdle to TRUE is unnecessary
 extern BOOL ChangeLeftPanelToFixedWhenIdle;
-extern BOOL ChangeRightPanelToFixedWhenIdleInProgress; // TRUE when the path is being changed; setting ChangeRightPanelToFixedWhenIdle to TRUE would be pointless
+extern BOOL ChangeRightPanelToFixedWhenIdleInProgress; // TRUE when the path is currently being changed; setting ChangeRightPanelToFixedWhenIdle to TRUE is unnecessary
 extern BOOL ChangeRightPanelToFixedWhenIdle;
 extern BOOL OpenCfgToChangeIfPathIsInaccessibleGoTo; // TRUE = open configuration on Drives during idle and focus "If path in panel is inaccessible, go to:"
 
@@ -2308,7 +2320,7 @@ extern HWND LastDriveSelectErrDlgHWnd;
 // GetDriveFormFactor returns the drive form factor.
 //  It returns 350 if the drive is a 3.5" floppy drive.
 //  It returns 525 if the drive is a 5.25" floppy drive.
-//  It returns 800 if the drive is a 8" floppy drive.
+//  It returns 800 if the drive is an 8" floppy drive.
 //  It returns   1 if the drive supports removable media other than 3.5", 5.25", and 8" floppies.
 //  It returns   0 on error.
 //  iDrive is 1 for drive A:, 2 for drive B:, etc.
@@ -2319,7 +2331,7 @@ DWORD GetDriveFormFactor(int iDrive);
 // sorts the array of plugins by PluginFSCreateTime (for display in Alt+F1/F2 and the Disconnect dialog)
 void SortPluginFSTimes(CPluginFSInterfaceEncapsulation** list, int left, int right);
 
-// returns the ordinal number for the menu item text in the Change Drive menu and Disconnect dialog;
+// returns the index for the item text in the Change Drive menu and Disconnect dialog;
 // see CPluginFSInterfaceEncapsulation::ChngDrvDuplicateItemIndex
 int GetIndexForDrvText(CPluginFSInterfaceEncapsulation** fsList, int count,
                        CPluginFSInterfaceAbstract* fsIface, int currentIndex);
@@ -2341,10 +2353,10 @@ HWND GetTopLevelParent(HWND hWindow);
 
 //******************************************************************************
 
-// variables used when saving configuration during shutdown, log-off or restart
-// we must pump messages so the system does not kill us as "not responding"
+// variables used while saving the configuration during shutdown, logoff, or restart
+// we must pump messages so the system does not kill us as a "not responding" application
 class CWaitWindow;
-extern CWaitWindow* GlobalSaveWaitWindow; // if a global wait window for Save exists it's here (otherwise NULL)
+extern CWaitWindow* GlobalSaveWaitWindow; // if a global wait window for Save exists, it is stored here (otherwise NULL)
 extern int GlobalSaveWaitWindowProgress;  // current progress value of the global wait window for Save
 
 extern BOOL IsSetSALAMANDER_SAVE_IN_PROGRESS; // TRUE if the SALAMANDER_SAVE_IN_PROGRESS value exists in the registry (used to detect interrupted configuration saving)
@@ -2375,7 +2387,7 @@ void GetIfPathIsInaccessibleGoTo(char* path, BOOL forceIsMyDocs = FALSE);
 // loads icon overlay handler configuration from the registry
 void LoadIconOvrlsInfo(const char* root);
 
-// returns TRUE if the icon overlay handler is disabled (or all are disabled)
+// returns TRUE if the icon overlay handler is disabled (or if all icon overlay handlers are disabled)
 BOOL IsDisabledCustomIconOverlays(const char* name);
 
 // returns TRUE if the icon overlay handler is in the list of disabled icon overlay handlers
@@ -2415,7 +2427,7 @@ BOOL CreateOurPathInRoamingAPPDATA(char* buf);
 
 #ifndef _WIN64
 
-// 32-bit build on Win64 only: checks whether the path is redirected by the
+// 32-bit version on Win64 only: checks whether the path is redirected by the
 // file system redirector to SysWOW64 or back to System32
 BOOL IsWin64RedirectedDir(const char* path, char** lastSubDir, BOOL failIfDirWithSameNameExists);
 
